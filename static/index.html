@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>技术面股票工作台</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📈 技术面股票工作台</div>
+    <div class="status">
+      <span class="badge" id="marketBadge">A股 · 沪深</span>
+      <span class="badge" id="tdxStatus">数据源：检测中…</span>
+      <span class="badge clock" id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <section class="panel">
+        <div class="panel-title">股票搜索</div>
+        <input id="searchInput" class="input" placeholder="代码/名称/拼音，如 600519 或 茅台">
+        <div id="searchResults" class="search-results"></div>
+      </section>
+
+      <section class="panel grow">
+        <div class="panel-title">
+          自选 / 盯盘
+          <button id="addCurrent" class="mini">+ 加当前</button>
+          <button id="refreshSignals" class="mini">刷信号</button>
+        </div>
+        <ul id="watchlist" class="watchlist"></ul>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">选股扫描</div>
+        <div class="row">
+          <select id="scopeSelect" class="input">
+            <option value="watchlist">自选列表</option>
+            <option value="universe">自定义股票池</option>
+            <option value="online_all">在线全市场（免通达信）</option>
+            <option value="tdx">通达信全市场（需装通达信）</option>
+          </select>
+          <select id="strategySelect" class="input">
+            <option value="composite">综合评分（买入及以上）</option>
+            <option value="ma_bull">均线多头排列</option>
+            <option value="golden_cross">MACD/KDJ 金叉</option>
+            <option value="breakout">突破 20 日新高</option>
+            <option value="volume_surge">放量上涨</option>
+            <option value="low_volume_rebound">缩量企稳反弹</option>
+            <option value="ma_converge_breakout">均线粘合突破</option>
+          </select>
+        </div>
+        <div class="row">
+          <button id="scanBtn" class="btn wide">扫描候选</button>
+          <button id="rebuildBtn" class="btn scan-rebuild" title="重新在线生成全 A 股代码池">重建股票池</button>
+        </div>
+        <div id="screenerResults" class="screener-results"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">我的持仓 <span class="sub">（驱动买/卖多少）</span></div>
+        <div class="row">
+          <input id="posCode" class="input small" placeholder="代码 sh600519">
+          <input id="posShares" class="input small" type="number" placeholder="股数">
+        </div>
+        <div class="row">
+          <input id="posCost" class="input small" type="number" placeholder="成本(可选)">
+          <button id="addPosBtn" class="btn">记录</button>
+        </div>
+        <ul id="posList" class="pos-list"></ul>
+        <details class="note-box">
+          <summary>券商真实盘对接</summary>
+          <p>当前券商连接器未连接。系统用「我的持仓」台账驱动<b>买多少 / 卖多少</b>。连接通达信/券商并授权后，可一键同步真实持仓与下单（仍须你在券商端最终确认）。详见 README 的「券商对接」。</p>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">评分权重 <span class="mini" id="resetWeights">重置</span></div>
+        <div id="weightSliders" class="weight-sliders"></div>
+        <div class="row"><button id="saveWeights" class="btn wide">保存权重</button></div>
+        <details class="note-box">
+          <summary>云端后端地址（远程访问）</summary>
+          <div class="row">
+            <input id="apiBase" class="input" placeholder="留空=本机；填云端后端 URL">
+            <button id="saveApiBase" class="btn">保存</button>
+          </div>
+          <p class="sub">把后端部署到云主机后，这里填它的地址，本页即可远程盯盘。</p>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">通达信本地数据</div>
+        <div class="row">
+          <input id="tdxPath" class="input" placeholder="vipdoc 路径，如 C:\newtdx\vipdoc">
+          <button id="saveTdx" class="btn">保存</button>
+        </div>
+        <p class="sub" id="tdxPathTip">无需安装通达信：选股下拉选「在线全市场」即可扫描全部 A 股（行情来自腾讯/新浪公开接口）。若本机装了通达信且下载过日线，填 vipdoc 路径可加速本地读取。</p>
+      </section>
+    </aside>
+
+    <!-- 主区 -->
+    <main class="main">
+      <div class="stock-header" id="stockHeader">
+        <div class="sh-left">
+          <span id="curName" class="cur-name">未选择股票</span>
+          <span id="curCode" class="cur-code"></span>
+        </div>
+        <div class="sh-price">
+          <span id="curPrice" class="cur-price">--</span>
+          <span id="curChange" class="cur-change">--</span>
+        </div>
+        <div class="sh-periods" id="periodBtns">
+          <button data-period="5m">5分</button>
+          <button data-period="15m">15分</button>
+          <button data-period="30m">30分</button>
+          <button data-period="60m">60分</button>
+          <button data-period="daily" class="active">日</button>
+          <button data-period="weekly">周</button>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="toolbar">
+          <label class="chk"><input type="checkbox" id="tgBoll" checked> BOLL</label>
+          <label class="chk"><input type="checkbox" id="tgMacd" checked> MACD</label>
+          <label class="chk"><input type="checkbox" id="tgKdj" checked> KDJ</label>
+          <label class="chk"><input type="checkbox" id="tgRsi"> RSI</label>
+          <span class="spacer"></span>
+          <button id="refreshBtn" class="btn">刷新行情</button>
+        </div>
+        <div class="canvas-box">
+          <canvas id="chart"></canvas>
+          <div id="tooltip" class="tooltip"></div>
+        </div>
+      </div>
+
+      <div class="bottom">
+        <section class="panel signal-panel">
+          <div class="panel-title">技术面信号 & 操作建议</div>
+          <div id="signalBody" class="signal-body">
+            <div class="signal-empty">选择一只股票查看买卖持有建议</div>
+          </div>
+          <div class="advice-form">
+            <label>资金¥<input id="capInput" class="input tiny" type="number" value="100000"></label>
+            <label>持仓(股)<input id="holdInput" class="input tiny" type="number" value="0"></label>
+            <button id="advBtn" class="btn">算建议</button>
+          </div>
+          <div id="adviceBody" class="advice-body"></div>
+        </section>
+
+        <section class="panel alert-panel">
+          <div class="panel-title">价格预警</div>
+          <div class="row">
+            <select id="alertOp" class="input small">
+              <option value="above">涨破</option>
+              <option value="below">跌破</option>
+            </select>
+            <input id="alertValue" class="input small" type="number" placeholder="价格">
+            <button id="addAlertBtn" class="btn">添加</button>
+          </div>
+          <ul id="alertList" class="alert-list"></ul>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/static/js/chart.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+cloudflared.exe
+*.log
+__pycache__/
+data/cache/
+data/universe.txt
+data/positions.json
+.vscode/

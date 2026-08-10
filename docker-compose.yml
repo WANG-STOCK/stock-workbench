@@ -1,0 +1,11 @@
+# 云端运行：docker compose up -d
+# 之后把前端「云端后端地址」设为 http://<你的云主机公网IP>:8723
+services:
+  stock-workbench:
+    build: .
+    container_name: stock-workbench
+    ports:
+      - "8723:8723"
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data   # 持久化持仓/预警/配置
