@@ -26,6 +26,8 @@ DATA_DIR = os.path.join(BASE, "data")
 WATCHLIST = os.path.join(DATA_DIR, "watchlist.json")
 ALERTS = os.path.join(DATA_DIR, "alerts.json")
 POSITIONS = os.path.join(DATA_DIR, "positions.json")
+# 云端/本地共用的持仓主源（git 跟踪，公开 URL 可达，部署/重启不丢）
+STATIC_POSITIONS = os.path.join(BASE, "static", "positions.json")
 CONFIG = os.path.join(DATA_DIR, "config.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -143,7 +145,12 @@ def _chunk(seq, n):
 
 
 def _load_positions():
-    return _load_json(POSITIONS, [])
+    # 1. 本地运行时覆盖（POST 写入，git 排除）：优先用
+    p = _load_json(POSITIONS, None)
+    if p is not None:
+        return p
+    # 2. 云端/本地共用主源（git 跟踪）：云端部署后自动同步，重启不丢
+    return _load_json(STATIC_POSITIONS, [])
 
 
 def _held_shares(code):
