@@ -1,6 +1,4 @@
 # Render Blueprint —— 一键部署「技术面股票工作台」
-# 用法：在 Render 新建 Blueprint（或 New Web Service），连接含本文件的 GitHub 仓库即自动部署。
-# 部署成功后获得固定链接：https://<服务名>.onrender.com （永不变，除非删除重建）
 services:
   - type: web
     name: wang-zhibiao-2026
@@ -14,4 +12,3 @@ services:
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
-    # 端口由 Render 自动注入环境变量 PORT，server.py 已读取，无需额外配置。
