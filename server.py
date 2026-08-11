@@ -167,9 +167,16 @@ def _build_position(analysis, qs, code=None):
     else:
         current_shares = _held_shares(code) if code else 0
     price = analysis.get("price") or 0
-    return sig.position_advice(analysis["score"], analysis["action"], price,
-                               capital=capital, max_single=max_single,
-                               current_shares=current_shares, lot=_POS.get("lot", 100))
+    pos = sig.position_advice(analysis["score"], analysis["action"], price,
+                              capital=capital, max_single=max_single,
+                              current_shares=current_shares, lot=_POS.get("lot", 100))
+    # 附带技术面建议买卖价（基于支撑/阻力），供持仓面板展示
+    pl = analysis.get("price_levels") or {}
+    pos["buy_price"] = pl.get("buy")
+    pos["sell_price"] = pl.get("sell")
+    pos["support"] = pl.get("support")
+    pos["resist"] = pl.get("resist")
+    return pos
 
 
 # ---------- 请求处理 ----------
@@ -366,25 +373,31 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/config":
             # 保存权重倍率 / 仓位参数 / 监控 / 云端地址 / 通达信路径
             if isinstance(payload, dict):
-                if "weight_multipliers" in payload:
-                    _config["weight_multipliers"] = payload["weight_multipliers"]
-                if "position" in payload:
-                    _config["position"] = payload["position"]
-                if "monitor" in payload:
-                    _config["monitor"] = payload["monitor"]
-                if "cloud_url" in payload:
-                    _config["cloud_url"] = payload["cloud_url"]
-                if "tdx_path" in payload:
-                    _config["tdx_path"] = payload["tdx_path"]
-                _save_json(CONFIG, _config)
-                global _WEIGHTS, _WEIGHT_MULT, _POS, _MON, _CLOUD_URL, _tdx_path, _tdx_available
-                _WEIGHT_MULT = _config.get("weight_multipliers") or {}
-                _WEIGHTS = sig.expand_weights(_WEIGHT_MULT)
-                _POS = _config.get("position") or _POS
-                _MON = _config.get("monitor") or _MON
-                _CLOUD_URL = _config.get("cloud_url", "") or ""
-                _tdx_path = _config.get("tdx_path", "") or ""
-                _tdx_available = bool(_tdx_path) and os.path.isdir(_tdx_path)
+                try:
+                    if "weight_multipliers" in payload:
+                        _config["weight_multipliers"] = payload["weight_multipliers"]
+                    if "position" in payload:
+                        _config["position"] = payload["position"]
+                    if "monitor" in payload:
+                        _config["monitor"] = payload["monitor"]
+                    if "cloud_url" in payload:
+                        _config["cloud_url"] = payload["cloud_url"]
+                    if "tdx_path" in payload:
+                        _config["tdx_path"] = payload["tdx_path"]
+                    try:
+                        _save_json(CONFIG, _config)
+                    except Exception as e:
+                        print("[WARN] save config failed:", e)
+                    global _WEIGHTS, _WEIGHT_MULT, _POS, _MON, _CLOUD_URL, _tdx_path, _tdx_available
+                    _WEIGHT_MULT = _config.get("weight_multipliers") or {}
+                    _WEIGHTS = sig.expand_weights(_WEIGHT_MULT)
+                    _POS = _config.get("position") or _POS
+                    _MON = _config.get("monitor") or _MON
+                    _CLOUD_URL = _config.get("cloud_url", "") or ""
+                    _tdx_path = _config.get("tdx_path", "") or ""
+                    _tdx_available = bool(_tdx_path) and os.path.isdir(_tdx_path)
+                except Exception as e:
+                    print("[ERROR] config update failed:", e)
             self._send(200, {"ok": True, "tdx_available": _tdx_available})
             return
         if route == "/api/positions":

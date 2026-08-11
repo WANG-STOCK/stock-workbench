@@ -252,8 +252,41 @@ def analyze(bars, weights=None):
             "rsi": {"rsi6": rsi6[-1], "rsi12": rsi12[-1], "rsi24": rsi24[-1]},
             "boll": {"mid": boll_mid, "upper": boll_up, "lower": boll_low},
         },
+        "price_levels": price_levels(bars),
         "bars_count": len(bars),
     }
+
+
+def price_levels(bars):
+    """返回建议买卖参考价（技术面支撑 / 阻力）。
+
+    buy：理想低吸区（贴近支撑，等回调到此再买）；
+    sell：理想高抛区（贴近阻力，涨到这考虑卖）。
+    纯技术面参考，非交易指令。
+    """
+    if len(bars) < 20:
+        return None
+    closes = [b["close"] for b in bars]
+    highs = [b["high"] for b in bars]
+    lows = [b["low"] for b in bars]
+    price = closes[-1]
+    ind = compute_all(bars)
+    boll_low = ind["boll"]["lower"][-1]
+    boll_up = ind["boll"]["upper"][-1]
+    recent_low = min(lows[-20:])
+    recent_high = max(highs[-20:])
+    # 买入参考：贴近支撑。BOLL 下轨在现价下方则取其下轨；否则取近期低点略上移避免接飞刀
+    if boll_low and boll_low < price:
+        buy = round(boll_low, 2)
+    else:
+        buy = round(recent_low * 1.005, 2)
+    # 卖出参考：贴近阻力。BOLL 上轨在现价上方则取其上轨；否则取近期高点略下移
+    if boll_up and boll_up > price:
+        sell = round(boll_up, 2)
+    else:
+        sell = round(recent_high * 0.995, 2)
+    return {"buy": buy, "sell": sell,
+            "support": round(recent_low, 2), "resist": round(recent_high, 2)}
 
 
 def position_advice(score, action, price, capital=100000.0, max_single=0.25,

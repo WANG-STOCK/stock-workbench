@@ -47,6 +47,7 @@
     bindEvents();
     await loadWatchlist();
     await loadPositions();
+    await computePositionSignals();
     setupWeights(cfg);
     $("#apiBase").value = API_BASE;
     $("#tdxPath").value = cfg.tdx_path || "";
@@ -56,6 +57,8 @@
     startClock();
     startMonitor();
     startAlertCheck();
+    startLiveView();
+    state.timers.push(setInterval(computePositionSignals, 15000));
   }
 
   function startClock() {
@@ -111,10 +114,15 @@
     $("#addPosBtn").addEventListener("click", addPosition);
     $("#saveWeights").addEventListener("click", saveWeights);
     $("#resetWeights").addEventListener("click", resetWeights);
-    $("#saveApiBase").addEventListener("click", () => {
+    $("#saveApiBase").addEventListener("click", async () => {
       API_BASE = $("#apiBase").value.trim();
       localStorage.setItem("wb_api_base", API_BASE);
-      toast(API_BASE ? "已设云端后端：" + API_BASE : "已切回本机");
+      try {
+        await api("POST", "/api/config", { cloud_url: API_BASE });
+        toast(API_BASE ? "已设云端后端：" + API_BASE : "已切回本机");
+      } catch (e) {
+        toast("云端地址已在本页生效，但后端未保存（推送链接仍指向本机）");
+      }
     });
     $("#saveTdx").addEventListener("click", async () => {
       const p = $("#tdxPath").value.trim();
@@ -262,9 +270,16 @@
     renderSignal(sig);
   }
 
-  function renderSignal(a) {
+  function renderSignal(a, isLive) {
     const body = $("#signalBody");
     if (!a.ok) { body.innerHTML = `<div class="signal-empty">${a.msg || "无法计算信号"}</div>`; $("#adviceBody").innerHTML = ""; return; }
+    // 实时模式下，信号从无→买入/卖出时弹提醒
+    if (isLive && a.action) {
+      const prev = state.lastAction;
+      if (prev && prev !== a.action && (a.action.includes("买入") || a.action.includes("卖出")))
+        toast("⚡ 信号变化：" + (state.current.name || state.current.code) + " → " + a.action);
+      state.lastAction = a.action;
+    }
     const color = ACT_COLOR[a.action] || "#868e96";
     const knob = (a.score + 100) / 2;
     const reasons = a.reasons.map(r => {
@@ -441,19 +456,48 @@
     if (!state.positions.length) { ul.innerHTML = `<li class="pos-empty">暂无持仓记录</li>`; return; }
     ul.innerHTML = state.positions.map(p => {
       const m = state.watchMeta[p.code] || {};
+      const act = m.action || "";
+      const actColor = (ACT_COLOR[act]) || "#868e96";
       let pl = "";
       if (m.price != null && p.cost > 0 && p.shares > 0) {
         const diff = (m.price - p.cost) * p.shares;
         const pct = (m.price / p.cost - 1) * 100;
         pl = `<span class="pl ${diff >= 0 ? "up" : "down"}">${diff >= 0 ? "+" : ""}${diff.toLocaleString("zh-CN", { maximumFractionDigits: 0 })} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)</span>`;
       }
-      return `<li><span class="pos-name">${p.name || p.code}<br><span class="code">${p.code} · ${p.shares}股</span></span>
-        <span class="pos-pl">${pl}</span><span class="wi-del" data-code="${p.code}">✕</span></li>`;
+      const priceTxt = m.price != null
+        ? `<span class="px ${chgClass(m.change)}">${fmt(m.price)}</span> <span class="chg ${chgClass(m.change)}">${m.change_pct != null ? (m.change_pct >= 0 ? "+" : "") + fmt(m.change_pct) + "%" : ""}</span>`
+        : `<span class="px">--</span>`;
+      const buyTxt = m.buy_price != null ? fmt(m.buy_price) : "--";
+      const sellTxt = m.sell_price != null ? fmt(m.sell_price) : "--";
+      const actBadge = act
+        ? `<span class="pos-act" style="background:${actColor};color:#fff">${act}</span>`
+        : `<span class="pos-act" style="background:#adb5bd;color:#fff">信号计算中</span>`;
+      return `<li class="pos-item" data-code="${p.code}" style="padding:8px 4px;border-bottom:1px solid #eee;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="pos-name" style="font-weight:600">${p.name || p.code}</span>
+          ${actBadge}
+          <span class="wi-del" data-code="${p.code}" style="margin-left:auto">✕</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;font-size:13px">
+          <span class="pos-code" style="color:#888;font-size:11px">${p.code} · ${p.shares}股</span>
+          ${priceTxt}
+        </div>
+        <div style="display:flex;gap:14px;margin-top:4px;font-size:12px">
+          <span style="color:#c92a2a">买价 <b>${buyTxt}</b></span>
+          <span style="color:#2b8a3e">卖价 <b>${sellTxt}</b></span>
+        </div>
+        ${pl ? `<div style="margin-top:2px;font-size:12px">${pl}</div>` : ""}
+      </li>`;
     }).join("");
     ul.querySelectorAll(".wi-del").forEach(el => el.addEventListener("click", async (e) => {
       e.stopPropagation();
       await api("DELETE", "/api/positions?code=" + el.dataset.code);
       await loadPositions();
+    }));
+    ul.querySelectorAll(".pos-item").forEach(el => el.addEventListener("click", () => {
+      const code = el.dataset.code;
+      const m = state.watchMeta[code] || {};
+      openStock(code, m.name || code);
     }));
   }
   async function addPosition() {
@@ -501,6 +545,40 @@
   // ---------- 定时器 ----------
   function startMonitor() { state.timers.push(setInterval(pollQuotes, 5000)); }
   function startAlertCheck() { state.timers.push(setInterval(checkAlerts, 6000)); loadAlerts(); }
+  // 持仓股每 15 秒重算信号 + 建议买卖价（纯前端轮询，不推送）
+  async function computePositionSignals() {
+    if (!state.positions.length) return;
+    for (const p of state.positions) {
+      const code = p.code;
+      try {
+        const a = await api("GET", "/api/signal?code=" + code + "&period=daily&limit=120");
+        if (a.ok) {
+          const m = state.watchMeta[code] || {};
+          m.action = a.action;
+          m.score = a.score;
+          m.buy_price = a.position ? a.position.buy_price : null;
+          m.sell_price = a.position ? a.position.sell_price : null;
+          state.watchMeta[code] = m;
+        }
+      } catch (e) { /* 网络抖动忽略 */ }
+    }
+    renderPositions();
+  }
+
+  // 正在看的股票每 8 秒自动重算评分+买卖建议（实时）
+  function startLiveView() {
+    state.timers.push(setInterval(async () => {
+      if (!state.current.code) return;
+      const { code, period } = state.current;
+      const cap = $("#capInput").value || 100000;
+      const hold = $("#holdInput").value || 0;
+      try {
+        const sig = await api("GET", "/api/signal?code=" + code + "&period=" + period + "&limit=120"
+          + "&capital=" + cap + "&current_shares=" + hold);
+        renderSignal(sig, true);
+      } catch (e) { /* 网络抖动忽略 */ }
+    }, 8000));
+  }
 
   document.addEventListener("DOMContentLoaded", init);
 })();
