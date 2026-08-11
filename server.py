@@ -311,6 +311,8 @@ class Handler(BaseHTTPRequestHandler):
                 adp = sig.adaptive_trade(tl, regime, a.get("price"), a.get("prev_close"), pct=0.03)
                 a["regime"] = regime
                 a["adaptive"] = adp
+                # 今日研判：技术面(MACD/BOLL/KDJ)+板块资金流+当日带宽 → 偏多/偏空/震荡 + 当前买/卖/不动
+                a["outlook"] = sig.day_outlook(a, regime, tl, adp, a.get("price"), a.get("prev_close"))
                 if a.get("position"):
                     a["position"]["regime"] = regime
                     a["position"]["adaptive"] = adp

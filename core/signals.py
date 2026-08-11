@@ -348,6 +348,114 @@ def adaptive_trade(tl, regime, price, prev_close=None, pct=0.03):
             "tip": "板块资金流出+龙头下跌，先减仓防继续跌；若跌停可低吸买回做T"}
 
 
+def day_outlook(a, regime, tl, adp, price, prev_close=None):
+    """今日盘口研判（小白版）：综合技术面(MACD/BOLL/KDJ/均线) + 板块资金流 + 当日价格带宽，
+    给出「今日偏多/偏空/震荡」定性判断，以及当前价该「买/卖/不动」的明确动作。
+    每次前端刷新都会重算，给一眼懂的操作结论。
+
+    返回：{trend, action, score, fund_score, weak_regime, tech_points, reason, indicators}
+    """
+    if not a or not a.get("ok"):
+        return None
+    score = a.get("score", 0)
+    reasons = [r.get("text", "") for r in a.get("reasons", []) if r.get("text")]
+    ind = a.get("indicators", {})
+    macd = ind.get("macd", {})
+    kdj = ind.get("kdj", {})
+    boll = ind.get("boll", {})
+    boll_low = boll.get("lower")
+    boll_up = boll.get("upper")
+
+    # ---- 资金面 ----
+    fund_score = 0
+    weak_regime = False
+    trend_pct = None
+    fund_net = None
+    if regime:
+        trend_pct = regime.get("trend_pct")
+        fund_net = regime.get("fund_net")
+        if fund_net is not None:
+            fund_score += 2 if fund_net > 0 else -2
+        if trend_pct is not None:
+            fund_score += 1 if trend_pct > 0 else (-1 if trend_pct < 0 else 0)
+        weak_regime = (trend_pct is not None and trend_pct < 0
+                       and fund_net is not None and fund_net < 0)
+
+    # ---- 方向投票：技术(±) + 资金(±) ----
+    tech_dir = 1 if score > 8 else (-1 if score < -8 else 0)
+    fund_dir = 1 if fund_score > 0 else (-1 if fund_score < 0 else 0)
+    total = tech_dir + fund_dir
+    if weak_regime:
+        trend = "偏空"
+    elif total >= 2:
+        trend = "偏多"
+    elif total <= -2:
+        trend = "偏空"
+    elif tech_dir == 1:
+        trend = "偏多"
+    elif tech_dir == -1:
+        trend = "偏空"
+    else:
+        trend = "震荡"
+
+    tech_points = reasons[:5]
+
+    # ---- 当前动作 ----
+    action = "不动"
+    if adp and adp.get("weak"):
+        action = "卖"          # 弱市防御：先减仓
+    else:
+        buy = tl.get("buy") if tl else None
+        sell = tl.get("sell") if tl else None
+        k = kdj.get("k")
+        oversold = (k is not None and k < 20)
+        overbought = (k is not None and k > 80)
+        if price is not None:
+            if trend == "偏空":
+                if (sell and price >= sell) or overbought or (boll_up and price >= boll_up):
+                    action = "卖"
+                elif (buy and price <= buy) or oversold or (boll_low and price <= boll_low):
+                    action = "买"
+            elif trend == "偏多":
+                if (buy and price <= buy) or oversold or (boll_low and price <= boll_low):
+                    action = "买"
+                elif (sell and price >= sell) or overbought or (boll_up and price >= boll_up):
+                    action = "卖"
+            else:  # 震荡
+                if buy and price <= buy:
+                    action = "买"
+                elif sell and price >= sell:
+                    action = "卖"
+
+    # ---- 一句话原因 ----
+    trend_txt = {"偏多": "今天偏涨 📈", "偏空": "今天偏跌 📉", "震荡": "今天震荡 ➡️"}[trend]
+    fund_txt = ""
+    if weak_regime:
+        fund_txt = "板块资金流出+龙头下跌（弱势）"
+    elif fund_net is not None:
+        fund_txt = "板块资金" + ("流入" if fund_net > 0 else "流出") + f"（{trend_pct:+.1f}%）"
+    reason = trend_txt + ("；" + fund_txt + "。" if fund_txt else "。")
+    if adp and adp.get("weak"):
+        reason += "建议先减仓防继续跌，跌停再低吸买回做T。"
+    elif action == "买":
+        reason += f"当前价 {price} 到买点（支撑/超卖区），可买。"
+    elif action == "卖":
+        reason += f"当前价 {price} 到卖点（压力/超买区），可卖。"
+    else:
+        reason += "价格未到买卖点，持有观望。"
+
+    return {
+        "trend": trend,
+        "action": action,
+        "score": score,
+        "fund_score": fund_score,
+        "weak_regime": weak_regime,
+        "tech_points": tech_points,
+        "reason": reason,
+        "indicators": {"macd": macd, "kdj": kdj, "boll": boll},
+    }
+
+
 def position_advice(score, action, price, capital=100000.0, max_single=0.25,
                     current_shares=0, lot=100):
     """根据评分与动作，给出可执行的仓位建议（规则化、非个性化投顾）。

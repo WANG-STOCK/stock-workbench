@@ -338,6 +338,23 @@
     } else if (today && today.buy != null) {
       todayHtml = `<div class="advice-note" style="background:#f8f9fa;border-color:#dee2e6;color:#495057">📅 今日做T参考：涨到 <b style="color:#c92a2a">${fmt(today.sell)}</b> 卖 / 跌到 <b style="color:#2b8a3e">${fmt(today.buy)}</b> 买（开盘 ${fmt(today.open)}）</div>`;
     }
+    const o = state.watchMeta[state.current.code] ? state.watchMeta[state.current.code].outlook : null;
+    let outlookHtml = "";
+    if (o) {
+      const tColor = o.trend === "偏多" ? "#2b8a3e" : o.trend === "偏空" ? "#c92a2a" : "#868e96";
+      const aColor = o.action === "买" ? "#2b8a3e" : o.action === "卖" ? "#c92a2a" : "#868e96";
+      const aBg = o.action === "买" ? "#e6fcf5" : o.action === "卖" ? "#fff5f5" : "#f1f3f5";
+      const aTxt = o.action === "买" ? "👉 现在可买" : o.action === "卖" ? "👉 现在可卖" : "⏸ 先不动";
+      const pts = (o.tech_points || []).slice(0, 4).map(t => `<li style="font-size:10.5px;color:#495057">· ${t}</li>`).join("");
+      outlookHtml = `<div style="margin-top:6px;padding:7px 9px;background:${aBg};border:1px solid ${aColor}66;border-radius:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:${tColor}">📊 今日研判：${o.trend}</span>
+          <span style="font-size:14px;font-weight:800;color:#fff;background:${aColor};padding:3px 12px;border-radius:12px">${aTxt}</span>
+        </div>
+        <div style="font-size:11px;color:#495057;margin-top:4px;line-height:1.6">${o.reason}</div>
+        ${pts ? `<ul style="margin:4px 0 0;padding-left:15px">${pts}</ul>` : ""}
+      </div>`;
+    }
     el.innerHTML = `
       <div class="advice-card ${cls}">
         <div class="advice-title">操作建议 · <b>${pos.action}</b></div>
@@ -352,6 +369,7 @@
         ${pos.note ? `<div class="advice-note">⚠️ ${pos.note}</div>` : ""}
         ${regimeHtml}
         ${todayHtml}
+        ${outlookHtml}
       </div>`;
   }
 
@@ -575,6 +593,26 @@
     </div>${rgHtml}`;
   }
 
+  // 今日研判卡：技术面+资金流+当日带宽 → 偏多/偏空/震荡 + 当前买/卖/不动（每次刷新重算）
+  function renderOutlook(m) {
+    const o = m.outlook;
+    if (!o) return "";
+    const trend = o.trend, action = o.action;
+    const trendColor = trend === "偏多" ? "#2b8a3e" : trend === "偏空" ? "#c92a2a" : "#868e96";
+    const actColor = action === "买" ? "#2b8a3e" : action === "卖" ? "#c92a2a" : "#868e96";
+    const actBg = action === "买" ? "#e6fcf5" : action === "卖" ? "#fff5f5" : "#f1f3f5";
+    const actTxt = action === "买" ? "👉 现在可买" : action === "卖" ? "👉 现在可卖" : "⏸ 先不动";
+    const points = (o.tech_points || []).slice(0, 4).map(t => `<li style="font-size:10px;color:#495057">· ${t}</li>`).join("");
+    return `<div style="margin-top:5px;padding:6px 8px;background:${actBg};border:1px solid ${actColor}55;border-radius:5px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:${trendColor};font-weight:700">📊 今日研判：${trend}</span>
+        <span style="font-size:13px;font-weight:800;color:#fff;background:${actColor};padding:2px 10px;border-radius:10px">${actTxt}</span>
+      </div>
+      <div style="font-size:10.5px;color:#495057;margin-top:3px;line-height:1.6">${o.reason}</div>
+      ${points ? `<ul style="margin:3px 0 0;padding-left:14px">${points}</ul>` : ""}
+    </div>`;
+  }
+
   function renderPositions() {
     const ul = $("#posList");
     if (!state.positions.length) { ul.innerHTML = `<li class="pos-empty" style="text-align:center;color:var(--muted);padding:20px;font-size:12px">暂无持仓</li>`; return; }
@@ -611,6 +649,7 @@
           <button class="pos-btn del" data-act="del" data-code="${p.code}">✕</button>
         </div>
         ${tPlanHtml(p, m)}
+        ${renderOutlook(m)}
       </li>`;
     }).join("");
     ul.querySelectorAll(".pos-btn[data-act='del']").forEach(el => el.addEventListener("click", async (e) => {
@@ -695,6 +734,7 @@
           m.today_open = a.position ? a.position.today_open : null;
           m.regime = a.regime || null;
           m.adaptive = a.adaptive || null;
+          m.outlook = a.outlook || null;
           m.t_plan = a.t_plan || null;
           state.watchMeta[code] = m;
         }
