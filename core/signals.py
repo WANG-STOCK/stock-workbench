@@ -427,3 +427,74 @@ STRATEGY_LABELS = {
     "low_volume_rebound": "缩量企稳反弹",
     "ma_converge_breakout": "均线粘合突破",
 }
+
+
+def build_t_plan(daily_a, bars_15m, price, held_shares, capital, lot, sector_strength=None):
+    """持仓做T计划：基于日线支撑阻力 + 15m 日内区间 + 行业/趋势强弱。
+
+    返回 {t_action, t_buy_price, t_sell_price, t_qty, t_note}
+      t_action: 做T买 / 做T卖 / 做T买（逢低） / 持有不动
+    逻辑（实用、不玄学）：
+      - 买区 = 日线支撑与15m近期低 的较低者；卖区 = 日线阻力与15m近期高 的较高者。
+      - 价格贴近买区 -> 低吸做T；贴近卖区 -> 高抛做T。
+      - 个股/行业偏弱时，只做高抛、不做低吸（防接飞刀）。
+      - 做T仓 = 现仓的 1/3（取整到手）；无持仓则用可用资金算 1 手起。
+    纯技术面参考，非交易指令。
+    """
+    if not daily_a or not daily_a.get("ok") or not price:
+        return {"t_action": "持有不动", "t_buy_price": None, "t_sell_price": None,
+                "t_qty": 0, "t_note": "K线不足，无法计算做T区间"}
+    pl = daily_a.get("price_levels") or {}
+    support = pl.get("support") or pl.get("buy")
+    resist = pl.get("resist") or pl.get("sell")
+    if bars_15m and len(bars_15m) >= 20:
+        recent = bars_15m[-20:]
+        day_low = min(b["low"] for b in recent)
+        day_high = max(b["high"] for b in recent)
+        avg15 = sum(b["close"] for b in recent) / len(recent)
+    else:
+        day_low = day_high = avg15 = price
+    cand = [x for x in [support, day_low] if x]
+    buy_zone = min(cand) if cand else round(price * 0.98, 2)
+    cand2 = [x for x in [resist, day_high] if x]
+    sell_zone = max(cand2) if cand2 else round(price * 1.02, 2)
+
+    lot = lot or 100
+    if held_shares and held_shares > 0:
+        base_qty = max(lot, (held_shares // 3 // lot) * lot)
+    else:
+        base_qty = max(lot, int(capital / price / lot) * lot) if price > 0 else 0
+
+    trend_score = daily_a.get("score", 0)
+    trend_down = trend_score < -10
+    sector_up = (sector_strength or {}).get("trend_pct")
+    sector_down = (sector_up is not None and sector_up < 0)
+
+    near_buy = price <= buy_zone * 1.015
+    near_sell = price >= sell_zone * 0.985
+
+    # 弱势：只高抛，不低吸
+    if trend_down or sector_down:
+        if near_sell or price > avg15:
+            return {"t_action": "做T卖", "t_buy_price": round(buy_zone, 2),
+                    "t_sell_price": round(sell_zone, 2), "t_qty": base_qty,
+                    "t_note": "个股/行业偏弱，仅逢高减仓做T，不低吸"}
+        return {"t_action": "持有不动", "t_buy_price": round(buy_zone, 2),
+                "t_sell_price": round(sell_zone, 2), "t_qty": 0,
+                "t_note": "弱势区间，暂不做T，观望为主"}
+
+    if near_buy:
+        return {"t_action": "做T买", "t_buy_price": round(buy_zone, 2),
+                "t_sell_price": round(sell_zone, 2), "t_qty": base_qty,
+                "t_note": "价格接近支撑区，可低吸做T，反弹至阻力区高抛"}
+    if near_sell:
+        return {"t_action": "做T卖", "t_buy_price": round(buy_zone, 2),
+                "t_sell_price": round(sell_zone, 2), "t_qty": base_qty,
+                "t_note": "价格接近阻力区，可高抛做T，回落至支撑区接回"}
+    if trend_score > 10:
+        return {"t_action": "做T买（逢低）", "t_buy_price": round(buy_zone, 2),
+                "t_sell_price": round(sell_zone, 2), "t_qty": base_qty,
+                "t_note": "趋势偏多，可于支撑区低吸、阻力区高抛做T"}
+    return {"t_action": "持有不动", "t_buy_price": round(buy_zone, 2),
+            "t_sell_price": round(sell_zone, 2), "t_qty": 0,
+            "t_note": "区间震荡，暂无明确做T点，持有观望"}

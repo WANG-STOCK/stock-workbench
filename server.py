@@ -18,6 +18,7 @@ from core import signals as sig
 from core.indicators import compute_all
 from core import industry_pool as ip
 from core import fundamentals as fm
+from core import sector_flow as sf
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -275,6 +276,21 @@ class Handler(BaseHTTPRequestHandler):
             a = sig.analyze(bars, _WEIGHTS)
             if a.get("ok"):
                 a["position"] = _build_position(a, qs, code)
+                # 持仓做T计划：15m 日内区间 + 日线支撑阻力 + 行业趋势
+                try:
+                    bars15 = _cache_get(code, "15m", 60) or ds.get_kline(code, "15m", 60, _tdx_path or None)
+                    _cache_set(code, "15m", 60, bars15)
+                    fp = ip.get_fund(code) or {}
+                    ss = sf.sector_strength(fp.get("sector")) if fp.get("sector") else None
+                    a["t_plan"] = sig.build_t_plan(a, bars15, a.get("price") or 0,
+                                                  _held_shares(code),
+                                                  capital=_POS.get("capital", 100000),
+                                                  lot=_POS.get("lot", 100),
+                                                  sector_strength=ss)
+                except Exception:
+                    a["t_plan"] = {"t_action": "持有不动", "t_buy_price": None,
+                                   "t_sell_price": None, "t_qty": 0,
+                                   "t_note": "做T计算暂不可用"}
             self._send(200, a)
             return
         if route == "/api/advice":
@@ -569,7 +585,10 @@ class Handler(BaseHTTPRequestHandler):
                 tech_norm = max(0.0, min(100.0, (tech + 100) / 2))
                 fp = ip.get_fund(code) or {}
                 fund = fm.fundamental_score(fp.get("grade", "B"), valuations.get(code))
-                combined = round(tech_norm * 0.55 + fund * 0.45, 1)
+                sector = fp.get("sector")
+                ss = sf.sector_strength(sector) if sector else None
+                sector_score = (ss or {}).get("score", 50) if ss else 50
+                combined = round(tech_norm * 0.50 + fund * 0.40 + sector_score * 0.10, 1)
                 price = a.get("price")
                 buy_price = pl.get("buy") or (round(price * 0.97, 2) if price else None)
                 sell_price = pl.get("sell") or (round(price * 1.06, 2) if price else None)
@@ -600,6 +619,9 @@ class Handler(BaseHTTPRequestHandler):
                     "sell_price": sell_price,
                     "buy_qty": qty,
                     "capital": capital,
+                    "sector": sector,
+                    "sector_trend": (ss or {}).get("trend_pct") if ss else None,
+                    "sector_fund": (ss or {}).get("fund_net") if ss else None,
                     "note": fp.get("note", ""),
                     "reasons": [r["text"] for r in a["reasons"][:2]],
                 })

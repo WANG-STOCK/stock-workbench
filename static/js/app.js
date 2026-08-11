@@ -357,6 +357,7 @@
           <span class="tag" style="background:${c}">${r.action}</span>
           <span style="font-weight:600">${r.name}</span><span style="color:#888;font-size:11px">${r.code}</span>
           <span style="color:#666;font-size:12px">· ${r.track}</span>
+          <span style="color:#666;font-size:12px">· 行业 ${r.sector_trend != null ? (r.sector_trend >= 0 ? "↑" : "↓") + fmt(r.sector_trend) + "%" : "—"}${r.sector_fund != null ? "　资金" + (r.sector_fund >= 0 ? "+" : "") + r.sector_fund.toFixed(1) + "亿" : ""}</span>
           <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}）</span></span>
         </div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;flex-wrap:wrap">
@@ -396,7 +397,7 @@
         el.innerHTML = `<div class="signal-empty">${data.count ? "成长池暂无符合「" + (data.strategy_label || strategy) + "」的标的" : "行业池为空，请检查 data/industry_pool.json"}</div>`;
         return;
       }
-      el.innerHTML = `<div class="scan-hint">十五五成长池 · 命中 ${data.results.length} 只（综合分=技术55%+基本面45%，按综合分降序）</div>` + renderCandidateRows(data.results);
+      el.innerHTML = `<div class="scan-hint">十五五成长池（纯主板）· 命中 ${data.results.length} 只（综合分=技术50%+基本面40%+行业10%，按综合分降序）</div>` + renderCandidateRows(data.results);
       bindCandidateRows(el);
       return;
     }
@@ -498,6 +499,20 @@
     }
     renderPositions();
   }
+  function tPlanHtml(p, m) {
+    const tp = m.t_plan;
+    if (!tp) return "";
+    const tColor = { "做T买": "#c92a2a", "做T卖": "#2b8a3e", "做T买（逢低）": "#c92a2a", "持有不动": "#868e96" }[tp.t_action] || "#868e96";
+    const qty = (tp.t_qty && tp.t_qty > 0) ? `做T量 ${tp.t_qty}股` : "暂不动";
+    return `<div style="margin-top:5px;padding:5px 6px;background:#fff8e1;border-left:3px solid ${tColor};border-radius:4px;font-size:12px">
+      <span style="font-weight:700;color:${tColor}">🔁 做T：${tp.t_action}</span>
+      <span style="margin-left:6px;color:#c92a2a">低吸价 ${fmt(tp.t_buy_price)}</span>
+      <span style="margin-left:6px;color:#2b8a3e">高抛价 ${fmt(tp.t_sell_price)}</span>
+      <span style="margin-left:6px;font-weight:600">${qty}</span>
+      ${tp.t_note ? `<div style="color:#666;margin-top:2px">${tp.t_note}</div>` : ""}
+    </div>`;
+  }
+
   function renderPositions() {
     const ul = $("#posList");
     if (!state.positions.length) { ul.innerHTML = `<li class="pos-empty">暂无持仓记录</li>`; return; }
@@ -533,6 +548,7 @@
           <span style="color:#c92a2a">买价 <b>${buyTxt}</b></span>
           <span style="color:#2b8a3e">卖价 <b>${sellTxt}</b></span>
         </div>
+        ${tPlanHtml(p, m)}
         ${pl ? `<div style="margin-top:2px;font-size:12px">${pl}</div>` : ""}
       </li>`;
     }).join("");
@@ -605,6 +621,7 @@
           m.score = a.score;
           m.buy_price = a.position ? a.position.buy_price : null;
           m.sell_price = a.position ? a.position.sell_price : null;
+          m.t_plan = a.t_plan || null;
           state.watchMeta[code] = m;
         }
       } catch (e) { /* 网络抖动忽略 */ }
