@@ -102,8 +102,8 @@
         if (state.current.code) loadKline();
       }));
 
-    // 指标开关
-    ["tgBoll", "tgMacd", "tgKdj", "tgRsi"].forEach(id =>
+    // 指标开关（HTML 已精简为 BOLL/MACD/KDJ 三项，无 RSI）
+    ["tgBoll", "tgMacd", "tgKdj"].forEach(id =>
       $("#" + id).addEventListener("change", () => {
         if (state.lastKline) chart.setData(state.lastKline.bars, state.lastKline.indicators, toggleOpts());
       }));
@@ -146,8 +146,10 @@
 
   function toggleOpts() {
     return {
-      showBoll: $("#tgBoll").checked, showMacd: $("#tgMacd").checked,
-      showKdj: $("#tgKdj").checked, showRsi: $("#tgRsi").checked,
+      showBoll: $("#tgBoll")?.checked ?? true,
+      showMacd: $("#tgMacd")?.checked ?? true,
+      showKdj: $("#tgKdj")?.checked ?? true,
+      showRsi: $("#tgRsi")?.checked ?? false,
     };
   }
 
