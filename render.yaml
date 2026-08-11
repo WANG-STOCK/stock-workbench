@@ -3,7 +3,7 @@
 # 部署成功后获得固定链接：https://<服务名>.onrender.com （永不变，除非删除重建）
 services:
   - type: web
-    name: stock-workbench
+    name: wang-zhibiao-2026
     runtime: python
     plan: free
     region: oregon
