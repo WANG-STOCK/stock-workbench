@@ -19,10 +19,8 @@
     current: { code: "", name: "", period: "daily" },
     watchlist: [],
     watchMeta: {},   // code -> {price, change, change_pct, action, score}
-    alerts: [],
     positions: [],   // [{code, name, shares, cost}]
     lastKline: null,
-    triggeredSeen: new Set(),
     timers: [],
   };
 
@@ -57,7 +55,6 @@
       : "填好后，选股下拉选「通达信全市场」即可扫描全部 A 股日线（需先在通达信下载日线数据）。";
     startClock();
     startMonitor();
-    startAlertCheck();
     startLiveView();
     state.timers.push(setInterval(computePositionSignals, 15000));
     // 调试与共享链接：?code=sh600105 自动打开该股；?demo=1 同时跑一次候选扫描
@@ -122,8 +119,6 @@
     });
     $("#rebuildBtn").addEventListener("click", rebuildUniverse);
     $("#advBtn").addEventListener("click", recomputeAdvice);
-
-    $("#addAlertBtn").addEventListener("click", addAlert);
 
     // 持仓台账
     $("#addPosBtn").addEventListener("click", addPosition);
@@ -459,45 +454,41 @@
     }
   }
 
-  // ---------- 预警 ----------
-  async function loadAlerts() {
-    state.alerts = await api("GET", "/api/alerts");
-    renderAlerts();
+  // ---------- 券商跳转 ----------
+  const BROKER_URL = {
+    zsxq: (code) => `https://stockapp.finance.qq.com/${code.toLowerCase()}.html`,
+    eastmoney: (code) => `https://quote.eastmoney.com/concept/${code.toLowerCase()}.html`,
+    "10jqka": (code) => `https://stockpage.10jqka.com.cn/${code.slice(2)}/`,
+    xueqiu: (code) => `https://xueqiu.com/S/${code.toUpperCase()}`,
+    ths: (code) => `http://stockpage.10jqka.com.cn/${code.slice(2)}/`,
+    citic: (code) => `https://www.cs.com.cn/sylm/jysj/`,  // 中信证券资讯页
+    huatai: (code) => `https://m.htsc.com.cn/htsc/index.html#/stockDetail/${code}`,
+    futu: (code) => `https://www.futunn.com/quote/${code.toUpperCase()}`,
+  };
+  function brokerRedirect(code, kind) {
+    if (!code) { toast("请先选择股票"); return; }
+    const fn = BROKER_URL[kind];
+    if (!fn) return;
+    const url = fn(code);
+    window.open(url, "_blank");
+    toast(`已打开 ${kind} 看 ${code}`);
   }
-  function renderAlerts() {
-    const ul = $("#alertList");
-    ul.innerHTML = state.alerts.map(a =>
-      `<li><span>${a.name || a.code}</span><span style="color:var(--muted)">${a.op === "above" ? "涨破" : "跌破"} ${a.value}</span><span class="ad" data-id="${a.id}">✕</span></li>`
-    ).join("");
-    ul.querySelectorAll(".ad").forEach(el =>
-      el.addEventListener("click", async () => {
-        await api("DELETE", "/api/alerts?id=" + el.dataset.id);
-        await loadAlerts();
-      }));
-  }
-  async function addAlert() {
-    if (!state.current.code) { toast("请先选择股票"); return; }
-    const value = parseFloat($("#alertValue").value);
-    if (!value) { toast("请输入预警价格"); return; }
-    await api("POST", "/api/alerts", {
-      code: state.current.code, name: state.current.name, type: "price",
-      op: $("#alertOp").value, value,
-    });
-    $("#alertValue").value = "";
-    await loadAlerts();
-    toast("预警已添加");
-  }
-  async function checkAlerts() {
-    const trig = await api("GET", "/api/alerts/check");
-    for (const t of trig) {
-      const key = t.id + "_" + t.now;
-      if (state.triggeredSeen.has(key)) continue;
-      state.triggeredSeen.add(key);
-      toast(`⏰ 预警触发：${t.name || t.code} ${t.op === "above" ? "涨破" : "跌破"} ${t.value}（现价 ${t.now}）`, 8);
-    }
+  // 顶部券商跳转 select
+  $("#brokerSelect").addEventListener("change", (e) => {
+    const kind = e.target.value;
+    if (!kind) return;
+    brokerRedirect(state.current.code, kind);
+    e.target.value = ""; // 重置以备下次再选
+  });
+  // 持仓库里的「去券商看」按钮（用 localStorage 记住用户常用券商）
+  const FAV_BROKER_KEY = "wb_fav_broker";
+  const favBroker = localStorage.getItem(FAV_BROKER_KEY) || "zsxq";
+  function setFavBroker(kind) {
+    localStorage.setItem(FAV_BROKER_KEY, kind);
+    renderPositions();
   }
 
-  // ---------- 持仓台账 ----------
+  // ---------- 持仓台账（重写：紧凑型 + 做T + 跳转） ----------
   async function loadPositions() {
     try { state.positions = await api("GET", "/api/positions"); } catch (e) { state.positions = []; }
     const codes = state.positions.map(p => p.code);
@@ -524,38 +515,54 @@
 
   function renderPositions() {
     const ul = $("#posList");
-    if (!state.positions.length) { ul.innerHTML = `<li class="pos-empty">暂无持仓记录</li>`; return; }
+    if (!state.positions.length) { ul.innerHTML = `<li class="pos-empty" style="text-align:center;color:var(--muted);padding:20px;font-size:12px">暂无持仓</li>`; return; }
+    const brokerOpts = (() => {
+      const sel = $("#brokerSelect");
+      if (!sel) return "";
+      return Array.from(sel.options).filter(o => o.value).map(o => `<option value="${o.value}">${o.textContent}</option>`).join("");
+    })();
     ul.innerHTML = state.positions.map(p => {
       const m = state.watchMeta[p.code] || {};
       const act = m.action || "";
       const actColor = (ACT_COLOR[act]) || "#868e96";
-      let pl = "";
-      if (m.price != null && p.cost > 0 && p.shares > 0) {
-        const diff = (m.price - p.cost) * p.shares;
-        const pct = (m.price / p.cost - 1) * 100;
-        pl = `<span class="pl ${diff >= 0 ? "up" : "down"}">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>`;
-      }
       const priceTxt = m.price != null
         ? `<span class="px ${chgClass(m.change)}">${fmt(m.price)}</span><span class="chg ${chgClass(m.change)}" style="font-size:10px;margin-left:3px">${m.change_pct != null ? (m.change_pct >= 0 ? "+" : "") + fmt(m.change_pct) + "%" : ""}</span>`
         : `<span class="px">--</span>`;
       const actBadge = act
-        ? `<span class="pos-act" style="background:${actColor};color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;font-weight:600">${act}</span>`
-        : `<span class="pos-act" style="background:#adb5bd;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px">…</span>`;
-      return `<li class="pos-item" data-code="${p.code}" style="padding:4px 5px;border-bottom:1px solid #f1f3f5;cursor:pointer;line-height:1.5">
-        <div style="display:flex;align-items:center;gap:5px;font-size:12px">
-          <span class="pos-name" style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name || p.code}</span>
+        ? `<span class="pos-act" style="background:${actColor}">${act}</span>`
+        : `<span class="pos-act" style="background:#adb5bd">…</span>`;
+      let pl = "";
+      if (m.price != null && p.cost > 0 && p.shares > 0) {
+        const pct = (m.price / p.cost - 1) * 100;
+        pl = `<span class="pl ${pct >= 0 ? "up" : "down"}" style="font-size:10px">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>`;
+      }
+      return `<li class="pos-item" data-code="${p.code}">
+        <div class="pos-row1">
+          <span class="pos-name">${p.name || p.code}</span>
           ${priceTxt}
           ${actBadge}
           ${pl}
-          <span class="wi-del" data-code="${p.code}" style="color:#adb5bd;cursor:pointer;margin-left:2px;font-size:11px">✕</span>
+        </div>
+        <div class="pos-row2">
+          <span style="color:var(--muted);font-size:10px">${p.code} · ${p.shares}股${p.cost ? " · 成本" + fmt(p.cost) : ""}</span>
+          <select class="pos-broker-sel" data-code="${p.code}" title="选券商跳转"><option value="">去券商看 ▼</option>${brokerOpts}</select>
+          <button class="pos-btn del" data-act="del" data-code="${p.code}">✕</button>
         </div>
         ${tPlanHtml(p, m)}
       </li>`;
     }).join("");
-    ul.querySelectorAll(".wi-del").forEach(el => el.addEventListener("click", async (e) => {
+    ul.querySelectorAll(".pos-btn[data-act='del']").forEach(el => el.addEventListener("click", async (e) => {
       e.stopPropagation();
       await api("DELETE", "/api/positions?code=" + el.dataset.code);
       await loadPositions();
+    }));
+    ul.querySelectorAll(".pos-broker-sel").forEach(sel => sel.addEventListener("change", (e) => {
+      e.stopPropagation();
+      const kind = e.target.value;
+      if (kind) {
+        brokerRedirect(sel.dataset.code, kind);
+        e.target.value = ""; // 重置回提示
+      }
     }));
     ul.querySelectorAll(".pos-item").forEach(el => el.addEventListener("click", () => {
       const code = el.dataset.code;
