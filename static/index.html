@@ -76,6 +76,7 @@
           <label>资金¥<input id="capInput" class="input tiny" type="number" value="100000"></label>
           <label>持仓(股)<input id="holdInput" class="input tiny" type="number" value="0"></label>
         </div>
+        <div class="sub" style="font-size:11px;color:var(--muted);margin:-2px 0 6px;line-height:1.5">「资金」= 你打算投在这只股票上的钱（元）。默认 100000（10万），按自己实际金额改就行，只影响建议买多少股，不影响行情。</div>
         <div id="signalBody" class="signal-body">
           <div class="signal-empty">选择一只股票查看买卖持有建议</div>
         </div>
@@ -178,6 +179,8 @@
         <div class="row">
           <label class="mini-label">可用资金¥<input id="availCapital" class="input small" type="number" value="100000"></label>
           <span class="sub">候选按此算买量</span>
+        </div>
+        <div class="sub" style="font-size:11px;color:var(--muted);margin:-4px 0 8px;line-height:1.5">「可用资金」= 你当前空闲、可以用来买股票的总钱数（元）。默认 10 万，按实际改。它只决定「扫描候选股」时每只建议买多少股，不影响行情和持仓。</div>
         </div>
         <div class="row">
           <button id="scanBtn" class="btn wide">扫描候选</button>

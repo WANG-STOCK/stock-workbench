@@ -312,10 +312,10 @@
         ${kv("MA5", fmt(ind.ma.ma5))} ${kv("MA10", fmt(ind.ma.ma10))} ${kv("MA20", fmt(ind.ma.ma20))} ${kv("MA60", fmt(ind.ma.ma60))}
         ${kv("MACD", `${fmt(ind.macd.dif)}/${fmt(ind.macd.dea)}`)} ${kv("KDJ", `${fmt(ind.kdj.k, 1)}/${fmt(ind.kdj.d, 1)}`)} ${kv("RSI12", fmt(ind.rsi.rsi12, 1))} ${kv("BOLL", `${fmt(ind.boll.lower)}~${fmt(ind.boll.upper)}`)}
       </div>`;
-    renderAdvice(a.position, a.price);
+    renderAdvice(a.position, a.price, a.today);
   }
 
-  function renderAdvice(pos, price) {
+  function renderAdvice(pos, price, today) {
     const el = $("#adviceBody");
     if (!pos) { el.innerHTML = ""; return; }
     const cls = pos.action.includes("买入") ? "adv-buy" : pos.action.includes("卖出") ? "adv-sell" : "adv-hold";
@@ -334,6 +334,7 @@
         </div>
         <div class="advice-text">${pos.suggestion}</div>
         ${pos.note ? `<div class="advice-note">⚠️ ${pos.note}</div>` : ""}
+        ${today && today.buy != null ? `<div class="advice-note" style="background:#f8f9fa;border-color:#dee2e6;color:#495057">📅 今日做T参考：涨到 <b style="color:#c92a2a">${fmt(today.sell)}</b> 卖 / 跌到 <b style="color:#2b8a3e">${fmt(today.buy)}</b> 买（开盘 ${fmt(today.open)}）</div>` : ""}
       </div>`;
   }
 
@@ -503,15 +504,30 @@
     renderPositions();
   }
   function tPlanHtml(p, m) {
-    const tp = m.t_plan;
-    if (!tp) return "";
-    const tColor = { "做T买": "#c92a2a", "做T卖": "#2b8a3e", "做T买（逢低）": "#c92a2a", "持有不动": "#868e96" }[tp.t_action] || "#868e96";
-    const qty = (tp.t_qty && tp.t_qty > 0) ? `${tp.t_qty}股` : "暂不动";
-    return `<div style="margin-top:2px;padding:2px 5px;background:#fff8e1;border-left:2px solid ${tColor};border-radius:3px;font-size:10.5px;line-height:1.5">
-      <span style="font-weight:700;color:${tColor}">${tp.t_action}</span>
-      <span style="margin-left:4px;color:#c92a2a">吸 ${fmt(tp.t_buy_price)}</span>
-      <span style="margin-left:4px;color:#2b8a3e">抛 ${fmt(tp.t_sell_price)}</span>
-      <span style="margin-left:4px;color:#666">·${qty}</span>
+    const buy = m.today_buy, sell = m.today_sell, openP = m.today_open, price = m.price;
+    if (buy == null && sell == null) {
+      // 没有当日分时数据时，退回原来的做T提示（标签改为大白话）
+      const tp = m.t_plan;
+      if (!tp) return "";
+      const tColor = { "做T买": "#c92a2a", "做T卖": "#2b8a3e", "持有不动": "#868e96" }[tp.t_action] || "#868e96";
+      return `<div style="margin-top:2px;padding:3px 6px;background:#f8f9fa;border-left:3px solid ${tColor};border-radius:4px;font-size:11px;line-height:1.7">
+        <span style="font-weight:700;color:${tColor}">${tp.t_action}</span>
+        ${tp.t_buy_price != null ? `<span style="margin-left:6px;color:#c92a2a">买 ${fmt(tp.t_buy_price)}</span>` : ""}
+        ${tp.t_sell_price != null ? `<span style="margin-left:6px;color:#2b8a3e">卖 ${fmt(tp.t_sell_price)}</span>` : ""}
+      </div>`;
+    }
+    // 当日实时买卖建议（开盘价±比例），用大白话展示
+    let status = "", statusColor = "#868e96";
+    if (price != null && sell != null && price >= sell) { status = "✅ 现在到了卖点，可卖"; statusColor = "#c92a2a"; }
+    else if (price != null && buy != null && price <= buy) { status = "✅ 现在到了买点，可买"; statusColor = "#2b8a3e"; }
+    else { status = "持有中 · 等价格到位"; statusColor = "#868e96"; }
+    const upPct = openP ? ((sell / openP - 1) * 100) : null;
+    const dnPct = openP ? ((1 - buy / openP) * 100) : null;
+    return `<div style="margin-top:4px;padding:5px 7px;background:#f8f9fa;border-left:3px solid ${statusColor};border-radius:4px;font-size:11px;line-height:1.8">
+      <div style="font-weight:700;color:${statusColor}">${status}</div>
+      <div>📈 涨到 <b style="color:#c92a2a">${fmt(sell)}</b> 就卖${upPct != null ? `（比开盘 +${upPct.toFixed(1)}%）` : ""}</div>
+      <div>📉 跌到 <b style="color:#2b8a3e">${fmt(buy)}</b> 就买${dnPct != null ? `（比开盘 −${dnPct.toFixed(1)}%）` : ""}</div>
+      ${price != null ? `<div style="color:#666;margin-top:2px">现在 ${fmt(price)}${openP != null ? `　开盘 ${fmt(openP)}` : ""}</div>` : ""}
     </div>`;
   }
 
@@ -630,6 +646,9 @@
           m.score = a.score;
           m.buy_price = a.position ? a.position.buy_price : null;
           m.sell_price = a.position ? a.position.sell_price : null;
+          m.today_buy = a.position ? a.position.today_buy : null;
+          m.today_sell = a.position ? a.position.today_sell : null;
+          m.today_open = a.position ? a.position.today_open : null;
           m.t_plan = a.t_plan || null;
           state.watchMeta[code] = m;
         }

@@ -289,6 +289,40 @@ def price_levels(bars):
             "support": round(recent_low, 2), "resist": round(recent_high, 2)}
 
 
+def today_levels(bars_5m, pct=0.03):
+    """基于当日开盘价，给「当天波动就卖/买」的及时参考价。
+
+    卖价 = 开盘价 × (1 + pct)   （涨这么多就卖）
+    买价 = 开盘价 × (1 - pct)   （跌这么多就买）
+
+    例：开盘 100、pct=0.05 → 卖 105、买 95（与用户示例一致）。
+    pct 默认 3%，可调。high/low 仅作展示（今日最高/最低）。
+    实时价 ≥ 卖价 → 显示「可卖」；实时价 ≤ 买价 → 显示「可买」。
+    """
+    if not bars_5m or len(bars_5m) < 1:
+        return None
+    # 5m 数据可能跨日——只取 "今天" 那部分（最后一根的日期作为今日）
+    today = bars_5m[-1].get("date")
+    if today:
+        today_bars = [b for b in bars_5m if b.get("date") == today]
+    else:
+        today_bars = bars_5m
+    if not today_bars:
+        return None
+    open_p = today_bars[0]["open"]
+    high_p = max(b["high"] for b in today_bars)
+    low_p = min(b["low"] for b in today_bars)
+    sell = round(open_p * (1 + pct), 2)
+    buy = round(open_p * (1 - pct), 2)
+    return {
+        "open": round(open_p, 2),
+        "high": round(high_p, 2),
+        "low": round(low_p, 2),
+        "buy": buy,
+        "sell": sell,
+    }
+
+
 def position_advice(score, action, price, capital=100000.0, max_single=0.25,
                     current_shares=0, lot=100):
     """根据评分与动作，给出可执行的仓位建议（规则化、非个性化投顾）。

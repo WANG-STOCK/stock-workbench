@@ -284,6 +284,18 @@ class Handler(BaseHTTPRequestHandler):
             a = sig.analyze(bars, _WEIGHTS)
             if a.get("ok"):
                 a["position"] = _build_position(a, qs, code)
+                # 当日实时买卖价：基于今日开盘价±比例，给「当天波动就卖/买」的及时建议
+                try:
+                    bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
+                    _cache_set(code, "5m", 60, bars5m)
+                    tl = sig.today_levels(bars5m, pct=0.03)  # 当日做T带宽 ±3%；想要例子里的±5%改成 0.05
+                except Exception:
+                    tl = None
+                a["today"] = tl
+                if a.get("position") and tl:
+                    a["position"]["today_buy"] = tl.get("buy")
+                    a["position"]["today_sell"] = tl.get("sell")
+                    a["position"]["today_open"] = tl.get("open")
                 # 持仓做T计划：15m 日内区间 + 日线支撑阻力 + 行业趋势
                 try:
                     bars15 = _cache_get(code, "15m", 60) or ds.get_kline(code, "15m", 60, _tdx_path or None)
