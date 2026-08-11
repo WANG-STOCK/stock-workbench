@@ -60,6 +60,15 @@
     startAlertCheck();
     startLiveView();
     state.timers.push(setInterval(computePositionSignals, 15000));
+    // 调试与共享链接：?code=sh600105 自动打开该股；?demo=1 同时跑一次候选扫描
+    const _qp = new URLSearchParams(location.search);
+    const _demoCode = _qp.get("code");
+    if (_demoCode) {
+      setTimeout(() => openStock(_demoCode, _qp.get("name") || ""), 700);
+    }
+    if (_qp.get("demo") === "scan") {
+      setTimeout(() => { const s = $("#scopeSelect"); s.value = "candidate"; runScreener(); }, 1200);
+    }
   }
 
   function startClock() {
@@ -504,13 +513,12 @@
     const tp = m.t_plan;
     if (!tp) return "";
     const tColor = { "做T买": "#c92a2a", "做T卖": "#2b8a3e", "做T买（逢低）": "#c92a2a", "持有不动": "#868e96" }[tp.t_action] || "#868e96";
-    const qty = (tp.t_qty && tp.t_qty > 0) ? `做T量 ${tp.t_qty}股` : "暂不动";
-    return `<div style="margin-top:5px;padding:5px 6px;background:#fff8e1;border-left:3px solid ${tColor};border-radius:4px;font-size:12px">
-      <span style="font-weight:700;color:${tColor}">🔁 做T：${tp.t_action}</span>
-      <span style="margin-left:6px;color:#c92a2a">低吸价 ${fmt(tp.t_buy_price)}</span>
-      <span style="margin-left:6px;color:#2b8a3e">高抛价 ${fmt(tp.t_sell_price)}</span>
-      <span style="margin-left:6px;font-weight:600">${qty}</span>
-      ${tp.t_note ? `<div style="color:#666;margin-top:2px">${tp.t_note}</div>` : ""}
+    const qty = (tp.t_qty && tp.t_qty > 0) ? `${tp.t_qty}股` : "暂不动";
+    return `<div style="margin-top:2px;padding:2px 5px;background:#fff8e1;border-left:2px solid ${tColor};border-radius:3px;font-size:10.5px;line-height:1.5">
+      <span style="font-weight:700;color:${tColor}">${tp.t_action}</span>
+      <span style="margin-left:4px;color:#c92a2a">吸 ${fmt(tp.t_buy_price)}</span>
+      <span style="margin-left:4px;color:#2b8a3e">抛 ${fmt(tp.t_sell_price)}</span>
+      <span style="margin-left:4px;color:#666">·${qty}</span>
     </div>`;
   }
 
@@ -525,32 +533,23 @@
       if (m.price != null && p.cost > 0 && p.shares > 0) {
         const diff = (m.price - p.cost) * p.shares;
         const pct = (m.price / p.cost - 1) * 100;
-        pl = `<span class="pl ${diff >= 0 ? "up" : "down"}">${diff >= 0 ? "+" : ""}${diff.toLocaleString("zh-CN", { maximumFractionDigits: 0 })} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)</span>`;
+        pl = `<span class="pl ${diff >= 0 ? "up" : "down"}">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>`;
       }
       const priceTxt = m.price != null
-        ? `<span class="px ${chgClass(m.change)}">${fmt(m.price)}</span> <span class="chg ${chgClass(m.change)}">${m.change_pct != null ? (m.change_pct >= 0 ? "+" : "") + fmt(m.change_pct) + "%" : ""}</span>`
+        ? `<span class="px ${chgClass(m.change)}">${fmt(m.price)}</span><span class="chg ${chgClass(m.change)}" style="font-size:10px;margin-left:3px">${m.change_pct != null ? (m.change_pct >= 0 ? "+" : "") + fmt(m.change_pct) + "%" : ""}</span>`
         : `<span class="px">--</span>`;
-      const buyTxt = m.buy_price != null ? fmt(m.buy_price) : "--";
-      const sellTxt = m.sell_price != null ? fmt(m.sell_price) : "--";
       const actBadge = act
-        ? `<span class="pos-act" style="background:${actColor};color:#fff">${act}</span>`
-        : `<span class="pos-act" style="background:#adb5bd;color:#fff">信号计算中</span>`;
-      return `<li class="pos-item" data-code="${p.code}" style="padding:8px 4px;border-bottom:1px solid #eee;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="pos-name" style="font-weight:600">${p.name || p.code}</span>
-          ${actBadge}
-          <span class="wi-del" data-code="${p.code}" style="margin-left:auto">✕</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;font-size:13px">
-          <span class="pos-code" style="color:#888;font-size:11px">${p.code} · ${p.shares}股</span>
+        ? `<span class="pos-act" style="background:${actColor};color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;font-weight:600">${act}</span>`
+        : `<span class="pos-act" style="background:#adb5bd;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px">…</span>`;
+      return `<li class="pos-item" data-code="${p.code}" style="padding:4px 5px;border-bottom:1px solid #f1f3f5;cursor:pointer;line-height:1.5">
+        <div style="display:flex;align-items:center;gap:5px;font-size:12px">
+          <span class="pos-name" style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name || p.code}</span>
           ${priceTxt}
-        </div>
-        <div style="display:flex;gap:14px;margin-top:4px;font-size:12px">
-          <span style="color:#c92a2a">买价 <b>${buyTxt}</b></span>
-          <span style="color:#2b8a3e">卖价 <b>${sellTxt}</b></span>
+          ${actBadge}
+          ${pl}
+          <span class="wi-del" data-code="${p.code}" style="color:#adb5bd;cursor:pointer;margin-left:2px;font-size:11px">✕</span>
         </div>
         ${tPlanHtml(p, m)}
-        ${pl ? `<div style="margin-top:2px;font-size:12px">${pl}</div>` : ""}
       </li>`;
     }).join("");
     ul.querySelectorAll(".wi-del").forEach(el => el.addEventListener("click", async (e) => {
