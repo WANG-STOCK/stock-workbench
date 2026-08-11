@@ -323,6 +323,89 @@ def today_levels(bars_5m, pct=0.03):
     }
 
 
+def candidate_levels(bars_5m=None, daily_bars=None, prev_close=None, pct=0.025):
+    """候选股扫描用的「紧贴当前价」买卖价。
+
+    思路：不要再给 BOLL 上下轨那种动辄差十几块的价格（用户反馈差太多）。
+    改用「当日实时价 ± 2.5%」带宽，并参考 MA20/MA5 和当日分时做微调：
+
+    1) 取基准价 anchor：优先用当日最新价（bars_5m 末根 close）→
+       退化为昨收（prev_close）→ 再退化为日线最后 close。
+    2) 基本带宽：buy = anchor × (1 − pct), sell = anchor × (1 + pct)（默认 ±2.5%）。
+    3) MA20 参考：若 anchor 离 MA20 > 5%，提示偏离；不直接改价，但写出"vs_ma20"幅度。
+    4) MA5 趋势微调：MA5 > MA20（短线偏多）→ sell 上浮 +0.3%；反之 sell 下压 −0.3%。
+    5) 当日分时 high/low 裁剪：实际的高/低不能超出建议带宽（避免建议买在涨停价）。
+
+    pct 默认 2.5%（比持仓版 3% 略紧，因为候选建议应当更灵敏、贴近当前价）。
+    """
+    anchor = None
+    src = "close"
+    if bars_5m and len(bars_5m) >= 1:
+        anchor = bars_5m[-1].get("close")
+        src = "tick"
+    if anchor is None and daily_bars and len(daily_bars) >= 1:
+        anchor = daily_bars[-1].get("close")
+        src = "daily"
+    if anchor is None and prev_close:
+        anchor = prev_close
+        src = "prev_close"
+    if anchor is None or anchor <= 0:
+        return None
+
+    # MA5 / MA20（用日线算，window 看不全就回退）
+    ma5 = ma20 = None
+    if daily_bars and len(daily_bars) >= 20:
+        closes = [b["close"] for b in daily_bars[-60:]]  # 最多取 60 根
+        if len(closes) >= 5:
+            ma5 = sum(closes[-5:]) / 5
+        if len(closes) >= 20:
+            ma20 = sum(closes[-20:]) / 20
+
+    # 短线趋势微调：MA5 > MA20 偏多，sell 上浮；偏空则 sell 下压
+    micro_up = 0.0
+    trend_note = "中性"
+    if ma5 is not None and ma20 is not None:
+        if ma5 > ma20 * 1.005:
+            micro_up = 0.003
+            trend_note = "MA5>MA20 短线偏多"
+        elif ma5 < ma20 * 0.995:
+            micro_up = -0.003
+            trend_note = "MA5<MA20 短线偏空"
+
+    buy = round(anchor * (1 - pct), 2)
+    sell = round(anchor * (1 + pct + micro_up), 2)
+
+    # 当日分时裁剪：实际高低不能跑出带宽
+    today_hi = today_lo = None
+    if bars_5m and len(bars_5m) >= 1:
+        # 5m 数据可能跨日，只取最后一根的日期视为今日
+        today = bars_5m[-1].get("date")
+        today_bars = [b for b in bars_5m if b.get("date") == today] if today else bars_5m
+        if today_bars:
+            today_hi = max(b["high"] for b in today_bars)
+            today_lo = min(b["low"] for b in today_bars)
+            sell = max(sell, round(today_hi, 2))  # 不能比今天高点还高
+            buy = min(buy, round(today_lo, 2))    # 不能比今天低点还低（兜底）
+
+    # MA20 偏离度
+    vs_ma20_pct = None
+    if ma20 and ma20 > 0:
+        vs_ma20_pct = round((anchor / ma20 - 1) * 100, 2)
+
+    return {
+        "anchor": round(anchor, 2),
+        "anchor_src": src,
+        "buy": buy,
+        "sell": sell,
+        "ma5": round(ma5, 2) if ma5 else None,
+        "ma20": round(ma20, 2) if ma20 else None,
+        "vs_ma20_pct": vs_ma20_pct,
+        "trend": trend_note,
+        "today_high": round(today_hi, 2) if today_hi else None,
+        "today_low": round(today_lo, 2) if today_lo else None,
+    }
+
+
 def adaptive_trade(tl, regime, price, prev_close=None, pct=0.03):
     """根据当日板块资金流/涨跌强弱，自适应调整买卖建议（顺势/逆势）。
 

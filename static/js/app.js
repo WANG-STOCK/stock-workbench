@@ -407,8 +407,10 @@
           <span style="color:#c92a2a">买价 <b>${fmt(r.buy_price)}</b></span>
           <span style="color:#2b8a3e">卖价 <b>${fmt(r.sell_price)}</b></span>
           <span>买量 <b>${r.buy_qty}股</b></span>
+          ${r.ma5 != null && r.ma20 != null ? `<span style="color:#666">MA5 <b>${fmt(r.ma5)}</b> / MA20 <b>${fmt(r.ma20)}</b>${r.vs_ma20_pct != null ? `　<span style="color:${r.vs_ma20_pct>=0?'#2b8a3e':'#c92a2a'}">vsMA20 ${r.vs_ma20_pct>=0?'+':''}${r.vs_ma20_pct}%</span>` : ""}</span>` : ""}
           <span style="color:${gradeColor}">基本面 ${r.fund_grade}</span>
         </div>
+        ${r.trend_hint && r.trend_hint !== "中性" ? `<div style="margin-top:3px;font-size:11px;color:#1971c2">📈 ${r.trend_hint}</div>` : ""}
         ${r.note ? `<div style="margin-top:4px;font-size:12px;color:#555">💡 ${r.note}</div>` : ""}
         ${r.reasons && r.reasons.length ? `<div style="margin-top:2px;font-size:11px;color:#999">${r.reasons.join("；")}</div>` : ""}
       </div>`;

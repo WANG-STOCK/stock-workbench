@@ -633,8 +633,15 @@ class Handler(BaseHTTPRequestHandler):
                 sector_score = (ss or {}).get("score", 50) if ss else 50
                 combined = round(tech_norm * 0.50 + fund * 0.40 + sector_score * 0.10, 1)
                 price = a.get("price")
-                buy_price = pl.get("buy") or (round(price * 0.97, 2) if price else None)
-                sell_price = pl.get("sell") or (round(price * 1.06, 2) if price else None)
+                # 候选股买卖价：用「当日实时价±2.5%」紧贴当前价（参考 MA20/MA5 + 当日分时）
+                try:
+                    bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
+                    _cache_set(code, "5m", 60, bars5m)
+                except Exception:
+                    bars5m = None
+                cl = sig.candidate_levels(bars5m, bars, a.get("prev_close"))
+                buy_price = cl["buy"] if cl else (round(price * 0.97, 2) if price else None)
+                sell_price = cl["sell"] if cl else (round(price * 1.06, 2) if price else None)
                 # 买信号门控：基本面弱或综合分低则降为「持有」
                 act = a["action"]
                 fund_ok = fund >= 60
@@ -660,6 +667,12 @@ class Handler(BaseHTTPRequestHandler):
                     "price": price,
                     "buy_price": buy_price,
                     "sell_price": sell_price,
+                    "ma5": cl["ma5"] if cl else None,
+                    "ma20": cl["ma20"] if cl else None,
+                    "vs_ma20_pct": cl["vs_ma20_pct"] if cl else None,
+                    "trend_hint": cl["trend"] if cl else None,
+                    "today_high": cl["today_high"] if cl else None,
+                    "today_low": cl["today_low"] if cl else None,
                     "buy_qty": qty,
                     "capital": capital,
                     "sector": sector,
