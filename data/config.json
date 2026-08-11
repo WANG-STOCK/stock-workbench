@@ -19,5 +19,7 @@
     "strategy": "composite",
     "top_n": 10
   },
-  "weight_multipliers": {}
+  "available_capital": 100000.0,
+  "weight_multipliers": {},
+  "cloud_url": "https://wang-zhibiao-2026.onrender.com"
 }

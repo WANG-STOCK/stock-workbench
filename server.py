@@ -636,7 +636,7 @@ class Handler(BaseHTTPRequestHandler):
                 return None
 
         results = []
-        with ThreadPoolExecutor(max_workers=12) as ex:
+        with ThreadPoolExecutor(max_workers=20) as ex:
             futs = [ex.submit(_worker, c) for c in codes]
             for fut in as_completed(futs):
                 try:
@@ -695,7 +695,7 @@ class Handler(BaseHTTPRequestHandler):
                     _scan["done"] += 1
 
             from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=6) as ex:
+            with ThreadPoolExecutor(max_workers=12) as ex:
                 list(ex.map(work, codes))
             results.sort(key=lambda x: x["score"], reverse=True)
             _scan["results"] = results
