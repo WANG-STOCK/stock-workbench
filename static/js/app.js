@@ -49,6 +49,7 @@
     await loadPositions();
     await computePositionSignals();
     setupWeights(cfg);
+    $("#availCapital").value = (cfg.available_capital != null ? cfg.available_capital : 100000);
     $("#apiBase").value = API_BASE;
     $("#tdxPath").value = cfg.tdx_path || "";
     $("#tdxPathTip").textContent = cfg.tdx_available
@@ -105,6 +106,11 @@
     $("#addCurrent").addEventListener("click", addCurrentToWatch);
     $("#refreshSignals").addEventListener("click", computeSignals);
     $("#scanBtn").addEventListener("click", runScreener);
+    $("#availCapital").addEventListener("change", async () => {
+      const v = parseFloat($("#availCapital").value || "100000");
+      await api("POST", "/api/config", { available_capital: v }).catch(() => {});
+      toast("可用资金已设为 ¥" + v.toLocaleString("zh-CN"));
+    });
     $("#rebuildBtn").addEventListener("click", rebuildUniverse);
     $("#advBtn").addEventListener("click", recomputeAdvice);
 
@@ -341,6 +347,35 @@
       row.addEventListener("click", () => openStock(row.dataset.code, row.dataset.name)));
   }
 
+  // 候选股（十五五成长池）富表渲染
+  function renderCandidateRows(results) {
+    return (results || []).map(r => {
+      const c = ACT_COLOR[r.action] || "#868e96";
+      const gradeColor = { A: "#c92a2a", B: "#1971c2", C: "#868e96" }[r.fund_grade] || "#868e96";
+      return `<div class="cand-row" data-code="${r.code}" data-name="${r.name}" style="padding:8px 4px;border-bottom:1px solid #eee;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="tag" style="background:${c}">${r.action}</span>
+          <span style="font-weight:600">${r.name}</span><span style="color:#888;font-size:11px">${r.code}</span>
+          <span style="color:#666;font-size:12px">· ${r.track}</span>
+          <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}）</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;flex-wrap:wrap">
+          <span>现价 <b>${fmt(r.price)}</b></span>
+          <span style="color:#c92a2a">买价 <b>${fmt(r.buy_price)}</b></span>
+          <span style="color:#2b8a3e">卖价 <b>${fmt(r.sell_price)}</b></span>
+          <span>买量 <b>${r.buy_qty}股</b></span>
+          <span style="color:${gradeColor}">基本面 ${r.fund_grade}</span>
+        </div>
+        ${r.note ? `<div style="margin-top:4px;font-size:12px;color:#555">💡 ${r.note}</div>` : ""}
+        ${r.reasons && r.reasons.length ? `<div style="margin-top:2px;font-size:11px;color:#999">${r.reasons.join("；")}</div>` : ""}
+      </div>`;
+    }).join("");
+  }
+  function bindCandidateRows(el) {
+    el.querySelectorAll(".cand-row").forEach(row =>
+      row.addEventListener("click", () => openStock(row.dataset.code, row.dataset.name)));
+  }
+
   async function runScreener() {
     const scope = $("#scopeSelect").value;
     const strategy = $("#strategySelect").value;
@@ -351,6 +386,18 @@
         <div class="sub" id="scanMsg">正在生成全市场股票池并扫描…（首次约 1–2 分钟，之后走缓存很快）</div></div>`;
       await api("GET", "/api/screener?scope=online_all&strategy=" + strategy + "&limit=120");
       pollScan(strategy);
+      return;
+    }
+    if (scope === "candidate") {
+      const cap = $("#availCapital").value || 100000;
+      el.innerHTML = `<div class="signal-empty">扫描十五五成长池…</div>`;
+      const data = await api("GET", "/api/screener?scope=candidate&strategy=" + strategy + "&limit=120&capital=" + cap);
+      if (!data.results.length) {
+        el.innerHTML = `<div class="signal-empty">${data.count ? "成长池暂无符合「" + (data.strategy_label || strategy) + "」的标的" : "行业池为空，请检查 data/industry_pool.json"}</div>`;
+        return;
+      }
+      el.innerHTML = `<div class="scan-hint">十五五成长池 · 命中 ${data.results.length} 只（综合分=技术55%+基本面45%，按综合分降序）</div>` + renderCandidateRows(data.results);
+      bindCandidateRows(el);
       return;
     }
     el.innerHTML = `<div class="signal-empty">扫描中…</div>`;

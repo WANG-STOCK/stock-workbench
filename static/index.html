@@ -39,6 +39,7 @@
         <div class="row">
           <select id="scopeSelect" class="input">
             <option value="watchlist">自选列表</option>
+            <option value="candidate">十五五成长池（科技/医药/电力）</option>
             <option value="universe">自定义股票池</option>
             <option value="online_all">在线全市场（免通达信）</option>
             <option value="tdx">通达信全市场（需装通达信）</option>
@@ -52,6 +53,10 @@
             <option value="low_volume_rebound">缩量企稳反弹</option>
             <option value="ma_converge_breakout">均线粘合突破</option>
           </select>
+        </div>
+        <div class="row">
+          <label class="mini-label">可用资金¥<input id="availCapital" class="input small" type="number" value="100000"></label>
+          <span class="sub">候选扫描按此算买量</span>
         </div>
         <div class="row">
           <button id="scanBtn" class="btn wide">扫描候选</button>

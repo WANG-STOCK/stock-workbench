@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core import data_source as ds
 from core import signals as sig
 from core.indicators import compute_all
+from core import industry_pool as ip
+from core import fundamentals as fm
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -30,7 +32,8 @@ os.makedirs(DATA_DIR, exist_ok=True)
 _config = {"tdx_path": "", "kline_ttl": {"5m": 30, "15m": 60, "30m": 120, "60m": 300,
                                          "daily": 300, "weekly": 600},
           "weights": {}, "position": {"capital": 100000, "max_single": 0.25, "lot": 100},
-          "monitor": {"scope": "watchlist", "strategy": "composite", "top_n": 10}}
+          "monitor": {"scope": "watchlist", "strategy": "composite", "top_n": 10},
+          "available_capital": 100000}
 if os.path.isfile(CONFIG):
     try:
         _config.update(json.load(open(CONFIG, encoding="utf-8")))
@@ -116,6 +119,8 @@ def _get_universe():
 def _scope_codes(scope):
     if scope == "watchlist":
         return [c for c in _load_json(WATCHLIST, []) if c]
+    if scope == "candidate":
+        return ip.pool_codes()
     if scope == "universe":
         u = os.path.join(DATA_DIR, "universe.txt")
         if not os.path.isfile(u):
@@ -229,6 +234,7 @@ class Handler(BaseHTTPRequestHandler):
                              "strategies": sig.STRATEGY_LABELS,
                              "weight_categories": sig.WEIGHT_CATEGORIES,
                              "weight_multipliers": _WEIGHT_MULT,
+                             "available_capital": _config.get("available_capital", 100000),
                              "cloud_url": _CLOUD_URL})
             return
         if route == "/api/positions":
@@ -297,6 +303,17 @@ class Handler(BaseHTTPRequestHandler):
             strategy = qs.get("strategy", ["composite"])[0]
             limit = int(qs.get("limit", ["120"])[0])
             codes = _scope_codes(scope)
+            # 候选股（十五五成长池）：技术+基本面综合打分，独立渲染
+            if scope == "candidate":
+                try:
+                    cap = float(qs.get("capital", [None])[0] or _config.get("available_capital", 100000))
+                except (TypeError, ValueError):
+                    cap = _config.get("available_capital", 100000)
+                result = self._run_candidate_screener(codes, limit, cap, strategy)
+                self._send(200, {"scope": scope, "strategy": strategy,
+                                 "strategy_label": sig.STRATEGY_LABELS.get(strategy, strategy),
+                                 "count": len(codes), "results": result})
+                return
             if not codes:
                 self._send(200, {"scope": scope, "strategy": strategy,
                                  "strategy_label": sig.STRATEGY_LABELS.get(strategy, strategy),
@@ -382,6 +399,11 @@ class Handler(BaseHTTPRequestHandler):
                         _config["monitor"] = payload["monitor"]
                     if "cloud_url" in payload:
                         _config["cloud_url"] = payload["cloud_url"]
+                    if "available_capital" in payload:
+                        try:
+                            _config["available_capital"] = float(payload["available_capital"])
+                        except (TypeError, ValueError):
+                            pass
                     if "tdx_path" in payload:
                         _config["tdx_path"] = payload["tdx_path"]
                     try:
@@ -511,6 +533,79 @@ class Handler(BaseHTTPRequestHandler):
             if r:
                 results.append(r)
         results.sort(key=lambda x: x["score"], reverse=True)
+        return results
+
+    def _run_candidate_screener(self, codes, limit, capital, strategy="composite"):
+        """候选股扫描（十五五成长池）：技术面 55% + 基本面 45% 综合打分。
+
+        基本面弱（估值/质量档）会门控买信号，避免夕阳/垃圾股被技术反弹误选。
+        """
+        results = []
+        names = {}
+        for chunk in _chunk(codes, 80):
+            try:
+                rt = ds.fetch_realtime(chunk)
+                for c, v in rt.items():
+                    names[c] = v.get("name", "")
+            except Exception:
+                pass
+        # 实时估值（best-effort，失败静默降级）
+        valuations = {}
+        try:
+            valuations = fm.batch_valuation(codes)
+        except Exception:
+            pass
+        lot = _POS.get("lot", 100)
+        for code in codes:
+            try:
+                bars = ds.get_kline(code, "daily", limit, _tdx_path or None)
+                if len(bars) < 60:
+                    continue
+                a = sig.analyze(bars, _WEIGHTS)
+                if not a.get("ok"):
+                    continue
+                pl = a.get("price_levels") or {}
+                tech = a["score"]  # -100..100
+                tech_norm = max(0.0, min(100.0, (tech + 100) / 2))
+                fp = ip.get_fund(code) or {}
+                fund = fm.fundamental_score(fp.get("grade", "B"), valuations.get(code))
+                combined = round(tech_norm * 0.55 + fund * 0.45, 1)
+                price = a.get("price")
+                buy_price = pl.get("buy") or (round(price * 0.97, 2) if price else None)
+                sell_price = pl.get("sell") or (round(price * 1.06, 2) if price else None)
+                # 买信号门控：基本面弱或综合分低则降为「持有」
+                act = a["action"]
+                fund_ok = fund >= 60
+                if act in ("买入", "强烈买入"):
+                    if not fund_ok or combined < 55:
+                        act = "持有"
+                    elif combined >= 72 and act == "买入":
+                        act = "强烈买入"
+                # 买量（按可用资金 + 买价 + 手数）
+                qty = 0
+                if buy_price and buy_price > 0:
+                    q = int(capital / buy_price // lot) * lot
+                    qty = max(q, 0)
+                results.append({
+                    "code": code,
+                    "name": names.get(code) or fp.get("name") or code,
+                    "track": fp.get("track", ""),
+                    "action": act,
+                    "tech_score": round(tech_norm, 1),
+                    "fund_score": round(fund, 1),
+                    "fund_grade": fp.get("grade", "B"),
+                    "combined": combined,
+                    "price": price,
+                    "buy_price": buy_price,
+                    "sell_price": sell_price,
+                    "buy_qty": qty,
+                    "capital": capital,
+                    "note": fp.get("note", ""),
+                    "reasons": [r["text"] for r in a["reasons"][:2]],
+                })
+            except Exception:
+                continue
+        results.sort(key=lambda x: x["combined"], reverse=True)
         return results
 
     def _scan_all_worker(self, codes, limit, strategy):
