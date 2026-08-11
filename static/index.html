@@ -84,110 +84,109 @@
       </section>
     </main>
 
-    <!-- 右侧侧边栏：3 个等高板块（搜索/盯盘 + 持仓·做T + 扫描中心） -->
+    <!-- 右侧：双列布局 —— 左列「持仓·做T」/ 右列「自选盯盘·扫描候选」（合并成一个单元） -->
     <aside class="right">
-      <!-- 1. 搜索/盯盘（实时） -->
-      <section class="panel panel-stalk">
-        <div class="panel-title">
-          <span class="dot dot-blue"></span>
-          <span>① 搜索 / 盯盘</span>
-          <span class="panel-actions">
-            <button id="addCurrent" class="mini">+加当前</button>
-            <button id="refreshSignals" class="mini">刷信号</button>
-          </span>
-        </div>
-        <input id="searchInput" class="input" placeholder="代码/名称/拼音">
-        <div id="searchResults" class="search-results"></div>
-        <div class="sub-title">
-          <span>自选盯盘</span>
-          <span id="watchCount" class="watch-count"></span>
-        </div>
-        <ul id="watchlist" class="watchlist"></ul>
-      </section>
+      <!-- 左列：持仓·做T -->
+      <div class="right-col">
+        <section class="panel panel-pos">
+          <div class="panel-title">
+            <span class="dot dot-orange"></span>
+            <span>持仓 · 做T</span>
+            <span class="sub">驱动买/卖多少</span>
+          </div>
+          <div class="row">
+            <input id="posCode" class="input small" placeholder="代码">
+            <input id="posShares" class="input small" type="number" placeholder="股数">
+          </div>
+          <div class="row">
+            <input id="posCost" class="input small" type="number" placeholder="成本(可选)">
+            <button id="addPosBtn" class="btn">记录</button>
+          </div>
+          <ul id="posList" class="pos-list"></ul>
+        </section>
+      </div>
 
-      <!-- 2. 持仓做T（行动） -->
-      <section class="panel panel-pos">
-        <div class="panel-title">
-          <span class="dot dot-orange"></span>
-          <span>② 持仓 · 做T</span>
-          <span class="sub">驱动买/卖多少</span>
-        </div>
-        <div class="row">
-          <input id="posCode" class="input small" placeholder="代码">
-          <input id="posShares" class="input small" type="number" placeholder="股数">
-        </div>
-        <div class="row">
-          <input id="posCost" class="input small" type="number" placeholder="成本(可选)">
-          <button id="addPosBtn" class="btn">记录</button>
-        </div>
-        <ul id="posList" class="pos-list"></ul>
-      </section>
+      <!-- 右列：自选盯盘 + 扫描候选（合并成一个单元，扫描结果正好显示在下方） -->
+      <div class="right-col">
+        <section class="panel panel-watchscan">
+          <div class="panel-title">
+            <span class="dot dot-blue"></span>
+            <span>自选盯盘 · 扫描候选</span>
+            <span class="panel-actions">
+              <button id="addCurrent" class="mini">+加当前</button>
+              <button id="refreshSignals" class="mini">刷信号</button>
+              <details class="note-box inline">
+                <summary>⚙ 设置</summary>
+                <div style="padding:8px 6px;min-width:240px">
+                  <div class="sub-title" style="margin-top:0">评分权重</div>
+                  <div id="weightSliders" class="weight-sliders"></div>
+                  <div class="row"><button id="saveWeights" class="btn tiny wide">保存权重</button><button id="resetWeights" class="btn tiny scan-rebuild">重置</button></div>
+                  <div class="sub-title">云端后端地址</div>
+                  <div class="row">
+                    <input id="apiBase" class="input xs" placeholder="留空=本机">
+                    <button id="saveApiBase" class="btn tiny">保存</button>
+                  </div>
+                  <div class="sub-title">通达信 vipdoc 路径</div>
+                  <div class="row">
+                    <input id="tdxPath" class="input xs" placeholder="vipdoc 路径">
+                    <button id="saveTdx" class="btn tiny">保存</button>
+                  </div>
+                  <div id="tdxPathTip" class="sub" style="font-size:11px;margin-top:4px"></div>
+                  <div class="sub-title">关于券商对接</div>
+                  <p class="sub" style="line-height:1.5">
+                    个人普通账户（中信华泰等）<b>没有 API 下单接口</b>，程序化下单需换 PTrade / QMT 量化平台（资产 50W+）。<br>
+                    当前方案：在持仓行点 <b>「去券商看」</b> → 浏览器新标签跳到你券商 APP/Web 的对应股票页 → 在那手工买/卖。<br>
+                    想全自动化请告诉我，可考虑接入券商合作渠道。
+                  </p>
+                </div>
+              </details>
+            </span>
+          </div>
 
-      <!-- 3. 扫描中心（探索） -->
-      <section class="panel panel-scan">
-        <div class="panel-title">
-          <span class="dot dot-purple"></span>
-          <span>③ 扫描中心</span>
-          <span class="panel-actions">
-            <details class="note-box inline">
-              <summary>⚙ 设置</summary>
-              <div style="padding:8px 6px;min-width:240px">
-                <div class="sub-title" style="margin-top:0">评分权重</div>
-                <div id="weightSliders" class="weight-sliders"></div>
-                <div class="row"><button id="saveWeights" class="btn tiny wide">保存权重</button><button id="resetWeights" class="btn tiny scan-rebuild">重置</button></div>
-                <div class="sub-title">云端后端地址</div>
-                <div class="row">
-                  <input id="apiBase" class="input xs" placeholder="留空=本机">
-                  <button id="saveApiBase" class="btn tiny">保存</button>
-                </div>
-                <div class="sub-title">通达信 vipdoc 路径</div>
-                <div class="row">
-                  <input id="tdxPath" class="input xs" placeholder="vipdoc 路径">
-                  <button id="saveTdx" class="btn tiny">保存</button>
-                </div>
-                <div id="tdxPathTip" class="sub" style="font-size:11px;margin-top:4px"></div>
-                <div class="sub-title">关于券商对接</div>
-                <p class="sub" style="line-height:1.5">
-                  个人普通账户（中信华泰等）<b>没有 API 下单接口</b>，程序化下单需换 PTrade / QMT 量化平台（资产 50W+）。<br>
-                  当前方案：在持仓行点 <b>「去券商看」</b> → 浏览器新标签跳到你券商 APP/Web 的对应股票页 → 在那手工买/卖。<br>
-                  想全自动化请告诉我，可考虑接入券商合作渠道。
-                </p>
-              </div>
-            </details>
-          </span>
-        </div>
-        <div class="row">
-          <select id="scopeSelect" class="input">
-            <option value="watchlist">自选列表</option>
-            <option value="candidate">十五五成长池（科技/医药/电力）</option>
-            <option value="universe">自定义股票池</option>
-            <option value="online_all">在线全市场</option>
-            <option value="tdx">通达信全市场</option>
-          </select>
-        </div>
-        <div class="row">
-          <select id="strategySelect" class="input">
-            <option value="composite">综合评分（买入及以上）</option>
-            <option value="ma_bull">均线多头排列</option>
-            <option value="golden_cross">MACD/KDJ 金叉</option>
-            <option value="breakout">突破 20 日新高</option>
-            <option value="volume_surge">放量上涨</option>
-            <option value="low_volume_rebound">缩量企稳反弹</option>
-            <option value="ma_converge_breakout">均线粘合突破</option>
-          </select>
-        </div>
-        <div class="row">
-          <label class="mini-label">可用资金¥<input id="availCapital" class="input small" type="number" value="100000"></label>
-          <span class="sub">候选按此算买量</span>
-        </div>
-        <div class="sub" style="font-size:11px;color:var(--muted);margin:-4px 0 8px;line-height:1.5">「可用资金」= 你当前空闲、可以用来买股票的总钱数（元）。默认 10 万，按实际改。它只决定「扫描候选股」时每只建议买多少股，不影响行情和持仓。</div>
-        </div>
-        <div class="row">
-          <button id="scanBtn" class="btn wide">扫描候选</button>
-          <button id="rebuildBtn" class="btn scan-rebuild" title="重新生成 A 股池">重建池</button>
-        </div>
-        <div id="screenerResults" class="screener-results"></div>
-      </section>
+          <input id="searchInput" class="input" placeholder="代码/名称/拼音">
+          <div id="searchResults" class="search-results"></div>
+
+          <div class="sub-title">
+            <span>自选盯盘</span>
+            <span id="watchCount" class="watch-count"></span>
+          </div>
+          <ul id="watchlist" class="watchlist"></ul>
+
+          <div class="sub-title scan-sep">
+            <span>扫描候选</span>
+          </div>
+          <div class="row">
+            <select id="scopeSelect" class="input">
+              <option value="watchlist">自选列表</option>
+              <option value="candidate">十五五成长池（科技/医药/电力）</option>
+              <option value="universe">自定义股票池</option>
+              <option value="online_all">在线全市场</option>
+              <option value="tdx">通达信全市场</option>
+            </select>
+          </div>
+          <div class="row">
+            <select id="strategySelect" class="input">
+              <option value="composite">综合评分（买入及以上）</option>
+              <option value="ma_bull">均线多头排列</option>
+              <option value="golden_cross">MACD/KDJ 金叉</option>
+              <option value="breakout">突破 20 日新高</option>
+              <option value="volume_surge">放量上涨</option>
+              <option value="low_volume_rebound">缩量企稳反弹</option>
+              <option value="ma_converge_breakout">均线粘合突破</option>
+            </select>
+          </div>
+          <div class="row">
+            <label class="mini-label">可用资金¥<input id="availCapital" class="input small" type="number" value="100000"></label>
+            <span class="sub">候选按此算买量</span>
+          </div>
+          <div class="sub" style="font-size:11px;color:var(--muted);margin:-4px 0 8px;line-height:1.5">「可用资金」= 你当前空闲、可以用来买股票的总钱数（元）。默认 10 万，按实际改。它只决定「扫描候选股」时每只建议买多少股，不影响行情和持仓。</div>
+          <div class="row">
+            <button id="scanBtn" class="btn wide">扫描候选</button>
+            <button id="rebuildBtn" class="btn scan-rebuild" title="重新生成 A 股池">重建池</button>
+          </div>
+          <div id="screenerResults" class="screener-results"></div>
+        </section>
+      </div>
     </aside>
   </div>
 

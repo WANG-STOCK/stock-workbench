@@ -71,21 +71,27 @@ body {
   overflow: hidden;
 }
 
-/* 右侧 3 个板块 1:1.2:1（中部持仓·做T 稍大） */
+/* 右侧改为双列：左列「持仓·做T」/ 右列「自选盯盘·扫描候选」合并单元 */
 .right {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 10px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
+.right-col {
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0; min-height: 0; overflow: hidden;
+}
+.right-col > .panel { flex: 1 1 auto; min-height: 0; }
 
 /* ---------- Panel 通用 ---------- */
 .panel {
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 14px; box-shadow: var(--shadow-l);
   display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  position: relative;
 }
 .panel-title {
   font-weight: 700; font-size: 13px; color: var(--ink); margin-bottom: 10px;
@@ -145,7 +151,8 @@ button.mini:hover { background: #dde7f0; }
 }
 .watch-count { background: #eef2f6; color: var(--accent); padding: 1px 8px; border-radius: 9px; font-size: 10px; }
 
-.watchlist { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; min-height: 0; }
+.watchlist { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 0.85 1 0; min-height: 70px; }
+.scan-sep { margin-top: 10px; }
 .watch-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 6px; border-radius: 6px; cursor: pointer;
   border-bottom: 1px solid #f1f3f5; font-size: 12px;
@@ -163,7 +170,7 @@ button.mini:hover { background: #dde7f0; }
 .sig-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* ---------- 选股扫描结果 ---------- */
-.screener-results { margin-top: 6px; flex: 1; min-height: 60px; overflow: auto; }
+.screener-results { margin-top: 6px; flex: 1.5 1 0; min-height: 80px; overflow: auto; }
 .scan-row {
   display: flex; align-items: center; gap: 6px; padding: 6px 6px; border-radius: 6px; cursor: pointer;
   border-bottom: 1px solid #f1f3f5; font-size: 12px;
@@ -324,7 +331,8 @@ button.mini:hover { background: #dde7f0; }
 /* ---------- 响应式：窄屏堆叠 ---------- */
 @media (max-width: 1100px) {
   .layout { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .right { grid-template-rows: auto; }
-  .right > .panel { min-height: 200px; }
   .left { grid-template-rows: auto auto auto; }
+  .right { grid-template-columns: minmax(0, 1fr); }
+  .right-col { overflow: visible; }
+  .right-col > .panel { min-height: 260px; }
 }
