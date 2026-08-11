@@ -554,44 +554,55 @@
         🧭 ${rg.track || rg.sector || "板块"}：${trendTxt}　${fundTxt}${weak ? "　⚠️弱势" : ""}
       </div>`;
     }
+    // 1) 弱市：先减仓防跌，跌停才低吸买回做T
     const adp = m.adaptive;
-    // 自适应建议：弱市先减仓防跌，跌停才低吸买回；正常市按开盘±比例做T
     if (adp && adp.bias === "defensive") {
       const ld = adp.limit_down;
       const price = m.price;
-      let status = "⚠️ 弱势减仓：先卖防继续跌", statusColor = "#c92a2a";
+      let status = "⚠️ 板块弱势·资金流出：先减仓防继续跌", statusColor = "#c92a2a";
       if (price != null && ld != null && price <= ld) { status = "✅ 已到跌停区，可低吸买回做T"; statusColor = "#2b8a3e"; }
       return `<div style="margin-top:4px;padding:5px 7px;background:#fff5f5;border-left:3px solid ${statusColor};border-radius:4px;font-size:11px;line-height:1.8">
         <div style="font-weight:700;color:${statusColor}">${status}</div>
         <div>💡 ${adp.tip}</div>
         ${ld != null ? `<div>📉 跌到 <b style="color:#2b8a3e">${fmt(ld)}</b>（约跌停）才低吸买回做T</div>` : ""}
-        ${price != null ? `<div style="color:#666;margin-top:2px">现在 ${fmt(price)}</div>` : ""}
+        ${price != null ? `<div style="color:#666;margin-top:2px">现价 ${fmt(price)}</div>` : ""}
       </div>${rgHtml}`;
     }
-    // 正常市：开盘±比例做T（大白话）
-    const buy = m.today_buy, sell = m.today_sell, openP = m.today_open, price = m.price;
-    if (buy == null && sell == null) {
-      // 没有当日分时数据时，退回原来的做T提示（标签改为大白话）
-      const tp = m.t_plan;
-      if (!tp) return rgHtml;
-      const tColor = { "做T买": "#c92a2a", "做T卖": "#2b8a3e", "持有不动": "#868e96" }[tp.t_action] || "#868e96";
-      return `<div style="margin-top:2px;padding:3px 6px;background:#f8f9fa;border-left:3px solid ${tColor};border-radius:4px;font-size:11px;line-height:1.7">
-        <span style="font-weight:700;color:${tColor}">${tp.t_action}</span>
-        ${tp.t_buy_price != null ? `<span style="margin-left:6px;color:#c92a2a">买 ${fmt(tp.t_buy_price)}</span>` : ""}
-        ${tp.t_sell_price != null ? `<span style="margin-left:6px;color:#2b8a3e">卖 ${fmt(tp.t_sell_price)}</span>` : ""}
-      </div>${rgHtml}`;
+    // 2) 普通市：不再显示"比开盘 +3% 卖"那种死板的延迟信号；
+    //    改为显示「今天趋势+现价结论」+「板块/技术要点」，让用户当下就知道该不该动。
+    const price = m.price;
+    const o = m.outlook;
+    let action = "⏸ 持有观察", actionColor = "#868e96", reason = "盘中，暂无明确多空信号";
+    if (o) {
+      if (o.trend === "偏多" && price != null && m.today_buy != null && price <= m.today_buy * 1.005) {
+        action = "👉 趋势偏多·可低吸买"; actionColor = "#2b8a3e";
+        reason = `今天偏多，现价 ${fmt(price)} 已在买点附近`;
+      } else if (o.trend === "偏空" && price != null) {
+        action = "👉 趋势偏空·先减仓别加仓"; actionColor = "#c92a2a";
+        reason = `今天偏空（${o.reason || ""}），建议先卖防继续跌`;
+      } else if (o.trend === "偏多" && price != null && m.today_sell != null && price >= m.today_sell * 0.995) {
+        action = "👉 趋势偏多·到高抛位可卖"; actionColor = "#2b8a3e";
+        reason = `今天偏多，现价 ${fmt(price)} 已近高抛位`;
+      } else if (o.action === "买") {
+        action = "👉 技术到位可买"; actionColor = "#2b8a3e";
+        reason = o.reason || "";
+      } else if (o.action === "卖") {
+        action = "👉 技术到位可卖"; actionColor = "#c92a2a";
+        reason = o.reason || "";
+      } else {
+        action = `⏸ ${o.trend}·等价格到位`; actionColor = "#868e96";
+        reason = o.reason || "等价格走到买卖点";
+      }
     }
-    let status = "", statusColor = "#868e96";
-    if (price != null && sell != null && price >= sell) { status = "✅ 现在到了卖点，可卖"; statusColor = "#c92a2a"; }
-    else if (price != null && buy != null && price <= buy) { status = "✅ 现在到了买点，可买"; statusColor = "#2b8a3e"; }
-    else { status = "持有中 · 等价格到位"; statusColor = "#868e96"; }
-    const upPct = openP ? ((sell / openP - 1) * 100) : null;
-    const dnPct = openP ? ((1 - buy / openP) * 100) : null;
-    return `<div style="margin-top:4px;padding:5px 7px;background:#f8f9fa;border-left:3px solid ${statusColor};border-radius:4px;font-size:11px;line-height:1.8">
-      <div style="font-weight:700;color:${statusColor}">${status}</div>
-      <div>📈 涨到 <b style="color:#c92a2a">${fmt(sell)}</b> 就卖${upPct != null ? `（比开盘 +${upPct.toFixed(1)}%）` : ""}</div>
-      <div>📉 跌到 <b style="color:#2b8a3e">${fmt(buy)}</b> 就买${dnPct != null ? `（比开盘 −${dnPct.toFixed(1)}%）` : ""}</div>
-      ${price != null ? `<div style="color:#666;margin-top:2px">现在 ${fmt(price)}${openP != null ? `　开盘 ${fmt(openP)}` : ""}</div>` : ""}
+    // 数据齐全时附上具体买卖点参考 + 现价
+    const ref = (m.today_buy != null && m.today_sell != null)
+      ? `<div style="color:#666;margin-top:2px">参考买入 <b style="color:#2b8a3e">≤${fmt(m.today_buy)}</b>　参考卖出 <b style="color:#c92a2a">≥${fmt(m.today_sell)}</b>${m.today_open != null ? `　（开盘 ${fmt(m.today_open)}）` : ""}</div>`
+      : (m.t_plan ? `<div style="color:#666">${m.t_plan.t_action}${m.t_plan.t_buy_price ? `　吸 ${fmt(m.t_plan.t_buy_price)}` : ""}${m.t_plan.t_sell_price ? `　抛 ${fmt(m.t_plan.t_sell_price)}` : ""}</div>` : "");
+    return `<div style="margin-top:4px;padding:5px 7px;background:#f8f9fa;border-left:3px solid ${actionColor};border-radius:4px;font-size:11px;line-height:1.7">
+      <div style="font-weight:700;color:${actionColor}">${action}</div>
+      <div style="color:#495057">${reason}</div>
+      ${ref}
+      ${price != null ? `<div style="color:#666;margin-top:2px">现价 ${fmt(price)}</div>` : ""}
     </div>${rgHtml}`;
   }
 
