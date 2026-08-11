@@ -323,6 +323,31 @@ def today_levels(bars_5m, pct=0.03):
     }
 
 
+def adaptive_trade(tl, regime, price, prev_close=None, pct=0.03):
+    """根据当日板块资金流/涨跌强弱，自适应调整买卖建议（顺势/逆势）。
+
+    判据（弱市）：regime.trend_pct < 0（板块/龙头在跌）且 regime.fund_net < 0（资金在流出）。
+    - 弱市：不再"跌到开盘-pct 就买"（防越跌越多），改为先减仓防跌；
+            卖出价不盯高抛，建议趁反弹/现价减仓（sell=None 表示"现在/反弹就卖"）；
+            买回做T价只在地板（跌停 ≈ 前收×0.9）才低吸，博反弹做T。
+    - 强/中性市：沿用开盘±pct 正常做T（today_levels 结果）。
+    pct 同 today_levels，默认 3%。
+    """
+    buy = tl.get("buy") if tl else None
+    sell = tl.get("sell") if tl else None
+    open_p = tl.get("open") if tl else None
+    weak = bool(regime and regime.get("trend_pct") is not None and regime["trend_pct"] < 0
+                and regime.get("fund_net") is not None and regime["fund_net"] < 0)
+    if not weak:
+        return {"bias": "normal", "weak": False, "buy": buy, "sell": sell,
+                "limit_down": None, "tip": "板块正常，按开盘±比例做T即可"}
+    # 弱市防守：只在跌停价才低吸买回
+    limit_down = round(prev_close * 0.9, 2) if prev_close else (round(open_p * 0.9, 2) if open_p else None)
+    return {"bias": "defensive", "weak": True, "buy": limit_down, "sell": None,
+            "limit_down": limit_down,
+            "tip": "板块资金流出+龙头下跌，先减仓防继续跌；若跌停可低吸买回做T"}
+
+
 def position_advice(score, action, price, capital=100000.0, max_single=0.25,
                     current_shares=0, lot=100):
     """根据评分与动作，给出可执行的仓位建议（规则化、非个性化投顾）。

@@ -322,6 +322,22 @@
     const pctTxt = (pos.target_pct * 100).toFixed(1) + "%";
     const deltaTxt = pos.delta_shares > 0 ? `买 ${pos.delta_shares} 股`
       : pos.delta_shares < 0 ? `卖 ${-pos.delta_shares} 股` : "不动";
+    const rg = state.watchMeta[state.current.code] ? state.watchMeta[state.current.code].regime : null;
+    const adp = state.watchMeta[state.current.code] ? state.watchMeta[state.current.code].adaptive : null;
+    let regimeHtml = "";
+    if (rg) {
+      const trend = rg.trend_pct, fund = rg.fund_net;
+      const weak = (trend != null && trend < 0) && (fund != null && fund < 0);
+      const fundTxt = fund == null ? "资金未知" : (fund >= 0 ? `资金流入 +${fmt(fund)}亿` : `资金流出 ${fmt(fund)}亿`);
+      const trendTxt = trend == null ? "板块未知" : `板块 ${trend >= 0 ? "+" : ""}${fmt(trend)}%`;
+      regimeHtml = `<div class="advice-note" style="background:#f1f3f5;border-color:#dee2e6;color:#495057">🧭 ${rg.track || rg.sector || "板块"}：${trendTxt}　${fundTxt}${weak ? "　⚠️弱势先减仓" : ""}</div>`;
+    }
+    let todayHtml = "";
+    if (adp && adp.bias === "defensive") {
+      todayHtml = `<div class="advice-note" style="background:#fff5f5;border-color:#ffc9c9;color:#c92a2a">⚠️ 板块弱势·资金流出：${adp.tip}${adp.limit_down != null ? `（跌停约 ${fmt(adp.limit_down)} 才低吸买回）` : ""}</div>`;
+    } else if (today && today.buy != null) {
+      todayHtml = `<div class="advice-note" style="background:#f8f9fa;border-color:#dee2e6;color:#495057">📅 今日做T参考：涨到 <b style="color:#c92a2a">${fmt(today.sell)}</b> 卖 / 跌到 <b style="color:#2b8a3e">${fmt(today.buy)}</b> 买（开盘 ${fmt(today.open)}）</div>`;
+    }
     el.innerHTML = `
       <div class="advice-card ${cls}">
         <div class="advice-title">操作建议 · <b>${pos.action}</b></div>
@@ -334,7 +350,8 @@
         </div>
         <div class="advice-text">${pos.suggestion}</div>
         ${pos.note ? `<div class="advice-note">⚠️ ${pos.note}</div>` : ""}
-        ${today && today.buy != null ? `<div class="advice-note" style="background:#f8f9fa;border-color:#dee2e6;color:#495057">📅 今日做T参考：涨到 <b style="color:#c92a2a">${fmt(today.sell)}</b> 卖 / 跌到 <b style="color:#2b8a3e">${fmt(today.buy)}</b> 买（开盘 ${fmt(today.open)}）</div>` : ""}
+        ${regimeHtml}
+        ${todayHtml}
       </div>`;
   }
 
@@ -504,19 +521,46 @@
     renderPositions();
   }
   function tPlanHtml(p, m) {
+    // 板块强弱条（资金流+龙头涨跌），小白一眼看懂当天环境
+    const rg = m.regime;
+    let rgHtml = "";
+    if (rg) {
+      const trend = rg.trend_pct, fund = rg.fund_net;
+      const weak = (trend != null && trend < 0) && (fund != null && fund < 0);
+      const rgColor = weak ? "#c92a2a" : (trend != null && trend > 0 ? "#2b8a3e" : "#868e96");
+      const fundTxt = fund == null ? "资金未知" : (fund >= 0 ? `资金流入 +${fmt(fund)}亿` : `资金流出 ${fmt(fund)}亿`);
+      const trendTxt = trend == null ? "板块未知" : `板块 ${trend >= 0 ? "+" : ""}${fmt(trend)}%`;
+      rgHtml = `<div style="margin-top:4px;padding:3px 7px;background:#f1f3f5;border-radius:4px;font-size:10.5px;color:#495057">
+        🧭 ${rg.track || rg.sector || "板块"}：${trendTxt}　${fundTxt}${weak ? "　⚠️弱势" : ""}
+      </div>`;
+    }
+    const adp = m.adaptive;
+    // 自适应建议：弱市先减仓防跌，跌停才低吸买回；正常市按开盘±比例做T
+    if (adp && adp.bias === "defensive") {
+      const ld = adp.limit_down;
+      const price = m.price;
+      let status = "⚠️ 弱势减仓：先卖防继续跌", statusColor = "#c92a2a";
+      if (price != null && ld != null && price <= ld) { status = "✅ 已到跌停区，可低吸买回做T"; statusColor = "#2b8a3e"; }
+      return `<div style="margin-top:4px;padding:5px 7px;background:#fff5f5;border-left:3px solid ${statusColor};border-radius:4px;font-size:11px;line-height:1.8">
+        <div style="font-weight:700;color:${statusColor}">${status}</div>
+        <div>💡 ${adp.tip}</div>
+        ${ld != null ? `<div>📉 跌到 <b style="color:#2b8a3e">${fmt(ld)}</b>（约跌停）才低吸买回做T</div>` : ""}
+        ${price != null ? `<div style="color:#666;margin-top:2px">现在 ${fmt(price)}</div>` : ""}
+      </div>${rgHtml}`;
+    }
+    // 正常市：开盘±比例做T（大白话）
     const buy = m.today_buy, sell = m.today_sell, openP = m.today_open, price = m.price;
     if (buy == null && sell == null) {
       // 没有当日分时数据时，退回原来的做T提示（标签改为大白话）
       const tp = m.t_plan;
-      if (!tp) return "";
+      if (!tp) return rgHtml;
       const tColor = { "做T买": "#c92a2a", "做T卖": "#2b8a3e", "持有不动": "#868e96" }[tp.t_action] || "#868e96";
       return `<div style="margin-top:2px;padding:3px 6px;background:#f8f9fa;border-left:3px solid ${tColor};border-radius:4px;font-size:11px;line-height:1.7">
         <span style="font-weight:700;color:${tColor}">${tp.t_action}</span>
         ${tp.t_buy_price != null ? `<span style="margin-left:6px;color:#c92a2a">买 ${fmt(tp.t_buy_price)}</span>` : ""}
         ${tp.t_sell_price != null ? `<span style="margin-left:6px;color:#2b8a3e">卖 ${fmt(tp.t_sell_price)}</span>` : ""}
-      </div>`;
+      </div>${rgHtml}`;
     }
-    // 当日实时买卖建议（开盘价±比例），用大白话展示
     let status = "", statusColor = "#868e96";
     if (price != null && sell != null && price >= sell) { status = "✅ 现在到了卖点，可卖"; statusColor = "#c92a2a"; }
     else if (price != null && buy != null && price <= buy) { status = "✅ 现在到了买点，可买"; statusColor = "#2b8a3e"; }
@@ -528,7 +572,7 @@
       <div>📈 涨到 <b style="color:#c92a2a">${fmt(sell)}</b> 就卖${upPct != null ? `（比开盘 +${upPct.toFixed(1)}%）` : ""}</div>
       <div>📉 跌到 <b style="color:#2b8a3e">${fmt(buy)}</b> 就买${dnPct != null ? `（比开盘 −${dnPct.toFixed(1)}%）` : ""}</div>
       ${price != null ? `<div style="color:#666;margin-top:2px">现在 ${fmt(price)}${openP != null ? `　开盘 ${fmt(openP)}` : ""}</div>` : ""}
-    </div>`;
+    </div>${rgHtml}`;
   }
 
   function renderPositions() {
@@ -649,6 +693,8 @@
           m.today_buy = a.position ? a.position.today_buy : null;
           m.today_sell = a.position ? a.position.today_sell : null;
           m.today_open = a.position ? a.position.today_open : null;
+          m.regime = a.regime || null;
+          m.adaptive = a.adaptive || null;
           m.t_plan = a.t_plan || null;
           state.watchMeta[code] = m;
         }

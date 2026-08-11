@@ -284,6 +284,12 @@ class Handler(BaseHTTPRequestHandler):
             a = sig.analyze(bars, _WEIGHTS)
             if a.get("ok"):
                 a["position"] = _build_position(a, qs, code)
+                # 当日板块强弱（资金流+龙头涨跌），做T计划与自适应建议共用
+                try:
+                    _fp = ip.get_fund(code) or {}
+                    _ss = sf.sector_strength(_fp.get("track")) if _fp.get("track") else None
+                except Exception:
+                    _fp, _ss = {}, None
                 # 当日实时买卖价：基于今日开盘价±比例，给「当天波动就卖/买」的及时建议
                 try:
                     bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
@@ -296,17 +302,27 @@ class Handler(BaseHTTPRequestHandler):
                     a["position"]["today_buy"] = tl.get("buy")
                     a["position"]["today_sell"] = tl.get("sell")
                     a["position"]["today_open"] = tl.get("open")
+                # 自适应买卖建议：板块资金流出+下跌 → 先减仓防跌，跌停才低吸买回
+                regime = None
+                if _ss:
+                    regime = {"track": _ss.get("track"), "sector": _ss.get("sector"),
+                              "trend_pct": _ss.get("trend_pct"), "fund_net": _ss.get("fund_net"),
+                              "up_ratio": _ss.get("up_ratio")}
+                adp = sig.adaptive_trade(tl, regime, a.get("price"), a.get("prev_close"), pct=0.03)
+                a["regime"] = regime
+                a["adaptive"] = adp
+                if a.get("position"):
+                    a["position"]["regime"] = regime
+                    a["position"]["adaptive"] = adp
                 # 持仓做T计划：15m 日内区间 + 日线支撑阻力 + 行业趋势
                 try:
                     bars15 = _cache_get(code, "15m", 60) or ds.get_kline(code, "15m", 60, _tdx_path or None)
                     _cache_set(code, "15m", 60, bars15)
-                    fp = ip.get_fund(code) or {}
-                    ss = sf.sector_strength(fp.get("track")) if fp.get("track") else None
                     a["t_plan"] = sig.build_t_plan(a, bars15, a.get("price") or 0,
                                                   _held_shares(code),
                                                   capital=_POS.get("capital", 100000),
                                                   lot=_POS.get("lot", 100),
-                                                  sector_strength=ss)
+                                                  sector_strength=_ss)
                 except Exception:
                     a["t_plan"] = {"t_action": "持有不动", "t_buy_price": None,
                                    "t_sell_price": None, "t_qty": 0,
