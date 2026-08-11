@@ -357,7 +357,7 @@
           <span class="tag" style="background:${c}">${r.action}</span>
           <span style="font-weight:600">${r.name}</span><span style="color:#888;font-size:11px">${r.code}</span>
           <span style="color:#666;font-size:12px">· ${r.track}</span>
-          <span style="color:#666;font-size:12px">· 行业 ${r.sector_trend != null ? (r.sector_trend >= 0 ? "↑" : "↓") + fmt(r.sector_trend) + "%" : "—"}${r.sector_fund != null ? "　资金" + (r.sector_fund >= 0 ? "+" : "") + r.sector_fund.toFixed(1) + "亿" : ""}</span>
+          <span style="color:#666;font-size:12px">· 赛道 ${r.sector_trend != null ? (r.sector_trend >= 0 ? "↑" : "↓") + fmt(r.sector_trend) + "%" : "—"}${r.sector_fund != null ? "　主力" + (r.sector_fund >= 0 ? "+" : "") + r.sector_fund.toFixed(1) + "亿" : ""}</span>
           <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}）</span></span>
         </div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;flex-wrap:wrap">
@@ -391,14 +391,10 @@
     }
     if (scope === "candidate") {
       const cap = $("#availCapital").value || 100000;
-      el.innerHTML = `<div class="signal-empty">扫描十五五成长池…</div>`;
-      const data = await api("GET", "/api/screener?scope=candidate&strategy=" + strategy + "&limit=120&capital=" + cap);
-      if (!data.results.length) {
-        el.innerHTML = `<div class="signal-empty">${data.count ? "成长池暂无符合「" + (data.strategy_label || strategy) + "」的标的" : "行业池为空，请检查 data/industry_pool.json"}</div>`;
-        return;
-      }
-      el.innerHTML = `<div class="scan-hint">十五五成长池（纯主板）· 命中 ${data.results.length} 只（综合分=技术50%+基本面40%+行业10%，按综合分降序）</div>` + renderCandidateRows(data.results);
-      bindCandidateRows(el);
+      el.innerHTML = `<div class="scan-progress"><div class="bar"><i id="scanBar"></i></div>
+        <div class="sub" id="scanMsg">正在扫描十五五成长池（纯主板，约 1 分钟：拉行情→算技术面+基本面+赛道趋势）…</div></div>`;
+      await api("GET", "/api/screener?scope=candidate&strategy=" + strategy + "&limit=120&capital=" + cap);
+      pollScan(strategy);
       return;
     }
     el.innerHTML = `<div class="signal-empty">扫描中…</div>`;
@@ -417,19 +413,24 @@
       const st = await api("GET", "/api/scan_status");
       const total = st.total || 1;
       const pct = Math.min(100, Math.round((st.done / total) * 100));
-      const rows = renderScanRows(st.results);
+      const isCand = st.scope === "candidate";
+      const rows = isCand ? renderCandidateRows(st.results) : renderScanRows(st.results);
       const hint = st.results.length
-        ? `<div class="scan-hint">策略：${strategy} · 已命中 ${st.results.length} 只（实时更新，按评分降序）</div>`
+        ? (isCand
+            ? `<div class="scan-hint">十五五成长池（纯主板 ${st.total} 只）· 命中 ${st.results.length} 只（综合分=技术50%+基本面40%+赛道趋势10%，按综合分降序）</div>`
+            : `<div class="scan-hint">策略：${strategy} · 已命中 ${st.results.length} 只（实时更新，按评分降序）</div>`)
         : "";
       el.innerHTML = `<div class="scan-progress"><div class="bar"><i id="scanBar" style="width:${pct}%"></i></div>
         <div class="sub">已扫描 ${st.done}/${st.total} 只，命中 ${st.results.length} 只…</div></div>${hint}${rows}`;
-      bindScanRows(el);
+      if (isCand) bindCandidateRows(el); else bindScanRows(el);
       if (st.running) {
         setTimeout(() => pollScan(strategy), 1500);
       } else if (st.error) {
         toast("扫描出错：" + st.error);
       } else if (!st.results.length) {
-        el.innerHTML = `<div class="signal-empty">全市场暂无符合「${strategy}」的标的（可换策略或等盘中变化）</div>`;
+        el.innerHTML = isCand
+          ? `<div class="signal-empty">成长池暂无符合「${strategy}」的标的（可换策略或等盘中变化）</div>`
+          : `<div class="signal-empty">全市场暂无符合「${strategy}」的标的（可换策略或等盘中变化）</div>`;
       }
     } catch (e) {
       toast("扫描状态获取失败");

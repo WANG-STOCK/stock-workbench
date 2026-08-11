@@ -8,6 +8,7 @@ import sys
 import json
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -281,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
                     bars15 = _cache_get(code, "15m", 60) or ds.get_kline(code, "15m", 60, _tdx_path or None)
                     _cache_set(code, "15m", 60, bars15)
                     fp = ip.get_fund(code) or {}
-                    ss = sf.sector_strength(fp.get("sector")) if fp.get("sector") else None
+                    ss = sf.sector_strength(fp.get("track")) if fp.get("track") else None
                     a["t_plan"] = sig.build_t_plan(a, bars15, a.get("price") or 0,
                                                   _held_shares(code),
                                                   capital=_POS.get("capital", 100000),
@@ -319,16 +320,28 @@ class Handler(BaseHTTPRequestHandler):
             strategy = qs.get("strategy", ["composite"])[0]
             limit = int(qs.get("limit", ["120"])[0])
             codes = _scope_codes(scope)
-            # 候选股（十五五成长池）：技术+基本面综合打分，独立渲染
+            # 候选股（十五五成长池）：技术+基本面综合打分，走后台异步，前端轮询进度
             if scope == "candidate":
                 try:
                     cap = float(qs.get("capital", [None])[0] or _config.get("available_capital", 100000))
                 except (TypeError, ValueError):
                     cap = _config.get("available_capital", 100000)
-                result = self._run_candidate_screener(codes, limit, cap, strategy)
-                self._send(200, {"scope": scope, "strategy": strategy,
-                                 "strategy_label": sig.STRATEGY_LABELS.get(strategy, strategy),
-                                 "count": len(codes), "results": result})
+                if not _scan["running"]:
+                    _scan["running"] = True
+                    _scan["results"] = []
+                    _scan["error"] = None
+                    _scan["started"] = time.time()
+                    _scan["scope"] = "candidate"
+                    _scan["strategy"] = strategy
+                    t = threading.Thread(target=self._run_candidate_bg,
+                                         args=(codes, limit, cap, strategy), daemon=True)
+                    t.start()
+                self._send(200, {"running": True, "total": len(codes) or _scan["total"],
+                                 "done": _scan.get("done", 0),
+                                 "results": _scan.get("results", [])[:200],
+                                 "scope": "candidate",
+                                 "strategy": strategy,
+                                 "strategy_label": sig.STRATEGY_LABELS.get(strategy, strategy)})
                 return
             if not codes:
                 self._send(200, {"scope": scope, "strategy": strategy,
@@ -551,42 +564,35 @@ class Handler(BaseHTTPRequestHandler):
         results.sort(key=lambda x: x["score"], reverse=True)
         return results
 
-    def _run_candidate_screener(self, codes, limit, capital, strategy="composite"):
+    def _run_candidate_screener(self, codes, limit, capital, strategy="composite", progress_cb=None):
         """候选股扫描（十五五成长池）：技术面 55% + 基本面 45% 综合打分。
 
         基本面弱（估值/质量档）会门控买信号，避免夕阳/垃圾股被技术反弹误选。
         """
         results = []
-        names = {}
-        for chunk in _chunk(codes, 80):
-            try:
-                rt = ds.fetch_realtime(chunk)
-                for c, v in rt.items():
-                    names[c] = v.get("name", "")
-            except Exception:
-                pass
-        # 实时估值（best-effort，失败静默降级）
-        valuations = {}
-        try:
-            valuations = fm.batch_valuation(codes)
-        except Exception:
-            pass
         lot = _POS.get("lot", 100)
-        for code in codes:
+        # 实时估值（best-effort）后台拉取，不阻塞扫描进度
+        valuations = {}
+        vt = threading.Thread(target=lambda: valuations.update((fm.batch_valuation(codes) or {})),
+                              daemon=True)
+        vt.start()
+
+        def _worker(code):
             try:
                 bars = ds.get_kline(code, "daily", limit, _tdx_path or None)
                 if len(bars) < 60:
-                    continue
+                    return None
                 a = sig.analyze(bars, _WEIGHTS)
                 if not a.get("ok"):
-                    continue
+                    return None
                 pl = a.get("price_levels") or {}
                 tech = a["score"]  # -100..100
                 tech_norm = max(0.0, min(100.0, (tech + 100) / 2))
                 fp = ip.get_fund(code) or {}
                 fund = fm.fundamental_score(fp.get("grade", "B"), valuations.get(code))
                 sector = fp.get("sector")
-                ss = sf.sector_strength(sector) if sector else None
+                track = fp.get("track")
+                ss = sf.sector_strength(track) if track else None
                 sector_score = (ss or {}).get("score", 50) if ss else 50
                 combined = round(tech_norm * 0.50 + fund * 0.40 + sector_score * 0.10, 1)
                 price = a.get("price")
@@ -605,10 +611,10 @@ class Handler(BaseHTTPRequestHandler):
                 if buy_price and buy_price > 0:
                     q = int(capital / buy_price // lot) * lot
                     qty = max(q, 0)
-                results.append({
+                return {
                     "code": code,
-                    "name": names.get(code) or fp.get("name") or code,
-                    "track": fp.get("track", ""),
+                    "name": fp.get("name") or code,
+                    "track": track or "",
                     "action": act,
                     "tech_score": round(tech_norm, 1),
                     "fund_score": round(fund, 1),
@@ -622,13 +628,46 @@ class Handler(BaseHTTPRequestHandler):
                     "sector": sector,
                     "sector_trend": (ss or {}).get("trend_pct") if ss else None,
                     "sector_fund": (ss or {}).get("fund_net") if ss else None,
+                    "up_ratio": (ss or {}).get("up_ratio") if ss else None,
                     "note": fp.get("note", ""),
                     "reasons": [r["text"] for r in a["reasons"][:2]],
-                })
+                }
             except Exception:
-                continue
+                return None
+
+        results = []
+        with ThreadPoolExecutor(max_workers=12) as ex:
+            futs = [ex.submit(_worker, c) for c in codes]
+            for fut in as_completed(futs):
+                try:
+                    r = fut.result()
+                except Exception:
+                    r = None
+                if r:
+                    results.append(r)
+                if progress_cb:
+                    progress_cb()
+        vt.join(timeout=8)  # 尽量等估值回写，超时不影响（基本面按质量档兜底）
         results.sort(key=lambda x: x["combined"], reverse=True)
         return results
+
+    def _run_candidate_bg(self, codes, limit, cap, strategy):
+        """候选扫描后台线程：结果写入全局 _scan，前端轮询 /api/scan_status。"""
+        try:
+            _scan["total"] = len(codes)
+            _scan["done"] = 0
+            _scan["results"] = []
+            _scan["error"] = None
+            _scan["scope"] = "candidate"
+            _scan["strategy"] = strategy
+            result = self._run_candidate_screener(
+                codes, limit, cap, strategy,
+                progress_cb=lambda: _scan.__setitem__("done", _scan.get("done", 0) + 1))
+            _scan["results"] = result
+        except Exception as e:
+            _scan["error"] = str(e)
+        finally:
+            _scan["running"] = False
 
     def _scan_all_worker(self, codes, limit, strategy):
         """后台全市场扫描：并发打分 + 进度回写，结果写入全局 _scan。"""

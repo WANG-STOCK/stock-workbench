@@ -2,63 +2,359 @@
   {
     "code": "sz002371",
     "name": "北方华创",
-    "track": "半导体·设备",
+    "track": "半导体设备",
     "sector": "科技",
     "grade": "A",
     "note": "半导体设备平台型龙头"
   },
   {
+    "code": "sh603690",
+    "name": "至纯科技",
+    "track": "半导体设备",
+    "sector": "科技",
+    "grade": "B",
+    "note": "湿法清洗设备，先进制程受益"
+  },
+  {
+    "code": "sh600641",
+    "name": "万业企业",
+    "track": "半导体设备",
+    "sector": "科技",
+    "grade": "B",
+    "note": "离子注入设备（凯世通）"
+  },
+  {
+    "code": "sh605111",
+    "name": "新洁能",
+    "track": "半导体材料",
+    "sector": "科技",
+    "grade": "B",
+    "note": "功率器件/IGBT 设计"
+  },
+  {
+    "code": "sh605358",
+    "name": "立昂微",
+    "track": "半导体材料",
+    "sector": "科技",
+    "grade": "B",
+    "note": "硅片+功率器件 IDM"
+  },
+  {
     "code": "sh603501",
     "name": "韦尔股份",
-    "track": "半导体·CIS",
+    "track": "半导体芯片",
     "sector": "科技",
     "grade": "A",
-    "note": "图像传感器龙头，车载/手机双驱动"
+    "note": "CIS 图像传感器龙头，车载/手机双驱动"
   },
   {
     "code": "sh603986",
     "name": "兆易创新",
-    "track": "半导体·存储",
+    "track": "半导体芯片",
     "sector": "科技",
     "grade": "A",
     "note": "NOR Flash/MCU 龙头"
   },
   {
-    "code": "sh600584",
-    "name": "长电科技",
-    "track": "半导体·封测",
-    "sector": "科技",
-    "grade": "B",
-    "note": "封测龙头，先进封装受益"
-  },
-  {
     "code": "sz002049",
     "name": "紫光国微",
-    "track": "半导体·安全芯片",
+    "track": "半导体芯片",
     "sector": "科技",
     "grade": "A",
     "note": "特种芯片+FPGA，国产替代"
   },
   {
-    "code": "sh600460",
-    "name": "士兰微",
-    "track": "半导体·IDM",
+    "code": "sh600745",
+    "name": "闻泰科技",
+    "track": "半导体芯片",
     "sector": "科技",
     "grade": "B",
-    "note": "功率半导体IDM，新能源受益"
+    "note": "功率半导体+ODM"
+  },
+  {
+    "code": "sh600460",
+    "name": "士兰微",
+    "track": "半导体芯片",
+    "sector": "科技",
+    "grade": "B",
+    "note": "功率半导体 IDM，新能源受益"
+  },
+  {
+    "code": "sh603893",
+    "name": "瑞芯微",
+    "track": "半导体芯片",
+    "sector": "科技",
+    "grade": "B",
+    "note": "SoC 主控，AIoT 方向"
+  },
+  {
+    "code": "sh603290",
+    "name": "斯达半导",
+    "track": "半导体芯片",
+    "sector": "科技",
+    "grade": "B",
+    "note": "IGBT 模块龙头"
+  },
+  {
+    "code": "sh600584",
+    "name": "长电科技",
+    "track": "封测",
+    "sector": "科技",
+    "grade": "B",
+    "note": "封测龙头，先进封装受益"
+  },
+  {
+    "code": "sz002156",
+    "name": "通富微电",
+    "track": "封测",
+    "sector": "科技",
+    "grade": "B",
+    "note": "AMD 核心封测伙伴"
+  },
+  {
+    "code": "sz002185",
+    "name": "华天科技",
+    "track": "封测",
+    "sector": "科技",
+    "grade": "B",
+    "note": "封测第三极，先进封装追赶"
+  },
+  {
+    "code": "sh603005",
+    "name": "晶方科技",
+    "track": "封测",
+    "sector": "科技",
+    "grade": "C",
+    "note": "WLCSP 先进封装，CIS 封装"
+  },
+  {
+    "code": "sz002463",
+    "name": "沪电股份",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "A",
+    "note": "高端通信用 PCB，AI 服务器核心"
+  },
+  {
+    "code": "sz002916",
+    "name": "深南电路",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "A",
+    "note": "载板+通信 PCB 双龙头"
+  },
+  {
+    "code": "sz002938",
+    "name": "鹏鼎控股",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "A",
+    "note": "全球 PCB 龙头，消费电子+服务器"
+  },
+  {
+    "code": "sh600183",
+    "name": "生益科技",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "A",
+    "note": "覆铜板 CCL 龙头，AI 算力链"
+  },
+  {
+    "code": "sh603228",
+    "name": "景旺电子",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "汽车+通信 PCB"
+  },
+  {
+    "code": "sz000823",
+    "name": "超声电子",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "HDI/多层板，汽车电子"
+  },
+  {
+    "code": "sh603328",
+    "name": "依顿电子",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "高多层板，汽车/通信"
+  },
+  {
+    "code": "sz002436",
+    "name": "兴森科技",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "IC 载板+样板，国产替代"
+  },
+  {
+    "code": "sh603920",
+    "name": "世运电路",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "汽车 PCB，特斯拉链"
+  },
+  {
+    "code": "sz002384",
+    "name": "东山精密",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "FPC+通信板，消费电子"
+  },
+  {
+    "code": "sz002815",
+    "name": "崇达技术",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "B",
+    "note": "工控/通信 PCB"
+  },
+  {
+    "code": "sz002134",
+    "name": "天津普林",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "C",
+    "note": "小批量高多层板"
+  },
+  {
+    "code": "sh603936",
+    "name": "博敏电子",
+    "track": "PCB",
+    "sector": "科技",
+    "grade": "C",
+    "note": "特种板，汽车电子"
+  },
+  {
+    "code": "sh600105",
+    "name": "永鼎股份",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "B",
+    "note": "光电缆+海外工程"
+  },
+  {
+    "code": "sh600487",
+    "name": "亨通光电",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "A",
+    "note": "光纤海缆双龙头"
+  },
+  {
+    "code": "sh600522",
+    "name": "中天科技",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "A",
+    "note": "海缆+光纤，新能源受益"
+  },
+  {
+    "code": "sh600498",
+    "name": "烽火通信",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "B",
+    "note": "光通信，算力网络受益"
+  },
+  {
+    "code": "sh601869",
+    "name": "长飞光纤",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "B",
+    "note": "光纤预制棒龙头"
+  },
+  {
+    "code": "sz000070",
+    "name": "特发信息",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "C",
+    "note": "光纤+军工电子"
+  },
+  {
+    "code": "sz000836",
+    "name": "富通信息",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "C",
+    "note": "光纤光缆"
+  },
+  {
+    "code": "sz000586",
+    "name": "汇源通信",
+    "track": "光纤",
+    "sector": "科技",
+    "grade": "C",
+    "note": "光纤光缆小市值"
+  },
+  {
+    "code": "sz002281",
+    "name": "光迅科技",
+    "track": "光模块",
+    "sector": "科技",
+    "grade": "B",
+    "note": "光模块/光芯片，算力链"
+  },
+  {
+    "code": "sz000988",
+    "name": "华工科技",
+    "track": "光模块",
+    "sector": "科技",
+    "grade": "B",
+    "note": "光模块+激光装备"
+  },
+  {
+    "code": "sz002741",
+    "name": "光华科技",
+    "track": "电子化学品",
+    "sector": "科技",
+    "grade": "B",
+    "note": "PCB 化学品+锂电回收"
+  },
+  {
+    "code": "sz002409",
+    "name": "雅克科技",
+    "track": "电子化学品",
+    "sector": "科技",
+    "grade": "B",
+    "note": "前驱体，半导体材料"
+  },
+  {
+    "code": "sh603078",
+    "name": "江化微",
+    "track": "电子化学品",
+    "sector": "科技",
+    "grade": "B",
+    "note": "湿电子化学品，晶圆制造用"
+  },
+  {
+    "code": "sz002584",
+    "name": "西陇科学",
+    "track": "电子化学品",
+    "sector": "科技",
+    "grade": "C",
+    "note": "电子级试剂"
   },
   {
     "code": "sh601138",
     "name": "工业富联",
-    "track": "AI算力·服务器",
+    "track": "AI算力",
     "sector": "科技",
-    "grade": "B",
-    "note": "AI服务器代工龙头"
+    "grade": "A",
+    "note": "AI 服务器代工龙头"
   },
   {
     "code": "sh603019",
     "name": "中科曙光",
-    "track": "AI算力·算力基础设施",
+    "track": "AI算力",
     "sector": "科技",
     "grade": "A",
     "note": "国产算力底座"
@@ -66,7 +362,7 @@
   {
     "code": "sz000977",
     "name": "浪潮信息",
-    "track": "AI算力·服务器",
+    "track": "AI算力",
     "sector": "科技",
     "grade": "B",
     "note": "服务器出货龙头"
@@ -74,15 +370,143 @@
   {
     "code": "sz000938",
     "name": "紫光股份",
-    "track": "AI算力·网络设备",
+    "track": "AI算力",
     "sector": "科技",
     "grade": "B",
     "note": "交换机/服务器，智算网络"
   },
   {
+    "code": "sz000034",
+    "name": "神州数码",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "B",
+    "note": "服务器分销+云"
+  },
+  {
+    "code": "sz002261",
+    "name": "拓维信息",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "C",
+    "note": "华为昇腾算力"
+  },
+  {
+    "code": "sh600839",
+    "name": "四川长虹",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "C",
+    "note": "华为算力合作"
+  },
+  {
+    "code": "sz000066",
+    "name": "中国长城",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "B",
+    "note": "信创整机"
+  },
+  {
+    "code": "sz002152",
+    "name": "广电运通",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "B",
+    "note": "算力+金融设备"
+  },
+  {
+    "code": "sz002415",
+    "name": "海康威视",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "A",
+    "note": "AI 视觉龙头"
+  },
+  {
+    "code": "sz002236",
+    "name": "大华股份",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "B",
+    "note": "AI 视觉第二极"
+  },
+  {
+    "code": "sh600100",
+    "name": "同方股份",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "C",
+    "note": "信创+算力"
+  },
+  {
+    "code": "sh603881",
+    "name": "数据港",
+    "track": "AI算力",
+    "sector": "科技",
+    "grade": "B",
+    "note": "IDC 数据中心，算力基建"
+  },
+  {
+    "code": "sz000063",
+    "name": "中兴通讯",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "A",
+    "note": "通信设备龙头，5G/6G"
+  },
+  {
+    "code": "sz002396",
+    "name": "星网锐捷",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "B",
+    "note": "交换机/路由器"
+  },
+  {
+    "code": "sh600050",
+    "name": "中国联通",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "B",
+    "note": "运营商，算力网络"
+  },
+  {
+    "code": "sh601728",
+    "name": "中国电信",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "B",
+    "note": "运营商，智算云"
+  },
+  {
+    "code": "sh600941",
+    "name": "中国移动",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "A",
+    "note": "运营商龙头，现金流稳"
+  },
+  {
+    "code": "sh600198",
+    "name": "大唐电信",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "C",
+    "note": "安全芯片+通信"
+  },
+  {
+    "code": "sz002544",
+    "name": "普天科技",
+    "track": "通信设备",
+    "sector": "科技",
+    "grade": "C",
+    "note": "专网通信"
+  },
+  {
     "code": "sz002747",
     "name": "埃斯顿",
-    "track": "机器人·本体",
+    "track": "机器人",
     "sector": "科技",
     "grade": "B",
     "note": "国产工业机器人本体领先"
@@ -90,39 +514,79 @@
   {
     "code": "sz002472",
     "name": "双环传动",
-    "track": "机器人·减速器",
+    "track": "机器人",
     "sector": "科技",
     "grade": "B",
-    "note": "精密齿轮/RV减速器"
-  },
-  {
-    "code": "sz002050",
-    "name": "三花智控",
-    "track": "机器人·执行器",
-    "sector": "科技",
-    "grade": "A",
-    "note": "热管理+机器人执行器"
-  },
-  {
-    "code": "sh601689",
-    "name": "拓普集团",
-    "track": "机器人·执行器",
-    "sector": "科技",
-    "grade": "A",
-    "note": "汽车零部件+机器人执行器"
+    "note": "精密齿轮/RV 减速器"
   },
   {
     "code": "sh603728",
     "name": "鸣志电器",
-    "track": "机器人·电机",
+    "track": "机器人",
     "sector": "科技",
     "grade": "B",
     "note": "步进/无刷电机，机器人关节"
   },
   {
+    "code": "sz002050",
+    "name": "三花智控",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "A",
+    "note": "热管理+机器人执行器"
+  },
+  {
+    "code": "sz000333",
+    "name": "美的集团",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "A",
+    "note": "库卡机器人+家电龙头"
+  },
+  {
+    "code": "sz002896",
+    "name": "中大力德",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "C",
+    "note": "行星减速器"
+  },
+  {
+    "code": "sh603662",
+    "name": "柯力传感",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "B",
+    "note": "应变式传感器"
+  },
+  {
+    "code": "sz000837",
+    "name": "秦川机床",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "B",
+    "note": "机床+RV 减速器"
+  },
+  {
+    "code": "sh603667",
+    "name": "五洲新春",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "C",
+    "note": "轴承/丝杠，机器人链"
+  },
+  {
+    "code": "sh601689",
+    "name": "拓普集团",
+    "track": "机器人",
+    "sector": "科技",
+    "grade": "A",
+    "note": "汽车零部件+机器人执行器"
+  },
+  {
     "code": "sz000099",
     "name": "中信海直",
-    "track": "低空经济·运营",
+    "track": "低空经济",
     "sector": "科技",
     "grade": "B",
     "note": "直升机运营，低空场景落地"
@@ -130,42 +594,98 @@
   {
     "code": "sz002085",
     "name": "万丰奥威",
-    "track": "低空经济·eVTOL",
+    "track": "低空经济",
     "sector": "科技",
     "grade": "C",
-    "note": "eVTOL题材，估值偏高"
+    "note": "eVTOL 题材，估值偏高"
   },
   {
     "code": "sz001696",
     "name": "宗申动力",
-    "track": "低空经济·动力",
+    "track": "低空经济",
     "sector": "科技",
     "grade": "C",
     "note": "航空发动机/摩企转型"
   },
   {
-    "code": "sh600118",
-    "name": "中国卫星",
-    "track": "商业航天·制造",
+    "code": "sh600038",
+    "name": "中直股份",
+    "track": "低空经济",
     "sector": "科技",
     "grade": "B",
-    "note": "小卫星研制龙头"
+    "note": "直升机研制"
+  },
+  {
+    "code": "sh600316",
+    "name": "洪都航空",
+    "track": "低空经济",
+    "sector": "科技",
+    "grade": "B",
+    "note": "教练机/无人机"
   },
   {
     "code": "sh600879",
     "name": "航天电子",
-    "track": "商业航天·配套",
+    "track": "低空经济",
     "sector": "科技",
     "grade": "B",
     "note": "航天电子配套核心"
   },
   {
-    "code": "sh601698",
-    "name": "中国卫通",
-    "track": "商业航天·运营",
+    "code": "sh600118",
+    "name": "中国卫星",
+    "track": "商业航天",
     "sector": "科技",
     "grade": "B",
-    "note": "卫星通信运营"
+    "note": "小卫星研制龙头"
+  },
+  {
+    "code": "sz002025",
+    "name": "航天电器",
+    "track": "商业航天",
+    "sector": "科技",
+    "grade": "B",
+    "note": "航天连接器核心"
+  },
+  {
+    "code": "sh603131",
+    "name": "上海沪工",
+    "track": "商业航天",
+    "sector": "科技",
+    "grade": "C",
+    "note": "焊机+卫星制造"
+  },
+  {
+    "code": "sz000547",
+    "name": "航天发展",
+    "track": "商业航天",
+    "sector": "科技",
+    "grade": "C",
+    "note": "电子蓝军/航天"
+  },
+  {
+    "code": "sz002151",
+    "name": "北斗星通",
+    "track": "商业航天",
+    "sector": "科技",
+    "grade": "B",
+    "note": "北斗芯片/导航"
+  },
+  {
+    "code": "sz000733",
+    "name": "振华科技",
+    "track": "商业航天",
+    "sector": "科技",
+    "grade": "B",
+    "note": "军工电子元件"
+  },
+  {
+    "code": "sh600343",
+    "name": "航天动力",
+    "track": "商业航天",
+    "sector": "科技",
+    "grade": "C",
+    "note": "航天推进技术"
   },
   {
     "code": "sh600206",
@@ -178,7 +698,7 @@
   {
     "code": "sh600456",
     "name": "宝钛股份",
-    "track": "新材料·钛合金",
+    "track": "新材料",
     "sector": "科技",
     "grade": "B",
     "note": "钛合金龙头，航空+半导体"
@@ -186,7 +706,7 @@
   {
     "code": "sz000970",
     "name": "中科三环",
-    "track": "新材料·稀土永磁",
+    "track": "新材料",
     "sector": "科技",
     "grade": "B",
     "note": "钕铁硼永磁，机器人/新能源"
@@ -194,31 +714,55 @@
   {
     "code": "sh600862",
     "name": "中航高科",
-    "track": "新材料·复材",
+    "track": "新材料",
     "sector": "科技",
     "grade": "B",
     "note": "航空复合材料龙头"
   },
   {
-    "code": "sz000063",
-    "name": "中兴通讯",
-    "track": "通信·设备",
-    "sector": "科技",
-    "grade": "A",
-    "note": "通信设备龙头，5G/6G"
-  },
-  {
-    "code": "sh600498",
-    "name": "烽火通信",
-    "track": "通信·设备",
+    "code": "sz002171",
+    "name": "楚江新材",
+    "track": "新材料",
     "sector": "科技",
     "grade": "B",
-    "note": "光通信，算力网络受益"
+    "note": "铜基材料+碳纤维"
+  },
+  {
+    "code": "sh600366",
+    "name": "宁波韵升",
+    "track": "新材料",
+    "sector": "科技",
+    "grade": "B",
+    "note": "钕铁硼永磁"
+  },
+  {
+    "code": "sh601137",
+    "name": "博威合金",
+    "track": "新材料",
+    "sector": "科技",
+    "grade": "B",
+    "note": "铜合金+光伏焊带"
+  },
+  {
+    "code": "sz002056",
+    "name": "横店东磁",
+    "track": "新材料",
+    "sector": "科技",
+    "grade": "B",
+    "note": "磁材+光伏"
+  },
+  {
+    "code": "sz002149",
+    "name": "西部材料",
+    "track": "新材料",
+    "sector": "科技",
+    "grade": "C",
+    "note": "钛/稀贵金属材料"
   },
   {
     "code": "sh600276",
     "name": "恒瑞医药",
-    "track": "医药·创新药",
+    "track": "创新药",
     "sector": "医药",
     "grade": "A",
     "note": "创新药标杆，管线丰富"
@@ -226,7 +770,7 @@
   {
     "code": "sh600196",
     "name": "复星医药",
-    "track": "医药·创新药",
+    "track": "创新药",
     "sector": "医药",
     "grade": "B",
     "note": "综合药企，mRNA/创新布局"
@@ -234,7 +778,7 @@
   {
     "code": "sz002422",
     "name": "科伦药业",
-    "track": "医药·创新药",
+    "track": "创新药",
     "sector": "医药",
     "grade": "A",
     "note": "大输液+创新药+ADC"
@@ -242,7 +786,7 @@
   {
     "code": "sz000963",
     "name": "华东医药",
-    "track": "医药·创新药",
+    "track": "创新药",
     "sector": "医药",
     "grade": "B",
     "note": "医美+创新药双轮"
@@ -250,15 +794,31 @@
   {
     "code": "sz002294",
     "name": "信立泰",
-    "track": "医药·创新药",
+    "track": "创新药",
     "sector": "医药",
     "grade": "B",
     "note": "心血管创新药"
   },
   {
+    "code": "sz000513",
+    "name": "丽珠集团",
+    "track": "创新药",
+    "sector": "医药",
+    "grade": "B",
+    "note": "生物药+制剂"
+  },
+  {
+    "code": "sh600079",
+    "name": "人福医药",
+    "track": "创新药",
+    "sector": "医药",
+    "grade": "B",
+    "note": "麻醉用药龙头"
+  },
+  {
     "code": "sz002262",
     "name": "恩华药业",
-    "track": "医药·创新药",
+    "track": "创新药",
     "sector": "医药",
     "grade": "B",
     "note": "中枢神经用药龙头"
@@ -266,31 +826,79 @@
   {
     "code": "sz002223",
     "name": "鱼跃医疗",
-    "track": "医药·器械",
+    "track": "医疗器械",
     "sector": "医药",
     "grade": "B",
     "note": "家用医疗器械龙头"
   },
   {
+    "code": "sz002901",
+    "name": "大博医疗",
+    "track": "医疗器械",
+    "sector": "医药",
+    "grade": "B",
+    "note": "骨科植入耗材"
+  },
+  {
+    "code": "sh603658",
+    "name": "安图生物",
+    "track": "医疗器械",
+    "sector": "医药",
+    "grade": "B",
+    "note": "IVD 化学发光"
+  },
+  {
+    "code": "sh600055",
+    "name": "万东医疗",
+    "track": "医疗器械",
+    "sector": "医药",
+    "grade": "C",
+    "note": "医学影像设备"
+  },
+  {
+    "code": "sh600587",
+    "name": "新华医疗",
+    "track": "医疗器械",
+    "sector": "医药",
+    "grade": "C",
+    "note": "消毒设备/器械"
+  },
+  {
     "code": "sh603259",
     "name": "药明康德",
-    "track": "医药·CXO",
+    "track": "CXO",
     "sector": "医药",
     "grade": "A",
-    "note": "全球CXO龙头"
+    "note": "全球 CXO 龙头"
   },
   {
     "code": "sz002821",
     "name": "凯莱英",
-    "track": "医药·CXO",
+    "track": "CXO",
     "sector": "医药",
     "grade": "B",
-    "note": "CDMO领先"
+    "note": "CDMO 领先"
+  },
+  {
+    "code": "sh603127",
+    "name": "昭衍新药",
+    "track": "CXO",
+    "sector": "医药",
+    "grade": "B",
+    "note": "安评 CRO"
+  },
+  {
+    "code": "sh603456",
+    "name": "九洲药业",
+    "track": "CXO",
+    "sector": "医药",
+    "grade": "B",
+    "note": "CDMO 特色"
   },
   {
     "code": "sh600436",
     "name": "片仔癀",
-    "track": "医药·中药",
+    "track": "中药",
     "sector": "医药",
     "grade": "A",
     "note": "中药瑰宝，强品牌溢价"
@@ -298,7 +906,7 @@
   {
     "code": "sz000538",
     "name": "云南白药",
-    "track": "医药·中药",
+    "track": "中药",
     "sector": "医药",
     "grade": "B",
     "note": "中药消费龙头"
@@ -306,7 +914,7 @@
   {
     "code": "sh600085",
     "name": "同仁堂",
-    "track": "医药·中药",
+    "track": "中药",
     "sector": "医药",
     "grade": "B",
     "note": "老字号中药"
@@ -314,15 +922,71 @@
   {
     "code": "sz000423",
     "name": "东阿阿胶",
-    "track": "医药·中药",
+    "track": "中药",
     "sector": "医药",
     "grade": "B",
     "note": "阿胶龙头，困境反转"
   },
   {
+    "code": "sz000999",
+    "name": "华润三九",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "B",
+    "note": "OTC 中药龙头"
+  },
+  {
+    "code": "sh600332",
+    "name": "白云山",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "B",
+    "note": "大南药+大健康"
+  },
+  {
+    "code": "sz002603",
+    "name": "以岭药业",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "C",
+    "note": "连花清瘟，流感题材"
+  },
+  {
+    "code": "sh600750",
+    "name": "江中药业",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "B",
+    "note": "OTC 胃肠用药"
+  },
+  {
+    "code": "sh600285",
+    "name": "羚锐制药",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "B",
+    "note": "贴膏剂细分龙头"
+  },
+  {
+    "code": "sh603896",
+    "name": "寿仙谷",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "C",
+    "note": "灵芝孢子粉"
+  },
+  {
+    "code": "sh600771",
+    "name": "广誉远",
+    "track": "中药",
+    "sector": "医药",
+    "grade": "C",
+    "note": "老字号，困境反转"
+  },
+  {
     "code": "sh600905",
     "name": "三峡能源",
-    "track": "电力·绿电",
+    "track": "绿电",
     "sector": "电力",
     "grade": "A",
     "note": "风电/光伏运营龙头"
@@ -330,7 +994,7 @@
   {
     "code": "sh600025",
     "name": "华能水电",
-    "track": "电力·绿电",
+    "track": "绿电",
     "sector": "电力",
     "grade": "A",
     "note": "水电优质资产"
@@ -338,7 +1002,7 @@
   {
     "code": "sh600900",
     "name": "长江电力",
-    "track": "电力·绿电",
+    "track": "绿电",
     "sector": "电力",
     "grade": "A",
     "note": "水电龙头，稳定现金流"
@@ -346,7 +1010,7 @@
   {
     "code": "sh600886",
     "name": "国投电力",
-    "track": "电力·绿电",
+    "track": "绿电",
     "sector": "电力",
     "grade": "B",
     "note": "水电+火电组合"
@@ -354,15 +1018,111 @@
   {
     "code": "sz000591",
     "name": "太阳能",
-    "track": "电力·绿电",
+    "track": "绿电",
     "sector": "电力",
     "grade": "B",
     "note": "光伏电站运营"
   },
   {
+    "code": "sh601016",
+    "name": "节能风电",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "风电运营"
+  },
+  {
+    "code": "sh601222",
+    "name": "林洋能源",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "光伏运营+储能"
+  },
+  {
+    "code": "sh600483",
+    "name": "福能股份",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "风电场运营"
+  },
+  {
+    "code": "sz000875",
+    "name": "吉电股份",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "风光运营转型"
+  },
+  {
+    "code": "sz000862",
+    "name": "银星能源",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "C",
+    "note": "风电+光伏小市值"
+  },
+  {
+    "code": "sh600674",
+    "name": "川投能源",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "A",
+    "note": "雅砻江水电收益"
+  },
+  {
+    "code": "sz002039",
+    "name": "黔源电力",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "水电，来水弹性"
+  },
+  {
+    "code": "sz003816",
+    "name": "中国广核",
+    "track": "绿电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "核电运营"
+  },
+  {
+    "code": "sz002335",
+    "name": "科华数据",
+    "track": "储能",
+    "sector": "电力",
+    "grade": "B",
+    "note": "UPS/储能/数据中心"
+  },
+  {
+    "code": "sz002518",
+    "name": "科士达",
+    "track": "储能",
+    "sector": "电力",
+    "grade": "B",
+    "note": "UPS/储能逆变器"
+  },
+  {
+    "code": "sz002837",
+    "name": "英维克",
+    "track": "储能",
+    "sector": "电力",
+    "grade": "B",
+    "note": "精密温控，储能/数据中心"
+  },
+  {
+    "code": "sh605117",
+    "name": "德业股份",
+    "track": "储能",
+    "sector": "电力",
+    "grade": "B",
+    "note": "储能逆变器，出海受益"
+  },
+  {
     "code": "sh600406",
     "name": "国电南瑞",
-    "track": "电力·电网",
+    "track": "特高压电网",
     "sector": "电力",
     "grade": "A",
     "note": "电网自动化/特高压龙头"
@@ -370,7 +1130,7 @@
   {
     "code": "sz000400",
     "name": "许继电气",
-    "track": "电力·电网",
+    "track": "特高压电网",
     "sector": "电力",
     "grade": "B",
     "note": "特高压/智能电网装备"
@@ -378,15 +1138,15 @@
   {
     "code": "sh600089",
     "name": "特变电工",
-    "track": "电力·电网",
+    "track": "特高压电网",
     "sector": "电力",
     "grade": "B",
-    "note": "变压器/特高压，新能源EPC"
+    "note": "变压器/特高压，新能源 EPC"
   },
   {
     "code": "sh601179",
     "name": "中国西电",
-    "track": "电力·电网",
+    "track": "特高压电网",
     "sector": "电力",
     "grade": "B",
     "note": "输配电装备龙头"
@@ -394,33 +1154,105 @@
   {
     "code": "sh601126",
     "name": "四方股份",
-    "track": "电力·电网",
+    "track": "特高压电网",
     "sector": "电力",
     "grade": "B",
     "note": "继电保护/智能电网"
   },
   {
-    "code": "sz002335",
-    "name": "科华数据",
-    "track": "电力·储能",
+    "code": "sh600312",
+    "name": "平高电气",
+    "track": "特高压电网",
     "sector": "电力",
     "grade": "B",
-    "note": "UPS/储能/数据中心"
+    "note": "高压开关GIS"
+  },
+  {
+    "code": "sz002028",
+    "name": "思源电气",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "A",
+    "note": "一次设备民企龙头"
+  },
+  {
+    "code": "sh600550",
+    "name": "保变电气",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "C",
+    "note": "变压器，重组预期"
+  },
+  {
+    "code": "sh603606",
+    "name": "东方电缆",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "A",
+    "note": "海缆龙头，风电/输电"
+  },
+  {
+    "code": "sz002498",
+    "name": "汉缆股份",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "C",
+    "note": "电缆，海风链"
+  },
+  {
+    "code": "sz002533",
+    "name": "金杯电工",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "B",
+    "note": "电磁线/电缆"
+  },
+  {
+    "code": "sz002202",
+    "name": "金风科技",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "B",
+    "note": "风电整机龙头"
+  },
+  {
+    "code": "sh600869",
+    "name": "远东股份",
+    "track": "特高压电网",
+    "sector": "电力",
+    "grade": "C",
+    "note": "智能缆网"
   },
   {
     "code": "sh601985",
     "name": "中国核电",
-    "track": "电力·核电",
+    "track": "核电",
     "sector": "电力",
     "grade": "A",
     "note": "核电运营双寡头"
   },
   {
-    "code": "sz003816",
-    "name": "中国广核",
-    "track": "电力·核电",
+    "code": "sh601611",
+    "name": "中国核建",
+    "track": "核电",
     "sector": "电力",
     "grade": "B",
-    "note": "核电运营"
+    "note": "核电工程建设"
+  },
+  {
+    "code": "sh600875",
+    "name": "东方电气",
+    "track": "核电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "核电/火电设备"
+  },
+  {
+    "code": "sh603308",
+    "name": "应流股份",
+    "track": "核电",
+    "sector": "电力",
+    "grade": "B",
+    "note": "核电/航发铸件"
   }
 ]
