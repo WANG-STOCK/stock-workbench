@@ -91,6 +91,8 @@ POOL = [
     {"code": "sz001389", "name": "广合科技", "track": "PCB", "sector": "科技", "grade": "B", "note": "服务器 PCB"},
     {"code": "sh600601", "name": "方正科技", "track": "PCB", "sector": "科技", "grade": "B", "note": "PCB+信创"},
     {"code": "sz002947", "name": "恒铭达", "track": "PCB", "sector": "科技", "grade": "B", "note": "消费电子/通信 PCB 结构件"},
+    # ====================== 消费电子 ======================
+    {"code": "sz002475", "name": "立讯精密", "track": "消费电子", "sector": "科技", "grade": "A", "note": "消费电子/苹果链龙头，AirPods/iPhone 组装（持仓）"},
     # ====================== 光纤 ======================
     {"code": "sh600105", "name": "永鼎股份", "track": "光纤", "sector": "科技", "grade": "B", "note": "光电缆+海外工程（持仓）"},
     {"code": "sh600487", "name": "亨通光电", "track": "光纤", "sector": "科技", "grade": "A", "note": "光纤海缆双龙头"},
