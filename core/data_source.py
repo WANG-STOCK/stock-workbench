@@ -68,20 +68,24 @@ def fetch_kline_em(code, period="1m", limit=60):
     # 若用 ['curl', ...] 可能撞其它实现的 curl（rc=56）。东财 kline 端点容易被风控抖动，
     # 加重试 3 次，失败时 fallback 到 5 分钟（保证盘中建议面板始终有数据）
     try:
-        for attempt in range(3):
+        import time as _t
+        # 超时与重试收紧：单只最坏 2×2×5s≈20s（正常<1s），避免盘中面板"一直加载"
+        for attempt in range(2):
             for hdr_args in (
                 '-H "Referer: https://quote.eastmoney.com/" -H "Accept: */*"',
                 '',
             ):
-                cmd = f'curl -s --max-time 10 {hdr_args} "{url}"'.strip()
-                out = subprocess.run(cmd, capture_output=True, text=True, timeout=13, shell=True)
-                if out.returncode == 0 and out.stdout and '"klines"' in out.stdout and len(out.stdout) > 1000:
+                cmd = f'curl -s --max-time 5 {hdr_args} "{url}"'.strip()
+                try:
+                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=7, shell=True)
+                except Exception:
+                    out = None
+                if out is not None and out.returncode == 0 and out.stdout and '"klines"' in out.stdout and len(out.stdout) > 1000:
                     raw = out.stdout
                     break
             if raw:
                 break
-            import time as _t
-            _t.sleep(1.0)
+            _t.sleep(0.3)
         # Fallback：东财 1m 拉不到时用 5m 数据顶上（盘中建议面板不断）
         if not raw and period == "1m":
             try:

@@ -91,7 +91,7 @@
     state.timers.push(setInterval(loadPositionAdvice, 10000));
     // 盘中实时建议：5 秒高频刷新（解决"拉升到6个点跌到4个点该不该卖"的分时判断）
     pollIntraday();
-    state.timers.push(setInterval(pollIntraday, 5000));
+    state.timers.push(setInterval(pollIntraday, 8000));
     // 尾盘策略：30 秒刷新（低频，尾盘汇总减仓/埋伏结论）
     try { loadTailStrategy(); } catch (e) {}
     state.timers.push(setInterval(loadTailStrategy, 30000));
@@ -103,6 +103,7 @@
         if (!btn) return;
         intradayPeriod = btn.dataset.period || "1m";
         periodBox.querySelectorAll(".ip-btn").forEach(b => b.classList.toggle("active", b === btn));
+        _intradayBusy = false;  // 允许立即按新周期刷新
         pollIntraday();
       });
     }
@@ -924,7 +925,16 @@
       const slot = document.querySelector(`#posList .pa-intraday[data-code="${p.code}"]`);
       if (!slot) return;
       const it = state.intraday && state.intraday[p.code];
-      if (!it) { slot.innerHTML = `<span style="color:var(--muted)">⏳ 分时建议加载中…</span>`; return; }
+      if (!it) {
+        // 首屏骨架：已有实时价时先显示"分析中 + 现价/涨跌"，避免一直空白"加载中"
+        const pa = (state.posAdvice || []).find(x => x.code === p.code) || {};
+        const priceTxt = pa.price != null ? `现价 ${pa.price}` : "";
+        const pctTxt = pa.change_pct != null
+          ? ` <b style="color:${pa.change_pct >= 0 ? '#c92a2a' : '#2b8a3e'}">${pa.change_pct >= 0 ? '+' : ''}${pa.change_pct}%</b>` : "";
+        slot.innerHTML = `<span style="color:var(--muted)">⏳ 分时分析中…</span>`
+          + (priceTxt ? `<span style="margin-left:6px;color:var(--muted);font-size:11px">${priceTxt}${pctTxt}</span>` : "");
+        return;
+      }
       const m = it.metrics || {};
       const color = it.action_color || "#1971c2";
       const urgent = it.urgency === "立即" ? "animation:it-blink 1s infinite;" : "";
@@ -942,32 +952,30 @@
     });
   }
 
-  // 盘中实时建议：每只持仓 + 当前查看股票，按 5min K 线的分时判断"该不该买/卖"
-  // 高频刷新（5 秒），解决日 K 综合评分"来不及"的问题
+  // 盘中实时建议：每只持仓 + 当前查看股票，按 1min/5min K 线的分时判断"该不该买/卖"
+  // 一次批量请求并发算所有持仓（后端线程池），解决"逐只请求叠加 1m 现拉 → 一直加载"
   let _intradaySeq = 0;
+  let _intradayBusy = false;  // 在途锁：上一轮未完成不发起新一轮，避免请求风暴
   let intradayPeriod = "1m";  // 分时周期：1m / 5m，前端可切换
   async function pollIntraday() {
-    const seq = ++_intradaySeq;
+    if (_intradayBusy) return;
+    const codes = new Set();
+    (state.posAdvice || []).forEach(p => codes.add(p.code));
+    if (state.current && state.current.code) codes.add(state.current.code);
+    if (!codes.size) return;
+    _intradayBusy = true;
     try {
-      const codes = new Set();
-      (state.posAdvice || []).forEach(p => codes.add(p.code));
-      if (state.current && state.current.code) codes.add(state.current.code);
-      // 没有持仓也没有当前股时静默
-      if (!codes.size) return;
-      // 并行请求
-      const results = await Promise.allSettled(
-        Array.from(codes).map(c => api("GET", "/api/intraday_advice?code=" + c + "&period=" + intradayPeriod))
-      );
+      const url = "/api/intraday_advice_batch?period=" + intradayPeriod +
+                  "&codes=" + encodeURIComponent(Array.from(codes).join(","));
+      const data = await api("GET", url);
+      if (!data || !data.results) return;
+      const seq = ++_intradaySeq;
       if (seq !== _intradaySeq) return;  // 被更新的轮询抢占
-      state.intraday = {};
-      results.forEach(r => {
-        if (r.status === "fulfilled" && r.value && r.value.code) {
-          state.intraday[r.value.code] = r.value;
-        }
-      });
+      state.intraday = data.results;
       renderIntradayList();
       renderInlineIntraday();
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* 网络抖动忽略，下次轮询重试 */ }
+    finally { _intradayBusy = false; }
   }
   function renderIntradayList() {
     const ul = $("#intradayList");

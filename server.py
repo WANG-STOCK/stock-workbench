@@ -461,7 +461,11 @@ def _intraday_for(code, price=None, prev_close=None, period="1m"):
         return {"scenario": "数据不足", "reasons": ["实时价或昨收缺失"]}
     try:
         if period == "1m":
-            bars = ds.get_kline(code, period, 60)  # 东财在线、不缓存，保证盘中时效
+            # 1 分钟线：东财在线，但加 25 秒内存缓存——避免每 5 秒轮询都重新现拉（曾导致面板一直"加载中"）
+            bars = _cache_get(code, "1m", 60)
+            if bars is None:
+                bars = ds.get_kline(code, period, 60)
+                _cache_set(code, "1m", 60, bars)
         else:
             bars = _cache_get(code, period, 60) or ds.get_kline(code, period, 60, _tdx_path or None)
             _cache_set(code, period, 60, bars)
@@ -952,6 +956,37 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/tail_market_strategy":
             self._send(200, _tail_market_strategy())
+            return
+        if route == "/api/intraday_advice_batch":
+            # 批量盘中建议：一次请求并发算所有持仓（线程池），避免前端对每只发独立请求、叠加 1m 现拉导致一直"加载中"
+            raw_codes = qs.get("codes", [""])[0].strip()
+            period = qs.get("period", ["1m"])[0].strip().lower()
+            if period not in ("1m", "5m", "15m", "30m", "60m"):
+                period = "1m"
+            codes = [c.strip().lower() for c in raw_codes.split(",") if c.strip()]
+            if not codes:
+                self._send(400, {"error": "codes required"}); return
+            from concurrent.futures import ThreadPoolExecutor
+            # 先一次性批量取所有实时价（一次请求，避免并发打腾讯实时接口被干扰导致"数据不足"）
+            rt = {}
+            try:
+                rt = ds.fetch_realtime(codes) or {}
+            except Exception:
+                rt = {}
+            results = {}
+            def _one(c):
+                q = rt.get(c) or {}
+                r = _intraday_for(c, price=q.get("price"), prev_close=q.get("prev_close"), period=period)
+                r["code"] = c
+                r["period"] = period
+                return c, r
+            try:
+                with ThreadPoolExecutor(max_workers=min(len(codes), 6)) as ex:
+                    for c, r in ex.map(_one, codes):
+                        results[c] = r
+            except Exception as e:
+                print("[WARN] intraday batch partial:", e)
+            self._send(200, {"period": period, "results": results})
             return
         if route == "/api/intraday_advice":
             # 盘中实时建议：基于 1min/5min K 线 + 实时价，给"该不该买/卖"的瞬时判断
