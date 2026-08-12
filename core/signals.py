@@ -31,6 +31,11 @@ ACTION_THRESHOLDS = {
     "强烈买入": 50, "买入": 25, "持有": -24, "减仓": -49,
 }
 
+# 动作优先级（数值越大越优先）：排序/展示时「强烈买入→买入→持有→减仓→卖出」在前
+ACTION_RANK = {
+    "强烈买入": 5, "买入": 4, "持有": 3, "减仓": 2, "卖出": 1,
+}
+
 # ---------- 权重分类（供 UI 调节：7 大类，每类一个倍率 0~2） ----------
 WEIGHT_CATEGORIES = {
     "趋势": ["trend_up", "trend_down", "trend_short_up", "trend_short_down", "new_high", "new_low"],
@@ -403,6 +408,96 @@ def candidate_levels(bars_5m=None, daily_bars=None, prev_close=None, pct=0.025):
         "trend": trend_note,
         "today_high": round(today_hi, 2) if today_hi else None,
         "today_low": round(today_lo, 2) if today_lo else None,
+    }
+
+
+def dynamic_levels(bars_daily, bars_5m=None, price=None, prev_close=None, regime=None):
+    """动态买卖参考价（替代固定「开盘×±3%」）。
+
+    用户反馈痛点：永鼎建议 38.55 卖、一直不动，结果涨到 40.11 卖飞了。
+    根因是「卖价 = 开盘×1.03」是死价，股价涨上去后卖价不跟涨。
+
+    本函数让卖价随股价上行而抬升（移动止盈/压力跟随），买价随回调而下移（支撑跟随）：
+    - 趋势：price>MA20 且 MA20 上行 → 多头；price<MA20 → 空头；否则震荡。
+    - 卖价：
+        · 多头且未超买(KDJ<80)：sell = max(近20日高×0.99, 现价×1.01)  → 随价抬升（移动止盈）
+        · 超买(KDJ≥80)：sell = 现价×0.99（见好就收）
+        · 空头：sell = min(近20日高×0.98, 现价×1.005)（反弹即卖，不追高）
+        · 弱市(板块资金流出+下跌)：sell 直接取现价（现在/反弹就卖）
+    - 买价：
+        · 多头：buy = min(MA20×0.99, 现价×0.97)（回踩 MA20 接）
+        · 超卖(KDJ≤20)：buy = 现价×1.01（企稳低吸）
+        · 空头：buy = 近20日低×1.01（只接支撑，不接飞刀）
+        · 弱市：buy = 前收×0.9（约跌停才低吸买回）
+    返回 {buy, sell, open, basis, mode}，与 today_levels 同键，可直接喂给 day_outlook/adaptive_trade。
+    """
+    if not bars_daily or len(bars_daily) < 20:
+        return None
+    closes = [b["close"] for b in bars_daily]
+    if price is None:
+        price = closes[-1]
+    ind = compute_all(bars_daily)
+    ma20 = ind["ma5"] and ind["ma20"][-1]
+    ma20_v = ind["ma20"][-1]
+    ma20_prev = ind["ma20"][-2] if len(ind["ma20"]) > 1 and ind["ma20"][-2] is not None else None
+    K, D = ind["kdj"]["k"][-1], ind["kdj"]["d"][-1]
+    highs = [b["high"] for b in bars_daily]
+    lows = [b["low"] for b in bars_daily]
+    recent_high = max(highs[-20:])
+    recent_low = min(lows[-20:])
+
+    # 当日开盘（用于展示「开盘 X」）
+    open_p = None
+    if bars_5m and len(bars_5m) >= 1:
+        today = bars_5m[-1].get("date")
+        today_bars = [b for b in bars_5m if b.get("date") == today] if today else bars_5m
+        if today_bars:
+            open_p = today_bars[0].get("open")
+
+    uptrend = (price is not None and ma20_v is not None and price > ma20_v
+               and (ma20_prev is None or ma20_v >= ma20_prev * 0.999))
+    downtrend = (price is not None and ma20_v is not None and price < ma20_v
+                 and (ma20_prev is None or ma20_v <= ma20_prev * 1.001))
+    overbought = (K is not None and D is not None and K >= 80 and D >= 80)
+    oversold = (K is not None and D is not None and K <= 20 and D <= 20)
+    weak = bool(regime and regime.get("trend_pct") is not None and regime["trend_pct"] < 0
+                and regime.get("fund_net") is not None and regime["fund_net"] < 0)
+
+    if weak:
+        sell = round(price, 2) if price else None
+        buy = round(prev_close * 0.9, 2) if prev_close else (round(open_p * 0.9, 2) if open_p else None)
+        basis = "弱市防守"
+    elif overbought:
+        sell = round(price * 0.99, 2) if price else None
+        buy = round(min(ma20_v * 0.99 if ma20_v else price, price * 0.97), 2) if price else None
+        basis = "超买卖出"
+    elif oversold:
+        sell = round(max(recent_high * 0.99, price * 1.01), 2) if price else None
+        buy = round(price * 1.01, 2) if price else None
+        basis = "超买卖入"
+    elif uptrend:
+        sell = round(max(recent_high * 0.99, price * 1.01), 2) if price else None
+        buy = round(min(ma20_v * 0.99 if ma20_v else price, price * 0.97), 2) if price else None
+        basis = "多头移动止盈"
+    elif downtrend:
+        sell = round(min(recent_high * 0.98, price * 1.005), 2) if price else None
+        buy = round(recent_low * 1.01, 2) if recent_low else (round(price * 0.95, 2) if price else None)
+        basis = "空头反弹卖"
+    else:
+        sell = round(recent_high * 0.99, 2) if recent_high else (round(price * 1.02, 2) if price else None)
+        buy = round(recent_low * 1.01, 2) if recent_low else (round(price * 0.98, 2) if price else None)
+        basis = "震荡"
+
+    mode = "trailing" if (uptrend and not overbought) else ("defensive" if weak else "fixed")
+    return {
+        "open": round(open_p, 2) if open_p else None,
+        "high": round(recent_high, 2),
+        "low": round(recent_low, 2),
+        "buy": buy,
+        "sell": sell,
+        "basis": basis,
+        "mode": mode,
+        "ma20": round(ma20_v, 2) if ma20_v else None,
     }
 
 

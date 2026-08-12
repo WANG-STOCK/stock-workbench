@@ -82,3 +82,61 @@ def fundamental_score(grade, valuation=None):
             elif pe <= 0:
                 base -= 8.0          # 亏损，减分
     return max(0.0, min(100.0, base))
+
+
+def fetch_target_price(code, timeout=8):
+    """机构目标价（best-effort，东财投资评级接口）。失败/无数据返回 None。"""
+    sid = _secid(code)
+    if not sid:
+        return None
+    url = ("https://emweb.securities.eastmoney.com/PC_HSF10/InvestmentAdvice/PageAjax"
+           "?code=%s" % code.upper())
+    try:
+        import re
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://emweb.securities.eastmoney.com/",
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read().decode("utf-8", "ignore")
+        for key in ("TargetPrice", "targetPrice", "目标价", "ForecastPrice", "JGTargetPrice"):
+            m = re.search(r'"%s"\s*:\s*"?([\d.]+)"?' % re.escape(key), raw)
+            if m:
+                try:
+                    return float(m.group(1))
+                except (TypeError, ValueError):
+                    pass
+        return None
+    except Exception:
+        return None
+
+
+def expectation_score(pe=None, target_upside=None, news_score=0, grade="B"):
+    """预期发展评分 0-100：估值低位(PE) + 机构目标价上行空间 + 新闻预期。
+
+    - PE 低（0<pe≤30）→ 加分；pe>60 或亏损 → 减分。
+    - 机构目标价上行空间 target_upside（小数，如 0.2=+20%）→ 正向；为负 → 减分。
+    - news_score(-100~100) → 映射成 ±15。
+    任一数据缺失均静默降级，不影响主流程。
+    """
+    base = GRADE_BASE.get(grade, 68.0)
+    pe_bonus = 0.0
+    if pe is not None:
+        if 0 < pe <= 20:
+            pe_bonus = 12.0
+        elif pe <= 30:
+            pe_bonus = 6.0
+        elif pe <= 60:
+            pe_bonus = 0.0
+        elif pe <= 100:
+            pe_bonus = -6.0
+        else:
+            pe_bonus = -10.0
+        if pe <= 0:
+            pe_bonus = -12.0
+    tgt_bonus = 0.0
+    if target_upside is not None:
+        tgt_bonus = max(-20.0, min(20.0, target_upside * 100))
+    news_bonus = max(-15.0, min(15.0, (news_score or 0) * 0.15))
+    s = base + pe_bonus + tgt_bonus + news_bonus
+    return max(0.0, min(100.0, s))

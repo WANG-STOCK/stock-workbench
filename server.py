@@ -26,6 +26,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
 WATCHLIST = os.path.join(DATA_DIR, "watchlist.json")
 ALERTS = os.path.join(DATA_DIR, "alerts.json")
+REVIEW = os.path.join(DATA_DIR, "review.json")
 POSITIONS = os.path.join(DATA_DIR, "positions.json")
 # 云端/本地共用的持仓主源（git 跟踪，公开 URL 可达，部署/重启不丢）
 STATIC_POSITIONS = os.path.join(BASE, "static", "positions.json")
@@ -123,7 +124,7 @@ def _get_universe():
 
 def _scope_codes(scope):
     if scope == "watchlist":
-        return [c for c in _load_json(WATCHLIST, []) if c]
+        return [w["code"] for w in _load_watchlist()]
     if scope == "candidate":
         return ip.pool_codes()
     if scope == "universe":
@@ -138,6 +139,150 @@ def _scope_codes(scope):
     if scope == "online_all":
         return _get_universe()
     return []
+
+
+# ---------- 自选股：支持带元数据的对象（添加时间/价格/推荐买价） ----------
+def _load_watchlist():
+    """返回标准化自选列表：[{code, name, add_time, add_price, scan_buy}, ...]。
+    兼容旧版纯字符串列表。"""
+    raw = _load_json(WATCHLIST, [])
+    out = []
+    for e in raw:
+        if isinstance(e, str):
+            out.append({"code": e, "name": "", "add_time": None,
+                        "add_price": None, "scan_buy": None})
+        elif isinstance(e, dict) and e.get("code"):
+            out.append({"code": e["code"], "name": e.get("name", ""),
+                        "add_time": e.get("add_time"), "add_price": e.get("add_price"),
+                        "scan_buy": e.get("scan_buy")})
+    return out
+
+
+# ---------- 个股基本面/预期事实缓存（PE + 机构目标价 + 新闻，best-effort） ----------
+_FACTS_CACHE = {}
+_FACTS_LOCK = threading.Lock()
+
+
+def _stock_facts(code, ttl=300):
+    """返回 {pe, pb, target, target_upside, news_score}；任何缺失均 None。带 5 分钟缓存。"""
+    now = time.time()
+    with _FACTS_LOCK:
+        c = _FACTS_CACHE.get(code)
+        if c and now - c[0] < ttl:
+            return c[1]
+    try:
+        val = fm.batch_valuation([code]) or {}
+        v = val.get(code) or {}
+        pe = v.get("pe")
+        target = fm.fetch_target_price(code)
+        price = None
+        try:
+            rt = ds.fetch_realtime([code]) or {}
+            price = (rt.get(code) or {}).get("price")
+        except Exception:
+            price = None
+        target_upside = round(target / price - 1, 4) if (target and price) else None
+        news_score = 0
+        try:
+            nw_d = nw.stock_news(code)
+            if nw_d.get("status") == "ok":
+                news_score = nw.news_sentiment(nw_d["headlines"])
+        except Exception:
+            news_score = 0
+        facts = {"pe": pe, "pb": v.get("pb"), "target": target,
+                 "target_upside": target_upside, "news_score": news_score}
+    except Exception:
+        facts = {"pe": None, "pb": None, "target": None,
+                 "target_upside": None, "news_score": 0}
+    with _FACTS_LOCK:
+        _FACTS_CACHE[code] = (now, facts)
+    return facts
+
+
+# ---------- 每日复盘：按日期记录开盘建议/最高/收盘，复盘准确率 ----------
+def _load_review():
+    return _load_json(REVIEW, {})
+
+
+def _today_str():
+    return time.strftime("%Y-%m-%d")
+
+
+def _capture_review(rec):
+    """前端每轮刷新上报快照；后端合并到「今天」记录。
+    rec: {code, name, price, high, low, action, op_price, op_qty}
+    - 首次出现填开盘建议；始终更新 high/low/最新；收盘后(>=15:00)填收盘。
+    """
+    date = _today_str()
+    store = _load_review()
+    day = store.setdefault(date, {})
+    code = rec.get("code")
+    if not code:
+        return store
+    r = day.get(code) or {}
+    if "open_action" not in r:
+        r["open_action"] = rec.get("action")
+        r["open_price"] = rec.get("price")
+        r["open_op_price"] = rec.get("op_price")
+        r["open_op_qty"] = rec.get("op_qty")
+        r["name"] = rec.get("name") or r.get("name")
+    r["name"] = rec.get("name") or r.get("name")
+    r["high"] = max(r.get("high") if r.get("high") is not None else -1e9,
+                    rec.get("high") if rec.get("high") is not None else -1e9)
+    r["low"] = min(r.get("low") if r.get("low") is not None else 1e9,
+                   rec.get("low") if rec.get("low") is not None else 1e9)
+    r["last_action"] = rec.get("action")
+    r["last_price"] = rec.get("price")
+    r["last_op_price"] = rec.get("op_price")
+    # 收盘判定：本地时间 >= 15:00（A股已收盘）
+    hour = time.localtime().tm_hour
+    if hour >= 15:
+        r["close_action"] = rec.get("action")
+        r["close_price"] = rec.get("price")
+        r["close_op_price"] = rec.get("op_price")
+    day[code] = r
+    store[date] = day
+    _save_json(REVIEW, store)
+    return store
+
+
+def _review_summary(date=None):
+    """汇总某日复盘：是否做对 + 按建议做T盈亏估算。"""
+    store = _load_review()
+    date = date or _today_str()
+    day = store.get(date, {})
+    out = []
+    for code, r in day.items():
+        oa = r.get("open_action")
+        oprice = r.get("open_op_price")
+        oqty = r.get("open_op_qty") or 0
+        close_p = r.get("close_price") or r.get("last_price")
+        high = r.get("high")
+        correct = None
+        pnl = None
+        if oa == "买入" and oprice and close_p:
+            pnl = round((close_p - oprice) * oqty, 2)
+            correct = close_p > oprice
+        elif oa == "卖出" and oprice and close_p:
+            pnl = round((oprice - close_p) * oqty, 2)
+            correct = close_p < oprice
+        out.append({
+            "code": code, "name": r.get("name", ""),
+            "open_action": oa, "open_op_price": oprice,
+            "high": high, "low": r.get("low"),
+            "close_price": close_p, "close_action": r.get("close_action"),
+            "correct": correct, "pnl": pnl,
+        })
+    # 按是否做对 + 盈亏排序
+    out.sort(key=lambda x: (x["correct"] is not True, -(x["pnl"] or 0)))
+    return {"date": date, "count": len(out), "rows": out}
+
+
+def _action_sort_key(r):
+    """排序键：动作优先级（强买>买入>持有>减仓>卖出）优先，其次综合分/评分降序。"""
+    act = sig.ACTION_RANK.get(r.get("action"), 0)
+    sc = r.get("combined") if r.get("combined") is not None else r.get("score", 0)
+    return (-act, -(sc or 0))
 
 
 def _chunk(seq, n):
@@ -213,13 +358,6 @@ def _advise_position(code, capital):
         _ss = sf.sector_strength(_fp.get("track")) if _fp.get("track") else None
     except Exception:
         _fp, _ss = {}, None
-    # 当日实时买卖价带宽
-    try:
-        bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
-        _cache_set(code, "5m", 60, bars5m)
-        tl = sig.today_levels(bars5m, pct=0.03)
-    except Exception:
-        tl = None
     price = a.get("price")
     prev_close = a.get("prev_close")
     regime = None
@@ -227,6 +365,13 @@ def _advise_position(code, capital):
         regime = {"track": _ss.get("track"), "sector": _ss.get("sector"),
                   "trend_pct": _ss.get("trend_pct"), "fund_net": _ss.get("fund_net"),
                   "up_ratio": _ss.get("up_ratio")}
+    # 动态买卖价（移动止盈/支撑跟随，避免「卖价死板卖飞」，如永鼎 38.55→40.11）
+    try:
+        bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
+        _cache_set(code, "5m", 60, bars5m)
+        tl = sig.dynamic_levels(bars, bars5m, price, prev_close, regime)
+    except Exception:
+        tl = None
     adp = sig.adaptive_trade(tl, regime, price, prev_close, pct=0.03)
     outlook = sig.day_outlook(a, regime, tl, adp, price, prev_close)
     held = _held_shares(code)
@@ -270,6 +415,7 @@ def _advise_position(code, capital):
         "score": a["score"],
         "op_price": round(op_price, 2) if op_price else None,
         "op_qty": op_qty,
+        "op_basis": (tl or {}).get("basis") or "",
         "reason": (outlook or {}).get("reason") or (a.get("reasons")[0]["text"] if a.get("reasons") else ""),
         "regime": regime,
         "indicators": a.get("indicators"),
@@ -363,6 +509,22 @@ class Handler(BaseHTTPRequestHandler):
                 adv["name"] = p.get("name") or adv.get("name") or code
                 adv["shares"] = shares
                 adv["cost"] = cost
+                # 基本面/预期事实（PE + 机构目标价 + 新闻，best-effort，带缓存）
+                try:
+                    adv["facts"] = _stock_facts(code)
+                except Exception:
+                    adv["facts"] = None
+                # 每日复盘快照：记录开盘建议/最高/最低，收盘后(>=15:00)自动记收盘
+                try:
+                    rq = rt.get(code) or {}
+                    _capture_review({
+                        "code": code, "name": adv["name"],
+                        "price": price, "high": rq.get("high"), "low": rq.get("low"),
+                        "action": adv.get("action"), "op_price": adv.get("op_price"),
+                        "op_qty": adv.get("op_qty"),
+                    })
+                except Exception:
+                    pass
                 total_value += (price or 0) * shares
                 out.append(adv)
             self._send(200, {"ok": True, "capital": capital,
@@ -471,7 +633,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, adv)
             return
         if route == "/api/watchlist":
-            self._send(200, _load_json(WATCHLIST, []))
+            self._send(200, _load_watchlist())
             return
         if route == "/api/screener":
             scope = qs.get("scope", ["watchlist"])[0]
@@ -552,6 +714,10 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/alerts/check":
             self._send(200, self._check_alerts())
             return
+        if route == "/api/review":
+            date = qs.get("date", [""])[0] or None
+            self._send(200, _review_summary(date))
+            return
         self._send(404, {"error": "unknown route"})
 
     def do_POST(self):
@@ -569,10 +735,38 @@ class Handler(BaseHTTPRequestHandler):
             payload = {}
 
         if route == "/api/watchlist":
+            # 增量添加（从扫描「加自选」按钮调用）：保留已有元数据
+            if isinstance(payload, dict) and payload.get("items") is not None:
+                items = payload["items"]
+                existing = {w["code"]: w for w in _load_watchlist()}
+                for it in items:
+                    c = str(it.get("code", ""))
+                    if not c:
+                        continue
+                    rec = existing.get(c) or {"code": c, "name": "", "add_time": None,
+                                             "add_price": None, "scan_buy": None}
+                    rec["name"] = it.get("name") or rec.get("name") or ""
+                    if it.get("add_time"):
+                        rec["add_time"] = it["add_time"]
+                    if it.get("add_price") is not None:
+                        rec["add_price"] = it["add_price"]
+                    if it.get("scan_buy") is not None:
+                        rec["scan_buy"] = it["scan_buy"]
+                    existing[c] = rec
+                _save_json(WATCHLIST, list(existing.values()))
+                self._send(200, {"ok": True, "items": list(existing.values())})
+                return
+            # 全量替换（兼容旧接口 / 前端保存列表）
             codes = payload.get("codes", []) if isinstance(payload, dict) else payload
-            codes = [str(c) for c in codes if c]
-            _save_json(WATCHLIST, codes)
-            self._send(200, {"ok": True, "codes": codes})
+            norm = []
+            for c in codes:
+                if isinstance(c, dict) and c.get("code"):
+                    norm.append(c)
+                elif c:
+                    norm.append({"code": str(c), "name": "", "add_time": None,
+                                 "add_price": None, "scan_buy": None})
+            _save_json(WATCHLIST, norm)
+            self._send(200, {"ok": True, "codes": [n["code"] for n in norm]})
             return
         if route == "/api/config":
             # 保存权重倍率 / 仓位参数 / 监控 / 云端地址 / 通达信路径
@@ -645,6 +839,14 @@ class Handler(BaseHTTPRequestHandler):
             alerts.append(item)
             _save_json(ALERTS, alerts)
             self._send(200, {"ok": True, "alert": item})
+            return
+        if route == "/api/review/capture":
+            rec = payload if isinstance(payload, dict) else {}
+            try:
+                _capture_review(rec)
+                self._send(200, {"ok": True})
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
             return
         self._send(404, {"error": "unknown route"})
 
@@ -763,7 +965,8 @@ class Handler(BaseHTTPRequestHandler):
             r = self._analyze_one(code, limit, pred, names, capital=cap)
             if r:
                 results.append(r)
-        results.sort(key=lambda x: x["score"], reverse=True)
+        # 排序：动作优先级(强买>买入>持有>减仓>卖出) 优先，同档按评分降序
+        results.sort(key=_action_sort_key)
         self._attach_news(results, "score", 20)
         return results
 
@@ -829,6 +1032,9 @@ class Handler(BaseHTTPRequestHandler):
                     "tech_score": round(tech_norm, 1),
                     "fund_score": round(fund, 1),
                     "fund_grade": fp.get("grade", "B"),
+                    "sector_score": round(sector_score, 1),
+                    "pe": (valuations.get(code) or {}).get("pe"),
+                    "target": None, "target_upside": None, "expect_score": None,
                     "combined": combined,
                     "price": price,
                     "buy_price": buy_price,
@@ -865,7 +1071,46 @@ class Handler(BaseHTTPRequestHandler):
                     progress_cb()
         vt.join(timeout=8)  # 尽量等估值回写，超时不影响（基本面按质量档兜底）
         results.sort(key=lambda x: x["combined"], reverse=True)
+        # 预期发展因子（PE估值低位 + 机构目标价上行空间 + 新闻）：仅对头部 best-effort 抓取
+        self._enrich_expect(results, topn=40)
         self._attach_news(results, "combined", 30)
+        # 最终排序：动作优先级(强买>买入>持有>减仓>卖出) 优先，同档按综合分降序
+        results.sort(key=_action_sort_key)
+        return results
+
+    def _enrich_expect(self, results, topn=40):
+        """给头部候选补机构目标价/PE/新闻，重算「预期发展」分并合并进综合分。best-effort。"""
+        top = results[:topn]
+
+        def _tgt(r):
+            try:
+                t = fm.fetch_target_price(r.get("code"))
+                if t and r.get("price"):
+                    r["target"] = t
+                    r["target_upside"] = round(t / r["price"] - 1, 4)
+                else:
+                    r["target"] = None
+                    r["target_upside"] = None
+            except Exception:
+                r["target"], r["target_upside"] = None, None
+
+        try:
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                list(ex.map(_tgt, top))
+        except Exception:
+            pass
+        for r in top:
+            pe = r.get("pe")
+            tup = r.get("target_upside")
+            ns = (r.get("news") or {}).get("score", 0) if r.get("news") else 0
+            grade = r.get("fund_grade", "B")
+            exp = fm.expectation_score(pe=pe, target_upside=tup, news_score=ns, grade=grade)
+            r["expect_score"] = round(exp, 1)
+            tech = r.get("tech_score", 0) or 0
+            fund = r.get("fund_score", 0) or 0
+            sector = r.get("sector_score", 50) or 50
+            # 综合分 = 技术45% + 基本面25% + 赛道10% + 预期25%（PE/目标价/新闻）
+            r["combined"] = round(tech * 0.45 + fund * 0.25 + sector * 0.10 + exp * 0.20, 1)
         return results
 
     def _run_candidate_bg(self, codes, limit, cap, strategy):
@@ -957,7 +1202,7 @@ def main():
     port = int(os.environ.get("PORT", "8723"))
     # 绑定 0.0.0.0 以便同一局域网内手机/其他设备访问（公网暴露请务必加反代与鉴权）
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    print(f"股票工作台已启动： http://127.0.0.1:{port}")
+    print(f"婷婷量化AI 已启动： http://127.0.0.1:{port}")
     try:
         import socket
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

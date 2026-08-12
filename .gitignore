@@ -4,5 +4,7 @@ __pycache__/
 data/cache/
 data/universe.txt
 data/positions.json
+data/watchlist.json
+data/review.json
 .vscode/
 .workbuddy/

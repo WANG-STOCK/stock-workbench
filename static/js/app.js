@@ -60,6 +60,9 @@
     startMonitor();
     startLiveView();
     state.timers.push(setInterval(loadPositionAdvice, 10000));
+    // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
+    loadReview();
+    state.timers.push(setInterval(loadReview, 60000));
     // 调试与共享链接：?code=sh600105 自动打开该股；?demo=1 同时跑一次候选扫描
     const _qp = new URLSearchParams(location.search);
     const _demoCode = _qp.get("code");
@@ -167,13 +170,14 @@
     };
   }
 
-  // ---------- 自选 ----------
+  // ---------- 自选（带元数据：添加时间/添加价/推荐买价） ----------
   async function loadWatchlist() {
     state.watchlist = await api("GET", "/api/watchlist");
     if (!state.watchlist.length) {
       // 默认放几只龙头示范
-      state.watchlist = ["sh600519", "sz000858", "sh601318", "sz300750"];
-      await api("POST", "/api/watchlist", { codes: state.watchlist });
+      state.watchlist = ["sh600519", "sz000858", "sh601318", "sz300750"].map(c => ({
+        code: c, name: "", add_time: null, add_price: null, scan_buy: null }));
+      await api("POST", "/api/watchlist", { items: state.watchlist });
     }
     renderWatchlist();
     await pollQuotes();
@@ -181,19 +185,41 @@
   }
 
   async function saveWatchlist() {
-    await api("POST", "/api/watchlist", { codes: state.watchlist });
+    // 用 items 增量合并，保留已有元数据（添加时间/价格/推荐买价）
+    await api("POST", "/api/watchlist", { items: state.watchlist });
   }
 
   function renderWatchlist() {
     const ul = $("#watchlist");
-    ul.innerHTML = state.watchlist.map(code => {
+    const items = state.watchlist || [];
+    if (!items.length) {
+      ul.innerHTML = `<li class="watch-empty" style="text-align:center;color:var(--muted);padding:14px;font-size:12px">暂无自选，点「+加当前」或扫描后「加自选」</li>`;
+      return;
+    }
+    ul.innerHTML = items.map(w => {
+      const code = w.code;
       const m = state.watchMeta[code] || {};
       const cur = state.current.code === code ? "active" : "";
       const act = m.action || "";
       const dot = act ? `<span class="sig-dot" style="background:${ACT_COLOR[act] || '#ccc'}"></span>` : `<span class="sig-dot" style="background:#ddd"></span>`;
       const px = m.price != null ? `<div class="wi-price"><div class="px ${chgClass(m.change)}">${fmt(m.price)}</div><div class="chg ${chgClass(m.change)}">${m.change_pct != null ? (m.change_pct >= 0 ? "+" : "") + fmt(m.change_pct) + "%" : ""}</div></div>` : `<div class="wi-price"></div>`;
+      // 增长：现价 vs 添加时价格
+      let grow = "--";
+      if (m.price != null && w.add_price != null && w.add_price > 0) {
+        const gp = (m.price / w.add_price - 1) * 100;
+        grow = `<span class="${gp >= 0 ? 'up' : 'down'}">${gp >= 0 ? '+' : ''}${gp.toFixed(1)}%</span>`;
+      }
+      const addTime = w.add_time ? w.add_time.slice(5, 16).replace("T", " ") : "--";
+      const addPrice = w.add_price != null ? fmt(w.add_price) : "--";
+      const recBuy = w.scan_buy != null ? `<b style="color:#2b8a3e">${fmt(w.scan_buy)}</b>` : "--";
       return `<li class="watch-item ${cur}" data-code="${code}">${dot}${px}
-        <div class="wi-name"><div class="nm">${m.name || code}</div><div class="cd">${code}</div></div>
+        <div class="wi-name"><div class="nm">${m.name || w.name || code}</div><div class="cd">${code}</div></div>
+        <div class="wi-meta">
+          <div>添加 <b>${addTime}</b></div>
+          <div>添加价 <b>${addPrice}</b></div>
+          <div>增长 ${grow}</div>
+          <div>荐买 ${recBuy}</div>
+        </div>
         <span class="wi-del" data-code="${code}">✕</span></li>`;
     }).join("");
     ul.querySelectorAll(".watch-item").forEach(el => {
@@ -207,7 +233,7 @@
     ul.querySelectorAll(".wi-del").forEach(el =>
       el.addEventListener("click", async (e) => {
         e.stopPropagation();
-        state.watchlist = state.watchlist.filter(c => c !== el.dataset.code);
+        state.watchlist = state.watchlist.filter(w => w.code !== el.dataset.code);
         delete state.watchMeta[el.dataset.code];
         await saveWatchlist(); renderWatchlist();
       }));
@@ -215,14 +241,18 @@
 
   async function addCurrentToWatch() {
     if (!state.current.code) { toast("请先选择一只股票"); return; }
-    if (state.watchlist.includes(state.current.code)) { toast("已在自选"); return; }
-    state.watchlist.push(state.current.code);
+    if (state.watchlist.some(w => w.code === state.current.code)) { toast("已在自选"); return; }
+    const m = state.watchMeta[state.current.code] || {};
+    state.watchlist.push({
+      code: state.current.code, name: m.name || state.current.name || state.current.code,
+      add_time: new Date().toISOString(), add_price: m.price != null ? m.price : null, scan_buy: null,
+    });
     await saveWatchlist(); renderWatchlist(); await computeSignals();
   }
 
   async function pollQuotes() {
     if (!state.watchlist.length) return;
-    const codes = state.watchlist;
+    const codes = state.watchlist.map(w => w.code);
     const chunked = [];
     for (let i = 0; i < codes.length; i += 80) chunked.push(codes.slice(i, i + 80));
     const rt = {};
@@ -246,7 +276,7 @@
   }
 
   async function computeSignals() {
-    for (const code of state.watchlist) {
+    for (const code of state.watchlist.map(w => w.code)) {
       try {
         const a = await api("GET", "/api/signal?code=" + code + "&period=daily&limit=120");
         if (a.ok) state.watchMeta[code] = { ...(state.watchMeta[code] || {}), action: a.action, score: a.score, name: state.watchMeta[code]?.name || code };
@@ -401,13 +431,23 @@
         <span class="sc-name">${r.name || r.code}<br><span style="color:var(--muted);font-size:11px">${r.code}</span></span>
         <span class="sc-score ${chgClass(r.score)}">${r.score > 0 ? "+" : ""}${r.score}</span>
         ${extra}
+        <button class="scan-add" data-code="${r.code}" data-name="${r.name || r.code}" data-price="${r.price != null ? r.price : ''}" data-buy="${r.buy_price != null ? r.buy_price : ''}">+自选</button>
       </div>`;
     }).join("");
     return rows;
   }
   function bindScanRows(el) {
     el.querySelectorAll(".scan-row").forEach(row =>
-      row.addEventListener("click", () => openStock(row.dataset.code, row.dataset.name)));
+      row.addEventListener("click", (e) => {
+        if (e.target.classList.contains("scan-add")) return;
+        openStock(row.dataset.code, row.dataset.name);
+      }));
+    el.querySelectorAll(".scan-add").forEach(btn =>
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        addToWatch(btn.dataset.code, btn.dataset.name,
+                   btn.dataset.price || null, btn.dataset.buy || null);
+      }));
   }
 
   // 候选股（十五五成长池）富表渲染
@@ -415,21 +455,30 @@
     return (results || []).map(r => {
       const c = ACT_COLOR[r.action] || "#868e96";
       const gradeColor = { A: "#c92a2a", B: "#1971c2", C: "#868e96" }[r.fund_grade] || "#868e96";
+      const peTxt = r.pe != null ? `<span style="color:#666">PE <b>${r.pe}</b></span>` : "";
+      const tgtTxt = r.target != null
+        ? `<span style="color:#1971c2">机构目标 <b>${fmt(r.target)}</b>${r.target_upside != null ? ` <span style="color:${r.target_upside >= 0 ? '#2b8a3e' : '#c92a2a'}">${r.target_upside >= 0 ? '+' : ''}${(r.target_upside * 100).toFixed(0)}%</span>` : ""}</span>`
+        : "";
+      const expTxt = r.expect_score != null ? `<span style="color:#666">预期 <b>${r.expect_score}</b></span>` : "";
       return `<div class="cand-row" data-code="${r.code}" data-name="${r.name}" style="padding:8px 4px;border-bottom:1px solid #eee;cursor:pointer">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span class="tag" style="background:${c}">${r.action}</span>
           <span style="font-weight:600">${r.name}</span><span style="color:#888;font-size:11px">${r.code}</span>
           <span style="color:#666;font-size:12px">· ${r.track}</span>
           <span style="color:#666;font-size:12px">· 赛道 ${r.sector_trend != null ? (r.sector_trend >= 0 ? "↑" : "↓") + fmt(r.sector_trend) + "%" : "—"}${r.sector_fund != null ? "　主力" + (r.sector_fund >= 0 ? "+" : "") + r.sector_fund.toFixed(1) + "亿" : ""}</span>
-          <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}）</span></span>
+          <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}${r.expect_score != null ? "/预期" + r.expect_score : ""}）</span></span>
+          <button class="scan-add" data-code="${r.code}" data-name="${r.name || r.code}" data-price="${r.price != null ? r.price : ''}" data-buy="${r.buy_price != null ? r.buy_price : ''}">+自选</button>
         </div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;flex-wrap:wrap">
           <span>现价 <b>${fmt(r.price)}</b></span>
           <span style="color:#c92a2a">买价 <b>${fmt(r.buy_price)}</b></span>
           <span style="color:#2b8a3e">卖价 <b>${fmt(r.sell_price)}</b></span>
           <span>买量 <b>${r.buy_qty}股</b></span>
-          ${r.ma5 != null && r.ma20 != null ? `<span style="color:#666">MA5 <b>${fmt(r.ma5)}</b> / MA20 <b>${fmt(r.ma20)}</b>${r.vs_ma20_pct != null ? `　<span style="color:${r.vs_ma20_pct>=0?'#2b8a3e':'#c92a2a'}">vsMA20 ${r.vs_ma20_pct>=0?'+':''}${r.vs_ma20_pct}%</span>` : ""}</span>` : ""}
+          ${r.ma5 != null && r.ma20 != null ? `<span style="color:#666">MA5 <b>${fmt(r.ma5)}</b> / MA20 <b>${fmt(r.ma20)}</b>${r.vs_ma20_pct != null ? `　<span style="color:${r.vs_ma20_pct >= 0 ? '#2b8a3e' : '#c92a2a'}">vsMA20 ${r.vs_ma20_pct >= 0 ? '+' : ''}${r.vs_ma20_pct}%</span>` : ""}</span>` : ""}
           <span style="color:${gradeColor}">基本面 ${r.fund_grade}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;margin-top:3px;font-size:12px;flex-wrap:wrap">
+          ${peTxt} ${tgtTxt} ${expTxt}
         </div>
         ${r.trend_hint && r.trend_hint !== "中性" ? `<div style="margin-top:3px;font-size:11px;color:#1971c2">📈 ${r.trend_hint}</div>` : ""}
         ${r.note ? `<div style="margin-top:4px;font-size:12px;color:#555">💡 ${r.note}</div>` : ""}
@@ -439,7 +488,30 @@
   }
   function bindCandidateRows(el) {
     el.querySelectorAll(".cand-row").forEach(row =>
-      row.addEventListener("click", () => openStock(row.dataset.code, row.dataset.name)));
+      row.addEventListener("click", (e) => {
+        if (e.target.classList.contains("scan-add")) return;
+        openStock(row.dataset.code, row.dataset.name);
+      }));
+    el.querySelectorAll(".scan-add").forEach(btn =>
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        addToWatch(btn.dataset.code, btn.dataset.name,
+                   btn.dataset.price || null, btn.dataset.buy || null);
+      }));
+  }
+
+  // 扫描结果「加自选」：记录添加时间/添加时价格/推荐买价
+  async function addToWatch(code, name, price, buy) {
+    if (state.watchlist.some(w => w.code === code)) { toast("已在自选"); return; }
+    const item = {
+      code, name: name || code,
+      add_time: new Date().toISOString(),
+      add_price: price != null && price !== "" ? parseFloat(price) : null,
+      scan_buy: buy != null && buy !== "" ? parseFloat(buy) : null,
+    };
+    state.watchlist.push(item);
+    await saveWatchlist(); renderWatchlist(); await computeSignals();
+    toast("已加入自选：" + (name || code));
   }
 
   async function runScreener() {
@@ -637,6 +709,16 @@
       const opPrice = p.op_price != null ? fmt(p.op_price) : "--";
       const opQty = p.op_qty != null ? p.op_qty : 0;
       const badgeTxt = act === "买入" ? "建议买入" : act === "卖出" ? "建议卖出" : "建议不动";
+      const basis = p.op_basis ? `📐 价格逻辑：${p.op_basis}（随股价移动，不再死板）` : "";
+      // 基本面/预期（PE + 机构目标价 + 新闻，best-effort）
+      let factTxt = "";
+      const f = p.facts;
+      if (f) {
+        const pe = f.pe != null ? `PE ${f.pe}` : "";
+        const tgt = f.target != null
+          ? `机构目标 ${fmt(f.target)}${f.target_upside != null ? ` <span style="color:${f.target_upside >= 0 ? '#2b8a3e' : '#c92a2a'}">${f.target_upside >= 0 ? '+' : ''}${(f.target_upside * 100).toFixed(0)}%</span>` : ""}` : "";
+        factTxt = [pe, tgt].filter(Boolean).join("　");
+      }
       return `<li class="pos-item" data-code="${p.code}">
         <div class="pos-row1">
           <span class="pos-name">${p.name || p.code}</span>
@@ -644,7 +726,11 @@
           ${pl}
         </div>
         <div class="pos-row2">
-          <span style="color:var(--muted);font-size:10px">${p.code} · ${p.shares}股${p.cost ? " · 成本" + fmt(p.cost) : ""}</span>
+          <span class="pos-edit">
+            成本<input class="pos-cost input xs" type="number" value="${p.cost || 0}">
+            股数<input class="pos-shares input xs" type="number" value="${p.shares || 0}">
+            <button class="pos-btn save" data-act="save" data-code="${p.code}">存</button>
+          </span>
           <button class="pos-btn del" data-act="del" data-code="${p.code}">✕</button>
         </div>
         <div class="pos-advice ${actClass}">
@@ -653,6 +739,8 @@
             <span class="pa-line">操作价 <b>${opPrice}</b></span>
             <span class="pa-line">操作量 <b>${opQty}股</b></span>
           </div>
+          ${basis ? `<div class="pa-basis">${basis}</div>` : ""}
+          ${factTxt ? `<div class="pa-fact">📊 ${factTxt}</div>` : ""}
           ${rgTxt ? `<div class="pa-regime">${rgTxt}</div>` : ""}
           ${p.reason ? `<div class="pa-reason">${p.reason}</div>` : ""}
         </div>
@@ -663,7 +751,19 @@
       await api("DELETE", "/api/positions?code=" + el.dataset.code);
       await loadPositions();
     }));
-    ul.querySelectorAll(".pos-item").forEach(el => el.addEventListener("click", () => {
+    ul.querySelectorAll(".pos-btn[data-act='save']").forEach(el => el.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const li = el.closest(".pos-item");
+      const cost = parseFloat(li.querySelector(".pos-cost").value || "0") || 0;
+      const shares = parseInt(li.querySelector(".pos-shares").value || "0", 10) || 0;
+      const code = el.dataset.code;
+      const name = (state.posAdvice.find(x => x.code === code) || {}).name || code;
+      await api("POST", "/api/positions", { code, name, shares, cost });
+      toast("已更新持仓：" + name);
+      await loadPositions();
+    }));
+    ul.querySelectorAll(".pos-item").forEach(el => el.addEventListener("click", (e) => {
+      if (e.target.closest(".pos-edit") || e.target.closest(".pos-btn")) return;
       const code = el.dataset.code;
       const m = (state.posAdvice || []).find(x => x.code === code) || {};
       openStock(code, m.name || code);
@@ -743,6 +843,36 @@
         renderSignal(sig, true);
       } catch (e) { /* 网络抖动忽略 */ }
     }, 8000));
+  }
+
+  // ---------- 每日复盘 ----------
+  async function loadReview() {
+    const el = $("#reviewBox");
+    if (!el) return;
+    try {
+      const d = await api("GET", "/api/review");
+      if (!d || !d.rows || !d.rows.length) {
+        el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px">今日暂无复盘记录。开盘后本工作台会自动记录每只持仓的「开盘建议 / 当日最高 / 收盘」，用来复盘你的判断准确率与按建议做T的盈亏。</div>`;
+        return;
+      }
+      const rows = d.rows.map(r => {
+        const ca = r.correct == null ? "—" : (r.correct ? "✅对" : "❌错");
+        const caColor = r.correct == null ? "#868e96" : (r.correct ? "#2b8a3e" : "#c92a2a");
+        const pnl = r.pnl != null ? `<b style="color:${r.pnl >= 0 ? '#2b8a3e' : '#c92a2a'}">${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(0)}</b>` : "—";
+        const oa = r.open_action || "—";
+        const oaColor = ACT_COLOR[oa] || "#868e96";
+        return `<div class="rev-row">
+          <span class="rev-name">${r.name || r.code}<br><span style="color:#999;font-size:10px">${r.code}</span></span>
+          <span class="rev-act" style="color:${oaColor}">${oa}</span>
+          <span>建议价<b>${r.open_op_price != null ? fmt(r.open_op_price) : '—'}</b></span>
+          <span>最高<b>${r.high != null ? fmt(r.high) : '—'}</b></span>
+          <span>收盘<b>${r.close_price != null ? fmt(r.close_price) : '—'}</b></span>
+          <span style="color:${caColor}">${ca}</span>
+          <span>做T盈亏${pnl}</span>
+        </div>`;
+      }).join("");
+      el.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:4px">${d.date} · 共 ${d.count} 只（按判断对错/盈亏排序；做T盈亏 = 按开盘建议价模拟操作至收盘的估算）</div>` + rows;
+    } catch (e) { /* ignore */ }
   }
 
   document.addEventListener("DOMContentLoaded", init);

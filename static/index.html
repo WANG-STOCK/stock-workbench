@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>技术面股票工作台</title>
+  <title>婷婷量化AI</title>
   <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="logo">📈</span>
-      <span>技术面股票工作台</span>
+      <span>婷婷量化AI</span>
     </div>
     <div class="status">
       <span class="badge" id="marketBadge">A股 · 沪深</span>
@@ -171,6 +171,12 @@
             <button id="rebuildBtn" class="btn scan-rebuild" title="重新生成 A 股池">重建池</button>
           </div>
           <div id="screenerResults" class="screener-results"></div>
+
+          <div class="sub-title scan-sep"><span>📊 每日复盘（按建议做T的准确率）</span></div>
+          <details class="review-box">
+            <summary>展开今日复盘</summary>
+            <div id="reviewBox" class="review-box-body">加载中…</div>
+          </details>
         </section>
       </div>
     </aside>

@@ -361,3 +361,31 @@ button.mini:hover { background: #dde7f0; }
   .right-col { overflow: visible; }
   .right-col > .panel { min-height: 260px; }
 }
+
+/* ---------- 自选股新表头（添加时间/价/增长/荐买） ---------- */
+.watch-item { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wi-meta { flex: 1 1 100%; display: flex; gap: 10px; flex-wrap: wrap; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.wi-meta b { color: var(--ink); font-weight: 600; }
+.wi-meta .up { color: #c92a2a; }
+.wi-meta .down { color: #2b8a3e; }
+
+/* ---------- 扫描「加自选」按钮 ---------- */
+.scan-add { margin-left: auto; align-self: center; border: 1px solid #4c6ef5; color: #4c6ef5; background: #fff; border-radius: 10px; font-size: 10px; padding: 1px 7px; cursor: pointer; }
+.scan-add:hover { background: #4c6ef5; color: #fff; }
+
+/* ---------- 持仓行内联编辑 ---------- */
+.pos-edit { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--muted); }
+.pos-cost, .pos-shares { width: 56px; padding: 1px 4px; }
+.pos-btn.save { border: 1px solid #2b8a3e; color: #2b8a3e; background: #fff; border-radius: 8px; font-size: 10px; padding: 1px 6px; cursor: pointer; }
+.pos-btn.save:hover { background: #2b8a3e; color: #fff; }
+.pa-basis { font-size: 10.5px; color: #1971c2; margin-top: 3px; }
+.pa-fact { font-size: 10.5px; color: #495057; margin-top: 2px; }
+
+/* ---------- 每日复盘 ---------- */
+.review-box { margin-top: 8px; border: 1px solid #e9ecef; border-radius: 8px; background: #f8f9fa; }
+.review-box > summary { cursor: pointer; padding: 6px 10px; font-size: 12px; font-weight: 600; color: #495057; }
+.review-box-body { padding: 6px 10px 10px; max-height: 320px; overflow: auto; }
+.rev-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 5px 0; border-bottom: 1px dashed #e9ecef; font-size: 11px; color: #495057; }
+.rev-row b { color: var(--ink); }
+.rev-name { font-weight: 600; color: var(--ink); line-height: 1.2; }
+.rev-act { font-weight: 700; }
