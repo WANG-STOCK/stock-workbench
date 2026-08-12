@@ -573,11 +573,17 @@ class Handler(BaseHTTPRequestHandler):
                     _ss = sf.sector_strength(_fp.get("track")) if _fp.get("track") else None
                 except Exception:
                     _fp, _ss = {}, None
-                # 当日实时买卖价：基于今日开盘价±比例，给「当天波动就卖/买」的及时建议
+                regime = None
+                if _ss:
+                    regime = {"track": _ss.get("track"), "sector": _ss.get("sector"),
+                              "trend_pct": _ss.get("trend_pct"), "fund_net": _ss.get("fund_net"),
+                              "up_ratio": _ss.get("up_ratio")}
+                # 当日实时买卖价：动态（移动止盈/支撑跟随，避免「卖价死板卖飞」如永鼎 38.55→40.11）
+                # 基于日K(含volume)计算，5m 仅用于取开盘价；5m 缺失也不影响买卖价输出
                 try:
                     bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
                     _cache_set(code, "5m", 60, bars5m)
-                    tl = sig.today_levels(bars5m, pct=0.03)  # 当日做T带宽 ±3%；想要例子里的±5%改成 0.05
+                    tl = sig.dynamic_levels(bars, bars5m, a.get("price"), a.get("prev_close"), regime)
                 except Exception:
                     tl = None
                 a["today"] = tl
@@ -585,12 +591,9 @@ class Handler(BaseHTTPRequestHandler):
                     a["position"]["today_buy"] = tl.get("buy")
                     a["position"]["today_sell"] = tl.get("sell")
                     a["position"]["today_open"] = tl.get("open")
+                    a["position"]["today_basis"] = tl.get("basis")
+                    a["position"]["today_mode"] = tl.get("mode")
                 # 自适应买卖建议：板块资金流出+下跌 → 先减仓防跌，跌停才低吸买回
-                regime = None
-                if _ss:
-                    regime = {"track": _ss.get("track"), "sector": _ss.get("sector"),
-                              "trend_pct": _ss.get("trend_pct"), "fund_net": _ss.get("fund_net"),
-                              "up_ratio": _ss.get("up_ratio")}
                 adp = sig.adaptive_trade(tl, regime, a.get("price"), a.get("prev_close"), pct=0.03)
                 a["regime"] = regime
                 a["adaptive"] = adp
