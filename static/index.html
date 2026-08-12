@@ -113,9 +113,32 @@
           </div>
           <ul id="intradayList" class="intraday-list"></ul>
         </section>
+
+        <!-- 尾盘策略面板：左列底部决策区（紧挨持仓做T/盘中建议），每天 14:30-15:00 自动汇总减仓/埋伏 -->
+        <section class="panel panel-tail" id="tailPanel" style="border:2px solid #6741d9;background:linear-gradient(135deg,#f3f0ff 0%,#e5dbff 100%);">
+          <div class="panel-title">
+            <span class="dot" style="background:#6741d9;animation:pulse 1.2s infinite;"></span>
+            <span style="font-weight:700">📊 尾盘策略</span>
+            <span id="tailPhase" class="sub">--</span>
+          </div>
+          <div id="tailConclusion" class="tail-conclusion">加载中…</div>
+          <div class="tail-cols">
+            <div class="tail-col">
+              <div class="tail-col-title">🟠 持仓该减仓</div>
+              <ul id="tailReduce" class="tail-list"></ul>
+            </div>
+            <div class="tail-col">
+              <div class="tail-col-title">🟢 尾盘可埋伏</div>
+              <ul id="tailBury" class="tail-list"></ul>
+            </div>
+          </div>
+          <div class="sub" style="font-size:11px;color:var(--muted);margin-top:6px">
+            每天 14:30–15:00 自动汇总：减仓哪几只 / 埋伏哪 1 只。仅供参考，不构成投资建议。
+          </div>
+        </section>
       </div>
 
-      <!-- 右列：自选盯盘 + 扫描候选（合并成一个单元，盘中新面板内嵌最顶部） -->
+      <!-- 右列：自选盯盘 + 扫描候选 -->
       <div class="right-col">
         <section class="panel panel-watchscan">
           <div class="panel-title">

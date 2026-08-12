@@ -92,6 +92,9 @@
     // 盘中实时建议：5 秒高频刷新（解决"拉升到6个点跌到4个点该不该卖"的分时判断）
     pollIntraday();
     state.timers.push(setInterval(pollIntraday, 5000));
+    // 尾盘策略：30 秒刷新（低频，尾盘汇总减仓/埋伏结论）
+    try { loadTailStrategy(); } catch (e) {}
+    state.timers.push(setInterval(loadTailStrategy, 30000));
     // 盘中分时周期切换（1分钟 / 5分钟）
     const periodBox = document.getElementById("intradayPeriods");
     if (periodBox) {
@@ -984,6 +987,49 @@
     });
     ul.innerHTML = arr.map(row => _intradayRowHtml(row)).join("");
   }
+  // 尾盘策略汇总：每天 14:30-15:00 给出"减仓哪几只 / 埋伏哪 1 只"结论
+  async function loadTailStrategy() {
+    try {
+      const data = await api("GET", "/api/tail_market_strategy");
+      if (!data) return;
+      renderTailStrategy(data);
+    } catch (e) { /* ignore */ }
+  }
+  function renderTailStrategy(d) {
+    const phaseEl = document.getElementById("tailPhase");
+    if (phaseEl) phaseEl.textContent = d.phase || "";
+    const concl = document.getElementById("tailConclusion");
+    if (concl) concl.textContent = d.conclusion || "—";
+    const red = document.getElementById("tailReduce");
+    if (red) {
+      if (!d.reduce_list || !d.reduce_list.length) {
+        red.innerHTML = '<li class="sub" style="color:var(--muted)">暂无（持仓均持有观察）</li>';
+      } else {
+        red.innerHTML = d.reduce_list.map(r => _tailRow(r, true)).join("");
+      }
+    }
+    const bury = document.getElementById("tailBury");
+    if (bury) {
+      if (!d.buries || !d.buries.length) {
+        bury.innerHTML = '<li class="sub" style="color:var(--muted)">暂无低位埋伏标的</li>';
+      } else {
+        bury.innerHTML = d.buries.map(b => _tailRow(b, false)).join("");
+      }
+    }
+  }
+  function _tailRow(r, isReduce) {
+    const color = r.action_color || (isReduce ? "#c92a2a" : "#2b8a3e");
+    const pct = r.now_pct != null
+      ? `<b style="color:${r.now_pct >= 0 ? '#c92a2a' : '#2b8a3e'}">${r.now_pct >= 0 ? '+' : ''}${r.now_pct}%</b>` : "";
+    const tag = `<span style="display:inline-block;padding:1px 6px;border-radius:5px;background:${color}1a;color:${color};font-weight:600">${r.action || (isReduce ? '减仓' : '可埋伏')}</span>`;
+    return `<li class="tail-item">
+      <span class="tail-name">${r.name || r.code}</span>
+      ${pct}
+      ${tag}
+      ${r.reason ? `<span class="tail-reason">${r.reason}</span>` : ""}
+    </li>`;
+  }
+
   function _intradayRowHtml(row) {
     const it = row.it;
     if (!it) {

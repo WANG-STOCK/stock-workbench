@@ -349,6 +349,21 @@ button.mini:hover { background: #dde7f0; }
 .panel-intraday { flex: 0 0 auto; }
 .panel-intraday .intraday-list { max-height: 42vh; overflow-y: auto; }
 
+/* 尾盘策略面板 */
+.panel-tail { flex: 0 0 auto; }
+.tail-conclusion {
+  font-size: 13px; line-height: 1.6; font-weight: 600; color: #4c2a8a;
+  background: rgba(103,65,217,0.08); border-radius: 8px; padding: 8px 10px; margin: 4px 0 10px;
+}
+.tail-cols { display: flex; gap: 12px; }
+.tail-col { flex: 1 1 0; min-width: 0; }
+.tail-col-title { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.tail-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.tail-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.tail-name { font-weight: 600; color: var(--text); }
+.tail-reason { color: var(--muted); font-size: 11px; flex-basis: 100%; }
+
+
 /* ---------- 评分权重 ---------- */
 .weight-sliders { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .weight-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }

@@ -473,6 +473,184 @@ def _intraday_for(code, price=None, prev_close=None, period="1m"):
     return intraday_mod.intraday_advice(quote, bars or [], prev_close)
 
 
+# ---------- 尾盘策略汇总（14:30-15:00 自动给出：减仓哪几只 / 埋伏哪 1 只） ----------
+TAIL_WATCH_CODES = [
+    "sz002371",  # 北方华创 半导体设备
+    "sz002463",  # 沪电股份 PCB
+    "sz002281",  # 光迅科技 光模块
+    "sh601138",  # 工业富联 AI算力
+    "sz000063",  # 中兴通讯 通信
+    "sh600276",  # 恒瑞医药 创新药
+    "sh603259",  # 药明康德 CXO
+    "sh600111",  # 北方稀土 稀土
+    "sh603986",  # 兆易创新 芯片
+    "sh600487",  # 亨通光电 光纤
+    "sz002050",  # 三花智控 机器人
+    "sh600436",  # 片仔癀 中药
+]
+
+
+def _market_phase():
+    """当前 A 股时段描述。"""
+    from datetime import datetime
+    now = datetime.now()
+    if now.weekday() >= 5:
+        return "休市（周末）"
+    hm = now.hour * 60 + now.minute
+    if 570 <= hm <= 690:
+        return "盘中（上午）"
+    if 690 < hm < 780:
+        return "午间休市"
+    if 780 <= hm <= 870:
+        return "盘中"
+    if 870 < hm <= 900:
+        return "尾盘"
+    if hm > 900:
+        return "已收盘"
+    return "等待开盘"
+
+
+def _is_trading_now():
+    from datetime import datetime
+    now = datetime.now()
+    if now.weekday() >= 5:
+        return False
+    hm = now.hour * 60 + now.minute
+    return (570 <= hm <= 690) or (780 <= hm <= 900)
+
+
+def _tail_market_strategy():
+    """汇总尾盘策略：持仓该减仓哪几只 + 候选池低位埋伏哪 1 只。"""
+    import concurrent.futures as _cf
+    from datetime import datetime
+    phase = _market_phase()
+    trading = _is_trading_now()
+    positions = _load_positions() or []
+    held = {p.get("code") for p in positions}
+
+    # 1) 持仓分时（5m 更稳，避免 1m 抖动）
+    def _one_pos(p):
+        code = p.get("code")
+        name = p.get("name") or (ip.get_fund(code) or {}).get("name") or code
+        try:
+            it = _intraday_for(code, period="5m")
+        except Exception:
+            it = {}
+        return code, name, it
+    pos_rows, reduce, hold = [], [], []
+    if positions:
+        with _cf.ThreadPoolExecutor(max_workers=6) as ex:
+            for code, name, it in ex.map(_one_pos, positions):
+                m = it.get("metrics", {}) or {}
+                act = it.get("action", "持有观察")
+                row = {
+                    "code": code, "name": name,
+                    "now_pct": m.get("now_pct"),
+                    "scenario": it.get("scenario"),
+                    "action": act,
+                    "urgency": it.get("urgency"),
+                    "target_price": it.get("target_price"),
+                    "stop_loss": it.get("stop_loss"),
+                    "action_color": it.get("action_color"),
+                    "kdj_j": m.get("kdj_j"),
+                }
+                pos_rows.append(row)
+                if "止盈" in act or "卖出" in act:
+                    reduce.append(row)
+                else:
+                    hold.append(row)
+
+    # 2) 埋伏候选（候选池精选子集，排除持仓）
+    candidates = [c for c in TAIL_WATCH_CODES if c not in held]
+    def _one_cand(c):
+        f = ip.get_fund(c) or {}
+        try:
+            it = _intraday_for(c, period="5m")
+        except Exception:
+            it = {}
+        return c, f.get("name") or c, f.get("track") or "", it
+    buries = []
+    if candidates:
+        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+            for c, name, track, it in ex.map(_one_cand, candidates):
+                if not it or it.get("scenario") == "数据不足":
+                    continue
+                m = it.get("metrics", {}) or {}
+                act = it.get("action", "")
+                now_pct = m.get("now_pct")
+                kdj_j = m.get("kdj_j")
+                vol = m.get("vol_ratio")
+                if now_pct is None:
+                    continue
+                if now_pct > 3:                       # 已涨多不埋伏
+                    continue
+                if kdj_j is not None and kdj_j >= 90:  # 超买不埋伏
+                    continue
+                if "止盈" in act or "卖出" in act:
+                    continue
+                score = 0
+                if now_pct < 0:
+                    score += 3
+                if kdj_j is not None and kdj_j < 40:
+                    score += 3
+                if vol is not None and vol < 1.0:
+                    score += 1
+                if "低吸" in act or "加仓" in act:
+                    score += 4
+                if now_pct < 0 and vol is not None and vol < 0.8:
+                    score += 2
+                reason = ""
+                if now_pct < 0:
+                    reason = f"日内 {now_pct}% 回落至低位"
+                elif now_pct <= 1:
+                    reason = f"日内 +{now_pct}%，蓄势"
+                if kdj_j is not None:
+                    reason += f"；KDJ J={kdj_j}"
+                buries.append({
+                    "code": c, "name": name, "track": track,
+                    "now_pct": now_pct, "kdj_j": kdj_j, "vol_ratio": vol,
+                    "scenario": it.get("scenario"), "action": act,
+                    "target_price": it.get("target_price"),
+                    "stop_loss": it.get("stop_loss"),
+                    "action_color": it.get("action_color"),
+                    "reason": reason, "score": score,
+                })
+    buries.sort(key=lambda x: x["score"], reverse=True)
+    buries = buries[:3]
+
+    # 3) 综合结论
+    n_reduce = len(reduce)
+    if not trading:
+        conclusion = f"当前{phase}，行情未开。尾盘策略仅在交易时段（尤其 14:30–15:00）有效，开盘后再来看。"
+        empty = True
+    else:
+        if n_reduce >= 2:
+            concl = f"今日持仓 {n_reduce} 只触发止盈/卖出信号，尾盘以『减仓落袋』为主，不宜追高加仓；"
+        elif n_reduce == 1:
+            concl = f"持仓中 1 只（{reduce[0]['name']}）触发止盈，其余持有观察；"
+        else:
+            concl = "持仓暂未触发明显止盈信号，可继续持有观察；"
+        if buries:
+            top = buries[0]
+            concl += f"若要用尾盘仓位埋伏，优先看【{top['name']}】（{top['track']}，{top['reason']}），建议小仓（约 1/5）分批，止损参考 {top['stop_loss'] or '—'}。"
+        else:
+            concl += "扫描候选当前多在高位或信号不明显，尾盘建议空仓观望、不盲目买入。"
+        conclusion = concl
+        empty = False
+
+    return {
+        "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "phase": phase,
+        "trading": trading,
+        "positions": pos_rows,
+        "reduce_list": reduce,
+        "hold_list": hold,
+        "buries": buries,
+        "conclusion": conclusion,
+        "empty": empty,
+    }
+
+
 # ---------- 请求处理 ----------
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -771,6 +949,9 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/review":
             date = qs.get("date", [""])[0] or None
             self._send(200, _review_summary(date))
+            return
+        if route == "/api/tail_market_strategy":
+            self._send(200, _tail_market_strategy())
             return
         if route == "/api/intraday_advice":
             # 盘中实时建议：基于 1min/5min K 线 + 实时价，给"该不该买/卖"的瞬时判断
