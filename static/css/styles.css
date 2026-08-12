@@ -363,6 +363,23 @@ button.mini:hover { background: #dde7f0; }
 .tail-name { font-weight: 600; color: var(--text); }
 .tail-reason { color: var(--muted); font-size: 11px; flex-basis: 100%; }
 
+/* ---------- 每日策略面板 ---------- */
+.panel-daily { flex: 0 0 auto; }
+.daily-sub { margin-top: 8px; }
+.daily-sub-title { font-size: 12px; font-weight: 700; color: #1971c2; margin-bottom: 4px; }
+.daily-open { font-size: 12px; }
+.daily-snap-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+.ds-btn { border: 1px solid #a5d8ff; background: #fff; color: #1971c2; border-radius: 8px; font-size: 11px; padding: 2px 10px; cursor: pointer; }
+.ds-btn.active { background: #1c7ed6; color: #fff; border-color: #1c7ed6; }
+.ds-btn:hover { background: #e7f5ff; }
+.ds-btn.active:hover { background: #1971c2; }
+.daily-snap, .daily-review { font-size: 12px; }
+.ds-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 0; border-bottom: 1px dashed #d0ebff; }
+.ds-name { font-weight: 600; color: var(--ink); }
+.ds-act { font-weight: 700; }
+.ds-price { color: #2b8a3e; font-variant-numeric: tabular-nums; }
+.ds-reason { color: var(--muted); font-size: 11px; flex-basis: 100%; }
+
 
 /* ---------- 评分权重 ---------- */
 .weight-sliders { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }

@@ -22,5 +22,10 @@
   },
   "available_capital": 100000.0,
   "weight_multipliers": {},
-  "cloud_url": "https://wang-zhibiao-2026.onrender.com"
+  "cloud_url": "https://wang-zhibiao-2026.onrender.com",
+  "daily_strategy": {
+    "buy_pct": 0.15,
+    "sell_pct": 0.3333,
+    "snap_times": ["09:30", "10:30", "13:00", "14:00"]
+  }
 }

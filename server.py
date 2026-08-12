@@ -22,6 +22,8 @@ from core import fundamentals as fm
 from core import sector_flow as sf
 from core import news as nw
 from core import intraday as intraday_mod
+from core import daily_strategy as dsmod
+from core.daily_strategy import run_daily, open_judgment, generate_snapshot, generate_review
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -523,6 +525,15 @@ def _is_trading_now():
     return (570 <= hm <= 690) or (780 <= hm <= 900)
 
 
+def _is_closed():
+    """已收盘（周末或 15:00 后）：停止拉分时/盘中建议。"""
+    from datetime import datetime
+    now = datetime.now()
+    if now.weekday() >= 5:
+        return True
+    return now.hour >= 15
+
+
 def _tail_market_strategy():
     """汇总尾盘策略：持仓该减仓哪几只 + 候选池低位埋伏哪 1 只。"""
     import concurrent.futures as _cf
@@ -531,6 +542,16 @@ def _tail_market_strategy():
     trading = _is_trading_now()
     positions = _load_positions() or []
     held = {p.get("code") for p in positions}
+
+    # 15:00 后停止尾盘扫描（仅 14:30-15:00 有意义，避免收盘后还去扫 391 只全池）
+    if _is_closed():
+        return {
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "phase": "已收盘",
+            "trading": False,
+            "positions": [], "reduce_list": [], "hold_list": [],
+            "buries": [], "conclusion": "已收盘，尾盘策略已停止更新。", "empty": True,
+        }
 
     # 1) 持仓分时（5m 更稳，避免 1m 抖动）
     def _one_pos(p):
@@ -564,8 +585,40 @@ def _tail_market_strategy():
                 else:
                     hold.append(row)
 
-    # 2) 埋伏候选（候选池精选子集，排除持仓）
-    candidates = [c for c in TAIL_WATCH_CODES if c not in held]
+    # 2) 埋伏候选：扫描「十五五行业池」全量（约 391 只），两阶段筛选
+    #    stage1 日线预筛（并发拉日K，磁盘按天缓存）→ stage2 对预筛 top 做盘中明细打分
+    from core.daily_strategy import _tech_score_daily, _load_pool
+    _pool = _load_pool() or []
+    pool_codes = [p.get("code") for p in _pool if p.get("code") and p.get("code") not in held]
+    def _daily_score(c):
+        try:
+            bars = ds.get_kline(c, "daily", 40)
+        except Exception:
+            bars = []
+        q = {}
+        try:
+            q = ds.fetch_realtime([c]).get(c, {}) or {}
+        except Exception:
+            q = {}
+        try:
+            score, sig, ob, os_ = _tech_score_daily(bars, q)
+        except Exception:
+            return c, -99, False
+        return c, score, os_
+    pref = []
+    if pool_codes:
+        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+            for c, score, os_ in ex.map(_daily_score, pool_codes):
+                if score <= -99:
+                    continue
+                if score <= -2:        # 明显转弱不埋伏
+                    continue
+                if not (os_ or score >= 1):
+                    continue
+                pref.append((c, score))
+    pref.sort(key=lambda x: x[1], reverse=True)
+    cand_top = [c for c, _ in pref[:60]]
+    candidates = cand_top
     def _one_cand(c):
         f = ip.get_fund(c) or {}
         try:
@@ -574,9 +627,9 @@ def _tail_market_strategy():
             it = {}
         return c, f.get("name") or c, f.get("track") or "", it
     buries = []
-    if candidates:
+    if cand_top:
         with _cf.ThreadPoolExecutor(max_workers=8) as ex:
-            for c, name, track, it in ex.map(_one_cand, candidates):
+            for c, name, track, it in ex.map(_one_cand, cand_top):
                 if not it or it.get("scenario") == "数据不足":
                     continue
                 m = it.get("metrics", {}) or {}
@@ -957,7 +1010,38 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/tail_market_strategy":
             self._send(200, _tail_market_strategy())
             return
+        if route == "/api/daily_strategy":
+            # 自动维护当日记录（缺失的开盘判断/已过时点快照/收盘复盘各生成一次）后返回
+            try:
+                day = run_daily("auto")
+            except Exception as e:
+                day = {"error": str(e)}
+            self._send(200, day)
+            return
+        if route == "/api/daily_strategy/open":
+            try:
+                self._send(200, open_judgment())
+            except Exception as e:
+                self._send(200, {"error": str(e)})
+            return
+        if route == "/api/daily_strategy/snapshot":
+            t = qs.get("t", [""])[0].strip() or None
+            try:
+                self._send(200, generate_snapshot(t) if t else run_daily("snapshot"))
+            except Exception as e:
+                self._send(200, {"error": str(e)})
+            return
+        if route == "/api/daily_strategy/review":
+            try:
+                self._send(200, generate_review())
+            except Exception as e:
+                self._send(200, {"error": str(e)})
+            return
         if route == "/api/intraday_advice_batch":
+            # 15:00 后停止拉分时/盘中建议（用户要求：收盘即停更）
+            if _is_closed():
+                self._send(200, {"closed": True, "message": "已收盘，分时建议已停止更新"})
+                return
             # 批量盘中建议：一次请求并发算所有持仓（线程池），避免前端对每只发独立请求、叠加 1m 现拉导致一直"加载中"
             raw_codes = qs.get("codes", [""])[0].strip()
             period = qs.get("period", ["1m"])[0].strip().lower()
@@ -989,6 +1073,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"period": period, "results": results})
             return
         if route == "/api/intraday_advice":
+            # 15:00 后停止拉分时/盘中建议
+            if _is_closed():
+                self._send(200, {"closed": True, "message": "已收盘，分时建议已停止更新"})
+                return
             # 盘中实时建议：基于 1min/5min K 线 + 实时价，给"该不该买/卖"的瞬时判断
             code = qs.get("code", [""])[0].strip().lower()
             if not code:

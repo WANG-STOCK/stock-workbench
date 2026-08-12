@@ -107,6 +107,21 @@
         pollIntraday();
       });
     }
+    // 每日策略：开盘判断 / 四时点快照 / 收盘复盘（30 秒刷新，后端自动补齐缺失记录）
+    state.dailySnapTab = "09:30";
+    try { pollDailyStrategy(); } catch (e) {}
+    state.timers.push(setInterval(pollDailyStrategy, 30000));
+    // 四时点快照切换
+    const snapTabs = document.getElementById("dailySnapTabs");
+    if (snapTabs) {
+      snapTabs.addEventListener("click", e => {
+        const btn = e.target.closest(".ds-btn");
+        if (!btn) return;
+        state.dailySnapTab = btn.dataset.t || "09:30";
+        snapTabs.querySelectorAll(".ds-btn").forEach(b => b.classList.toggle("active", b === btn));
+        if (state.daily) renderDailySnap(state.daily);
+      });
+    }
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
@@ -968,6 +983,12 @@
       const url = "/api/intraday_advice_batch?period=" + intradayPeriod +
                   "&codes=" + encodeURIComponent(Array.from(codes).join(","));
       const data = await api("GET", url);
+      // 15:00 后停止更新：后端返回 closed，前端显示"已收盘"并停更
+      if (data && data.closed) {
+        const ul = document.getElementById("intradayList");
+        if (ul) ul.innerHTML = `<li class="sub" style="padding:10px 0;color:var(--muted)">🌙 ${data.message || "已收盘，分时建议已停止更新"}</li>`;
+        return;
+      }
       if (!data || !data.results) return;
       const seq = ++_intradaySeq;
       if (seq !== _intradaySeq) return;  // 被更新的轮询抢占
@@ -1099,6 +1120,92 @@
         renderSignal(sig, true);
       } catch (e) { /* 网络抖动忽略 */ }
     }, 8000));
+  }
+
+  // ---------- 每日策略（开盘判断 / 四时点快照 / 收盘复盘） ----------
+  async function pollDailyStrategy() {
+    try {
+      const data = await api("GET", "/api/daily_strategy");
+      if (!data) return;
+      state.daily = data;
+      renderDaily(data);
+    } catch (e) { /* ignore */ }
+  }
+  function _dsColor(action) {
+    if (action === "买入") return "#2b8a3e";
+    if (action === "卖出" || action === "减仓") return "#c92a2a";
+    return "#868e96";
+  }
+  function renderDaily(d) {
+    const phaseEl = document.getElementById("dailyPhase");
+    if (phaseEl) {
+      const now = new Date();
+      const hm = now.getHours() * 60 + now.getMinutes();
+      let ph = "盘前";
+      if (hm >= 900) ph = "已收盘";
+      else if (hm >= 570) ph = "交易中";
+      phaseEl.textContent = (d.review ? "已复盘 · " : "") + ph;
+    }
+    const openEl = document.getElementById("dailyOpen");
+    if (openEl) {
+      const op = d.open;
+      if (!op) {
+        openEl.innerHTML = '<span class="sub" style="color:var(--muted)">开盘前暂未生成，9:25 后自动判断当天涨跌并给买卖价量。</span>';
+      } else {
+        const tr = { up: "↑ 看涨", down: "↓ 看跌", sideways: "→ 震荡" }[op.trend] || op.trend;
+        const trColor = { up: "#2b8a3e", down: "#c92a2a", sideways: "#868e96" }[op.trend] || "#868e96";
+        const sugg = (op.suggestions || []).map(s => {
+          const ac = s.action || "持有";
+          const qty = s.qty ? ` ×${s.qty}股` : (ac === "买入" ? " 资金不足1手" : "");
+          return `<div class="ds-row"><span class="ds-name">${s.name}<span style="color:#999;font-size:10px"> ${s.code}</span></span>
+            <span class="ds-act" style="color:${_dsColor(ac)}">${ac}</span>
+            <span class="ds-price">${s.price != null ? ("@" + s.price) : ""}${qty}</span>
+            <span class="ds-reason">${s.reason || ""}</span></div>`;
+        }).join("");
+        openEl.innerHTML = `<div style="margin:4px 0 2px"><b style="color:${trColor};font-size:14px">${tr}</b> <span class="sub">置信度 ${op.confidence}%</span></div>
+          <div class="sub" style="font-size:11px;color:#666;margin-bottom:4px">${op.market_note || ""}</div>
+          ${sugg || '<span class="sub" style="color:var(--muted)">无明确建议</span>'}`;
+      }
+    }
+    renderDailySnap(d);
+    const revEl = document.getElementById("dailyReview");
+    if (revEl) {
+      const rv = d.review;
+      if (!rv) {
+        revEl.innerHTML = '<span class="sub" style="color:var(--muted)">收盘后（≥15:00）自动复盘：核对建议价是否触达、按建议做T盈亏与胜率。</span>';
+      } else {
+        const s = rv.summary || {};
+        const rows = (rv.rows || []).map(r => {
+          const ca = r.correct == null ? "—" : (r.correct ? "✅" : "❌");
+          const caColor = r.correct == null ? "#868e96" : (r.correct ? "#2b8a3e" : "#c92a2a");
+          const pnl = r.pnl != null ? `<b style="color:${r.pnl >= 0 ? '#2b8a3e' : '#c92a2a'}">${r.pnl >= 0 ? '+' : ''}${r.pnl}</b>` : "—";
+          const hit = r.hit == null ? "—" : (r.hit ? "触达" : "未触");
+          return `<div class="ds-row"><span class="ds-name">${r.name}<span style="color:#999;font-size:10px"> ${r.code}</span></span>
+            <span class="ds-act">${r.action || "—"}</span><span>@${r.price != null ? r.price : "—"}</span>
+            <span>${hit}</span><span style="color:${caColor}">${ca}</span><span>盈亏${pnl}</span></div>`;
+        }).join("");
+        revEl.innerHTML = `<div style="margin:4px 0 2px"><b>胜率 ${s.win_rate != null ? s.win_rate : "—"}%</b>（${s.win_count || 0}/${s.evaluated || 0}）　<b style="color:${s.total_pnl >= 0 ? '#2b8a3e' : '#c92a2a'}">模拟盈亏 ${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl != null ? s.total_pnl : '—'}</b></div>${rows}`;
+      }
+    }
+  }
+  function renderDailySnap(d) {
+    const el = document.getElementById("dailySnap");
+    if (!el) return;
+    const t = state.dailySnapTab || "09:30";
+    const snap = d.snapshots && d.snapshots[t];
+    if (!snap) {
+      el.innerHTML = `<span class="sub" style="color:var(--muted)">${t} 时点尚未记录（开盘后自动抓取，或等定时任务触发）。</span>`;
+      return;
+    }
+    const rows = (snap.rows || []).map(s => {
+      const ac = s.action || "持有";
+      const qty = s.qty ? ` ×${s.qty}` : (ac === "买入" ? " 资金不足" : "");
+      return `<div class="ds-row"><span class="ds-name">${s.name}</span>
+        <span class="ds-act" style="color:${_dsColor(ac)}">${ac}</span>
+        <span class="ds-price">${s.price != null ? ("@" + s.price) : ""}${qty}</span>
+        <span class="ds-reason">${s.reason || ""}</span></div>`;
+    }).join("");
+    el.innerHTML = `<div class="sub" style="font-size:10px;color:#999;margin-bottom:2px">记录于 ${snap.ts}</div>${rows || '<span class="sub" style="color:var(--muted)">该时点无建议</span>'}`;
   }
 
   // ---------- 每日复盘 ----------
