@@ -89,6 +89,9 @@
     startMonitor();
     startLiveView();
     state.timers.push(setInterval(loadPositionAdvice, 10000));
+    // 盘中实时建议：5 秒高频刷新（解决"拉升到6个点跌到4个点该不该卖"的分时判断）
+    pollIntraday();
+    state.timers.push(setInterval(pollIntraday, 5000));
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
@@ -809,6 +812,7 @@
           ${factTxt ? `<div class="pa-fact">📊 ${factTxt}</div>` : ""}
           ${rgTxt ? `<div class="pa-regime">${rgTxt}</div>` : ""}
           ${p.reason ? `<div class="pa-reason">${p.reason}</div>` : ""}
+          <div class="pa-intraday" data-code="${p.code}">⏳ 分时建议加载中…</div>
         </div>
       </li>`;
     }).join("");
@@ -895,7 +899,125 @@
       $("#posTotalValue").textContent = "¥" + (data.total_value != null
         ? data.total_value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }) : "--");
       renderPositions();
+      renderInlineIntraday();
+      renderIntradayList();
     } catch (e) { /* 网络抖动忽略 */ }
+  }
+  // 在每只持仓卡片下方内联一份分时建议（仅复用已缓存 state.intraday，不发请求）
+  function renderInlineIntraday() {
+    const adv = state.posAdvice || [];
+    adv.forEach(p => {
+      const slot = document.querySelector(`#posList .pa-intraday[data-code="${p.code}"]`);
+      if (!slot) return;
+      const it = state.intraday && state.intraday[p.code];
+      if (!it) { slot.innerHTML = `<span style="color:var(--muted)">⏳ 分时建议加载中…</span>`; return; }
+      const m = it.metrics || {};
+      const color = it.action_color || "#1971c2";
+      const urgent = it.urgency === "立即" ? "animation:it-blink 1s infinite;" : "";
+      const metTxt = [
+        m.now_pct != null ? `<b style="color:${m.now_pct >= 0 ? '#c92a2a' : '#2b8a3e'}">${m.now_pct >= 0 ? '+' : ''}${m.now_pct}%</b>` : "",
+        m.kdj_j != null ? `KDJ ${m.kdj_j} ${m.kdj_turn && m.kdj_turn !== '平稳' ? '·' + m.kdj_turn : ''}` : "",
+        m.macd_status ? `MACD ${m.macd_status}` : "",
+        m.vol_ratio != null ? `量比 ${m.vol_ratio}` : "",
+      ].filter(Boolean).join("　");
+      const tgt = it.target_price ? `${it.target_type || "操作"} ${it.target_price}` : "";
+      slot.innerHTML = `<span style="display:inline-block;padding:2px 8px;border-radius:6px;background:${color}1a;color:${color};font-weight:600;${urgent}">⚡${it.action}</span>
+        <span style="margin-left:6px;color:var(--muted)">${it.urgency}</span>
+        ${metTxt ? `<span style="margin-left:8px;font-size:12px">${metTxt}</span>` : ""}
+        ${tgt ? `<span style="margin-left:8px;color:#2b8a3e">${tgt}</span>` : ""}`;
+    });
+  }
+
+  // 盘中实时建议：每只持仓 + 当前查看股票，按 5min K 线的分时判断"该不该买/卖"
+  // 高频刷新（5 秒），解决日 K 综合评分"来不及"的问题
+  let _intradaySeq = 0;
+  async function pollIntraday() {
+    const seq = ++_intradaySeq;
+    try {
+      const codes = new Set();
+      (state.posAdvice || []).forEach(p => codes.add(p.code));
+      if (state.current && state.current.code) codes.add(state.current.code);
+      // 没有持仓也没有当前股时静默
+      if (!codes.size) return;
+      // 并行请求
+      const results = await Promise.allSettled(
+        Array.from(codes).map(c => api("GET", "/api/intraday_advice?code=" + c))
+      );
+      if (seq !== _intradaySeq) return;  // 被更新的轮询抢占
+      state.intraday = {};
+      results.forEach(r => {
+        if (r.status === "fulfilled" && r.value && r.value.code) {
+          state.intraday[r.value.code] = r.value;
+        }
+      });
+      renderIntradayList();
+      renderInlineIntraday();
+    } catch (e) { /* ignore */ }
+  }
+  function renderIntradayList() {
+    const ul = $("#intradayList");
+    if (!ul) return;
+    const codes = new Set();
+    (state.posAdvice || []).forEach(p => codes.add(p.code));
+    if (state.current && state.current.code) codes.add(state.current.code);
+    if (!codes.size) {
+      ul.innerHTML = '<li class="sub" style="padding:8px 0;color:var(--muted);font-size:12px">无持仓或未选股时，分时建议自动停止。</li>';
+      return;
+    }
+    const arr = Array.from(codes).map(code => {
+      const pa = (state.posAdvice || []).find(p => p.code === code);
+      const it = state.intraday && state.intraday[code];
+      const name = (pa && pa.name) || (state.current && state.current.code === code ? state.current.name : "") || code;
+      return { code, name, pa, it };
+    });
+    ul.innerHTML = arr.map(row => _intradayRowHtml(row)).join("");
+  }
+  function _intradayRowHtml(row) {
+    const it = row.it;
+    if (!it) {
+      return `<li class="intraday-row" data-code="${row.code}">
+        <span class="it-name">${row.name}</span><span class="sub it-wait">分析中…</span>
+      </li>`;
+    }
+    const isErr = it.error || it.scenario === "数据不足";
+    if (isErr && it.error) {
+      return `<li class="intraday-row" data-code="${row.code}">
+        <span class="it-name">${row.name}</span>
+        <span class="sub" style="color:var(--muted)">${it.scenario || it.error}</span>
+      </li>`;
+    }
+    const color = it.action_color || "#1971c2";
+    const urgencyCls = it.urgency === "立即" ? "it-urgent" : (it.urgency === "5分钟内" ? "it-soon" : "it-wait");
+    const targetHtml = it.target_price
+      ? `<span class="it-target">${it.target_type || "操作"} ${it.target_price}</span>`
+      : "";
+    const stopHtml = it.stop_loss
+      ? `<span class="it-stop">止损 ${it.stop_loss}</span>`
+      : "";
+    const metrics = it.metrics || {};
+    const metTxt = [
+      metrics.now_pct != null ? `<b style="color:${metrics.now_pct >= 0 ? '#c92a2a' : '#2b8a3e'}">${metrics.now_pct >= 0 ? '+' : ''}${metrics.now_pct}%</b>` : "",
+      metrics.kdj_j != null ? `KDJ J=${metrics.kdj_j} ${metrics.kdj_status || ''}${metrics.kdj_turn && metrics.kdj_turn !== '平稳' ? '·' + metrics.kdj_turn : ''}` : "",
+      metrics.macd_status ? `MACD ${metrics.macd_status}` : "",
+      metrics.vol_ratio != null ? `量比 ${metrics.vol_ratio}` : "",
+      metrics.rsi != null ? `RSI ${metrics.rsi}` : "",
+    ].filter(Boolean).join("　");
+    const reasons = (it.reasons || []).slice(0, 3).join("；");
+    return `<li class="intraday-row ${urgencyCls}" data-code="${row.code}"
+        style="border-left:4px solid ${color};">
+      <div class="it-head">
+        <span class="it-scenario">${it.scenario}</span>
+        <span class="it-name">${row.name}</span>
+        <span class="it-action" style="color:${color}">${it.action}</span>
+        <span class="it-urgency">${it.urgency}</span>
+      </div>
+      <div class="it-body">
+        ${metTxt ? `<span class="it-metrics">${metTxt}</span>` : ""}
+        ${targetHtml}
+        ${stopHtml}
+      </div>
+      ${reasons ? `<div class="it-reasons" style="color:#555;font-size:12px;margin-top:2px">${reasons}</div>` : ""}
+    </li>`;
   }
 
   // 正在看的股票每 8 秒自动重算评分+买卖建议（实时）

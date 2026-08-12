@@ -21,6 +21,7 @@ from core import industry_pool as ip
 from core import fundamentals as fm
 from core import sector_flow as sf
 from core import news as nw
+from core import intraday as intraday_mod
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -422,6 +423,8 @@ def _advise_position(code, capital):
         op_qty = 0
     if action in ("买入", "卖出") and op_qty <= 0:
         action, op_qty = "不动", 0
+    # 盘中实时建议（5min 分时级别，看一眼该买/卖/等的瞬时判断）
+    intraday = _intraday_for(code, price, prev_close)
     return {
         "code": code, "ok": True,
         "name": _fp.get("name") or code,
@@ -436,7 +439,35 @@ def _advise_position(code, capital):
         "reason": (outlook or {}).get("reason") or (a.get("reasons")[0]["text"] if a.get("reasons") else ""),
         "regime": regime,
         "indicators": a.get("indicators"),
+        "intraday": intraday,
     }
+
+
+# ---------- 盘中实时建议（高频刷新，按分时判断该不该买/卖） ----------
+def _intraday_for(code, price=None, prev_close=None):
+    """对单只股票计算盘中实时建议（场景+动作+价+止损+原因）。
+
+    优先用实时行情（腾讯实时接口）做"这一刻"的价；分时图（5min K 线）做动作判断。
+    """
+    try:
+        quote = ds.fetch_realtime([code]).get(code) or {}
+    except Exception:
+        quote = {}
+    if price is None:
+        price = quote.get("price")
+    if prev_close is None:
+        prev_close = quote.get("prev_close") or price
+    if not price or not prev_close:
+        return {"scenario": "数据不足", "reasons": ["实时价或昨收缺失"]}
+    try:
+        bars5m = _cache_get(code, "5m", 48) or ds.get_kline(code, "5m", 48, _tdx_path or None)
+        _cache_set(code, "5m", 48, bars5m)
+    except Exception:
+        bars5m = []
+    if not quote:
+        quote = {"code": code, "price": price, "prev_close": prev_close,
+                 "high": price, "low": price, "open": prev_close, "volume": 0}
+    return intraday_mod.intraday_advice(quote, bars5m or [], prev_close)
 
 
 # ---------- 请求处理 ----------
@@ -737,6 +768,16 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/review":
             date = qs.get("date", [""])[0] or None
             self._send(200, _review_summary(date))
+            return
+        if route == "/api/intraday_advice":
+            # 盘中实时建议：基于 5min K 线 + 实时价，给"该不该买/卖"的瞬时判断
+            code = qs.get("code", [""])[0].strip().lower()
+            if not code:
+                self._send(400, {"error": "code required"}); return
+            # 复用 _intraday_for：自动取实时价 + 5min K 线
+            res = _intraday_for(code)
+            res["code"] = code
+            self._send(200, res)
             return
         self._send(404, {"error": "unknown route"})
 
