@@ -257,7 +257,7 @@ def open_judgment(date=None):
             "code": code, "name": name, "role": "holding",
             "action": action, "price": price, "qty": qty,
             "reason": reason, "track": p.get("track", ""), "grade": p.get("grade", ""),
-            "forecast": forecast,
+            "forecast": forecast, "score": score,
         })
 
     for p in cand:
@@ -278,7 +278,7 @@ def open_judgment(date=None):
             "code": code, "name": name, "role": "candidate",
             "action": action, "price": price, "qty": qty,
             "reason": reason, "track": p.get("track", ""), "grade": p.get("grade", ""),
-            "forecast": forecast,
+            "forecast": forecast, "score": score,
         })
 
     total = bull + bear
@@ -290,11 +290,24 @@ def open_judgment(date=None):
         trend = "sideways"
     conf = round(100 * max(bull, bear) / (total + 1))
 
+    # 按"购买优先级"对 suggestions 排序（买入最优先 → 持有 → 卖出/减仓；同类按 forecast.pct / score 排）
+    #   action_rank: 买入=0(优先) > 持有=1 > 卖出/减仓=2
+    #   但"减仓"对持仓是告警，也要显眼，所以卖出=2、减仓=2
+    def _prio(s):
+        a = s.get("action", "")
+        if a == "买入":
+            return (0, -(s.get("forecast") or {}).get("pct", 0))   # 预期涨幅高在前
+        if a in ("卖出", "减仓"):
+            return (2, -abs((s.get("forecast") or {}).get("pct", 0)))  # 跌幅大在前（警告大）
+        # 持有
+        return (1, -abs(s.get("score", 0)))
+    sugg.sort(key=_prio)
+
     rec = {
         "generated_at": _now_str(),
         "trend": trend,
         "confidence": conf,
-        "market_note": f"偏多 {bull} 只 / 偏空 {bear} 只（持仓+评级A候选），综合集合竞价与均线信号。",
+        "market_note": f"偏多 {bull} 只 / 偏空 {bear} 只（持仓+评级A候选），综合集合竞价与均线信号。建议按下方优先级排序，<b style='color:#2b8a3e'>买入</b>排最前（预期空间最大），<b style='color:#c92a2a'>卖出/减仓</b>排最后（风险高需处理）。",
         "suggestions": sugg,
     }
     d = _load()

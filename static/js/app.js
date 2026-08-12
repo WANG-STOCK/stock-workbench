@@ -131,15 +131,107 @@
     }).join("");
   }
 
-  // AI 建议列表（每只持仓一行，七列：股票/评分/操作/今日预估/板块/技术面/做T方案）
+  // -------------------------------------------
+  // 做T方案生成函数（按 forecast.trend 三态）
+  //   偏多 → 等回踩买入，吃今日增长利润
+  //   震荡 → 高抛低吸（按支撑/压力位）
+  //   偏空 → 先卖再接回做T（保住利润 + 等待再吸）
+  // -------------------------------------------
+  function _tpPlan(p, fcTrendRaw) {
+    const price = +p.price || 0;
+    const tech = p.technical || {};
+    const support = +tech.support || 0;
+    const resist  = +tech.resist || 0;
+    const ma5 = +tech.ma5 || 0;
+    const ma20 = +tech.ma20 || 0;
+    const op = +p.op_price || 0;
+    const fcPct = +((p.forecast || {}).pct || 0);
+    const fcTrend = String(fcTrendRaw || "").replace("偏", "").trim();
+    const shares = +p.shares || 0;
+
+    // A. 偏多 → 等回踩买入，吃今日增长利润
+    if (fcTrend === '多') {
+      const pullback = ma5 && price > ma5 && Math.abs(price - ma5) > price * 0.002 ? ma5 :
+                       (support || (ma20 || price * 0.985));
+      const buyAt = +(op && op > 0 ? op : pullback).toFixed(2);
+      const tgtByPct = price * (1 + Math.max(1.0, Math.abs(fcPct)) * 0.6 / 100);
+      const targetAt = +(resist > 0 ? Math.min(resist * 0.995, tgtByPct) : tgtByPct).toFixed(2);
+      const stop = +(support > 0 ? support * 0.98 : price * 0.96).toFixed(2);
+      const addQty = +(p.op_qty || 100);
+      let when;
+      if (ma5 && Math.abs(price - ma5) / price < 0.003) when = '现价贴近 MA5，回踩不破就买';
+      else if (ma5 && price > ma5) when = '回踩 MA5 至 ' + fmt(ma5, 2) + ' 附近不破就买';
+      else if (ma20 && price > ma20) when = '回踩 MA20 至 ' + fmt(ma20, 2) + ' 企稳承接';
+      else if (support) when = '回踩支撑 ' + fmt(support, 2) + ' 企稳就买';
+      else when = '开盘前 30 分钟站稳现价之上即可买';
+      return {
+        kind: 'buy',
+        lines: [
+          { tag: '买', cls: 'buy', price: buyAt, qty: addQty, hint: when },
+          { tag: '目标', cls: 'tp', price: targetAt, qty: null, hint: '盈利止盈' },
+          { tag: '止损', cls: 'sl', price: stop, qty: null, hint: '跌破出局' }
+        ],
+        basis: '偏多行情，等回踩买，吃今日增长空间（预估 ' + (fcPct >= 0 ? '+' : '') + fcPct.toFixed(2) + '%）'
+      };
+    }
+
+    // B. 偏空 → 先卖 → 支撑接回做 T
+    if (fcTrend === '空') {
+      const sellAt = +(op && op > 0 ? op : price).toFixed(2);
+      const reBuyAt = +(support > 0 ? support : (ma20 || price * 0.95)).toFixed(2);
+      const reBuyQ = shares ? Math.max(100, Math.floor(shares * 0.7 / 100) * 100) : 100;
+      const stop = +(reBuyAt * 0.96).toFixed(2);
+      const sellQty = p.op_qty || (shares ? Math.max(100, Math.floor(shares / 3 / 100) * 100) : 100);
+      return {
+        kind: 'sell',
+        lines: [
+          { tag: '先卖', cls: 'sell', price: sellAt, qty: sellQty, hint: '现价上方优先减 1/3' },
+          { tag: '接回', cls: 'buy', price: reBuyAt, qty: reBuyQ, hint: '回调支撑 ' + fmt(reBuyAt, 2) + ' 吸回做 T' },
+          { tag: '再止损', cls: 'sl', price: stop, qty: null, hint: '接回后再跌 4% 必止损' }
+        ],
+        basis: '偏空行情，先卖保利润，支撑位接回做 T（盈利空间 ' + Math.abs(fcPct).toFixed(2) + '%）'
+      };
+    }
+
+    // C. 震荡 → 高抛 / 低吸
+    const upper = +(resist > 0 ? resist : price * 1.025).toFixed(2);
+    const lower = +(support > 0 ? support : price * 0.975).toFixed(2);
+    return {
+      kind: 'hold',
+      lines: [
+        { tag: '高抛', cls: 'sell', price: upper, qty: 100, hint: '靠近上沿 ' + fmt(upper, 2) + ' 减 1/3' },
+        { tag: '低吸', cls: 'buy', price: lower, qty: 100, hint: '下沿 ' + fmt(lower, 2) + ' 买回做 T' }
+      ],
+      basis: '震荡区间 ' + fmt(lower, 2) + '~' + fmt(upper, 2) + '，T 赚波动利润'
+    };
+  }
+
+  function _tpHtml(plan) {
+    if (!plan || !plan.lines || !plan.lines.length) {
+      return '<div class="tp-line"><span class="tp-tag hold">持有</span><span class="tp-when">等价格到位</span></div>';
+    }
+    const head = plan.lines.map(l => {
+      const cls = l.cls === 'buy' ? 'buy' : l.cls === 'sell' ? 'sell' : l.cls === 'tp' ? 'tp' : 'sl';
+      const priceTag = l.price != null ? '<span class="tp-price ' + cls + '">' + fmt(l.price, 2) + '</span>' : '';
+      const qty = l.qty ? '<span class="tp-qty">×' + l.qty + '</span>' : '';
+      return '<div class="tp-line"><span class="tp-tag ' + cls + '">' + l.tag + '</span>' + priceTag + qty + '<span class="tp-when">' + (l.hint || '') + '</span></div>';
+    }).join('');
+    return head + (plan.basis ? '<div class="tp-basis">' + plan.basis + '</div>' : '');
+  }
+
+  // -------------------------------------------
+  // AI 建议列表（每只持仓一行，七列）
+  // -------------------------------------------
   function renderAiAdvice(positions) {
     const el = document.getElementById("aiAdviceBody");
     if (!el) return;
     if (!positions || !positions.length) {
-      el.innerHTML = `<div class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</div>`;
+      el.innerHTML = '<div class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</div>';
       return;
     }
-    el.innerHTML = positions.map(p => _aiRowHtml(p)).join("");
+    // 按评分绝对值降序：最强信号（最值得操作）在最上面
+    const sorted = positions.slice().sort((a, b) => Math.abs(+(b.advice_score || 0)) - Math.abs(+(a.advice_score || 0)));
+    el.innerHTML = sorted.map(function (p) { return _aiRowHtml(p); }).join("");
   }
 
   function _aiRowHtml(p) {
@@ -149,25 +241,26 @@
     const rowCls = action === "买入" ? "ai-row-buy" : action === "卖出" ? "ai-row-sell" : "ai-row-hold";
 
     // 列 1：股票 + 现价
-    const priceHtml = p.price != null ? `<div class="ai-c-price">现价 <b>${fmt(p.price, 2)}</b>${p.change_pct != null ? ` <span class="${p.change_pct >= 0 ? 'up' : 'down'}">${signed(p.change_pct, 2)}%</span>` : ''}</div>` : '';
+    const priceHtml = p.price != null ? ('<div class="ai-c-price">现价 <b>' + fmt(p.price, 2) + '</b>' + (p.change_pct != null ? ' <span class="' + (p.change_pct >= 0 ? 'up' : 'down') + '">' + signed(p.change_pct, 2) + '%</span>' : '') + '</div>') : '';
 
     // 列 4：今日预估（forecast）
     const fc = p.forecast || {};
     const fcTrend = fc.trend || (p.outlook ? p.outlook.trend : "震荡");
     const fcCls = fcTrend === "偏多" ? "up" : fcTrend === "偏空" ? "down" : "flat";
-    const fcPct = fc.pct != null ? `<span class="fc-pct ${fcCls}">${fc.pct >= 0 ? '+' : ''}${fc.pct.toFixed(2)}%</span>` : '';
+    const fcPct = fc.pct != null ? '<span class="fc-pct ' + fcCls + '">' + (fc.pct >= 0 ? '+' : '') + fc.pct.toFixed(2) + '%</span>' : '';
     const basisHtml = (fc.basis || (p.outlook ? [p.outlook.reason] : [])).filter(Boolean).slice(0, 3)
-      .map(b => `<li>${b}</li>`).join("");
+      .map(b => '<li>' + b + '</li>').join("");
 
-    // 列 5：板块
+    // 列 5：板块（板块名 + 涨跌% + 主力资金流入/流出 + 上涨占比，对齐清晰、显眼）
     const sec = p.sector_detail || p.industry_today || {};
     const secName = sec.name || sec.track || sec.sector || '—';
     const secTrend = sec.trend_pct != null ? sec.trend_pct : null;
     const secFund = sec.fund_net != null ? sec.fund_net : null;
-    const secPctCls = secTrend == null ? '' : (secTrend >= 0 ? 'up' : 'down');
-    const secPctTxt = secTrend == null ? '—' : `${secTrend >= 0 ? '+' : ''}${secTrend.toFixed(2)}%`;
-    const secFundTxt = secFund == null ? '' : `<span class="sec-fund">${secFund >= 0 ? '资金流入 +' : '资金流出 '}${Math.abs(secFund).toFixed(1)}亿</span>`;
-    const upRatioTxt = sec.up_ratio != null ? `<span class="sec-fund">· 上涨占比 ${(sec.up_ratio * 100).toFixed(0)}%</span>` : '';
+    const secPctCls = secTrend == null ? '' : (secTrend >= 0 ? 'sec-up' : 'sec-dn');
+    const secPctTxt = secTrend == null ? '—' : (secTrend >= 0 ? '+' : '') + secTrend.toFixed(2) + '%';
+    const secFundCls = secFund == null ? '' : (secFund >= 0 ? 'sec-fund-in' : 'sec-fund-out');
+    const secFundTxt = secFund == null ? '' : ('<span class="sec-fund-val ' + secFundCls + '">' + (secFund >= 0 ? '主力流入 +' : '主力流出 ') + Math.abs(secFund).toFixed(1) + '亿</span>');
+    const upRatioTxt = sec.up_ratio != null ? '<span class="sec-fund-mini">上涨占比 <b>' + (sec.up_ratio * 100).toFixed(0) + '%</b></span>' : '';
 
     // 列 6：技术面（MA + MACD/KDJ/BOLL + 关键支撑压力位）
     const tech = p.technical || {};
@@ -176,7 +269,7 @@
     if (ma5 && ma10 && ma20) {
       const trendCls = (p.price != null && p.price > ma5 && ma5 > ma10 && ma10 > ma20) ? 'gold' :
                        (p.price != null && p.price < ma5 && ma5 < ma10 && ma10 < ma20) ? 'dead' : 'mid';
-      maHtml = `<div class="tech-ma"><span class="tech-state ${trendCls}">MA${trendCls === 'gold' ? '多头' : trendCls === 'dead' ? '空头' : '纠缠'}</span></div>`;
+      maHtml = '<div class="tech-ma"><span class="tech-state ' + trendCls + '">MA' + (trendCls === 'gold' ? '多头' : trendCls === 'dead' ? '空头' : '纠缠') + '</span></div>';
     }
     const macdState = tech.macd_state || '—';
     const kdjState = tech.kdj_state || '—';
@@ -186,30 +279,21 @@
     const kdjCls = kdjState.includes('超买') ? 'ob' : kdjState.includes('超卖') ? 'os' : 'mid';
     const bollCls = bollPos === '上轨' ? 'boll-up' : bollPos === '下轨' ? 'boll-down' : 'boll-mid';
     const srHtml = (tech.support || tech.resist) ?
-      `<div class="tech-levels">支撑 <b style="color:#2b8a3e">${tech.support != null ? fmt(tech.support, 2) : '—'}</b> · 压力 <b style="color:#c92a2a">${tech.resist != null ? fmt(tech.resist, 2) : '—'}</b></div>` : '';
+      ('<div class="tech-levels">支撑 <b style="color:#1971c2">' + (tech.support != null ? fmt(tech.support, 2) : '—') + '</b> · 压力 <b style="color:#e8590c">' + (tech.resist != null ? fmt(tech.resist, 2) : '—') + '</b></div>') : '';
 
-    // 列 7：做T方案
-    const opPrice = p.op_price, opQty = p.op_qty;
-    let tpHtml = '';
-    if (action === "买入" && opPrice) {
-      tpHtml = `<div class="tp-line"><span class="tp-tag buy">买</span><span class="tp-price buy">${fmt(opPrice, 2)}</span><span class="tp-qty">×${opQty || 0}股</span></div>`;
-    } else if (action === "卖出" && opPrice) {
-      tpHtml = `<div class="tp-line"><span class="tp-tag sell">卖</span><span class="tp-price sell">${fmt(opPrice, 2)}</span><span class="tp-qty">×${opQty || 0}股</span></div>`;
-    } else {
-      tpHtml = `<div class="tp-line"><span class="tp-tag hold">持有</span><span class="tp-qty">等价格到位</span></div>`;
-    }
-    // 时机：参考 op_basis（如「多头移动止盈」「回踩 MA20 买」）
-    const tpBasis = p.op_basis ? `<div class="tp-basis">时机：${p.op_basis}</div>` : (p.reason ? `<div class="tp-basis">时机：${p.reason}</div>` : '');
+    // 列 7：做T方案（按 forecast.trend 严格分三态）
+    const plan = _tpPlan(p, fcTrend);
+    const tpHtml = _tpHtml(plan);
 
-    return `<div class="ai-row ${rowCls}">
-      <div class="ai-c-name"><b>${p.name || p.code}</b><span class="code-mini">${p.code}</span>${priceHtml}</div>
-      <div class="ai-c-score">${score > 0 ? "+" : ""}${score}</div>
-      <div class="ai-c-action">${label}</div>
-      <div class="ai-c-fc"><span class="fc-trend ${fcCls}">${fcTrend}${fcPct}</span><ul class="fc-basis">${basisHtml}</ul></div>
-      <div class="ai-c-sec"><span class="sec-name">${secName}</span><div><span class="sec-pct ${secPctCls}">${secPctTxt}</span> ${secFundTxt}${upRatioTxt}</div></div>
-      <div class="ai-c-tech">${maHtml}<div><span class="tech-state ${macdCls}">MACD ${macdState}</span><span class="tech-state ${kdjCls}">${kdjState}</span><span class="tech-state ${bollCls}">BOLL ${bollPos}</span></div>${srHtml}</div>
-      <div class="ai-c-tp">${tpHtml}${tpBasis}</div>
-    </div>`;
+    return '<div class="ai-row ' + rowCls + '">' +
+      '<div class="ai-c-name"><b>' + (p.name || p.code) + '</b><span class="code-mini">' + p.code + '</span>' + priceHtml + '</div>' +
+      '<div class="ai-c-score">' + (score > 0 ? '+' : '') + score + '</div>' +
+      '<div class="ai-c-action">' + label + '</div>' +
+      '<div class="ai-c-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul></div>' +
+      '<div class="ai-c-sec"><span class="sec-name">' + secName + '</span><div class="sec-row1"><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span> ' + secFundTxt + '</div>' + upRatioTxt + '</div>' +
+      '<div class="ai-c-tech">' + maHtml + '<div><span class="tech-state ' + macdCls + '">MACD ' + macdState + '</span><span class="tech-state ' + kdjCls + '">' + kdjState + '</span><span class="tech-state ' + bollCls + '">BOLL ' + bollPos + '</span></div>' + srHtml + '</div>' +
+      '<div class="ai-c-tp">' + tpHtml + '</div>' +
+    '</div>';
   }
 
   // 给自选股注入今日赛道（板块资金流走的是同个数据源，后端 positions_advice 已含，自选侧复用同 cache）
@@ -833,7 +917,7 @@
       el.innerHTML = `<div class="signal-empty">${data.count ? "无符合「" + (data.strategy_label || strategy) + "」的标的" : "该范围暂无股票（自选为空 / 未配置通达信 / universe.txt 为空）"}</div>`;
       return;
     }
-    el.innerHTML = `<div class="scan-hint">策略：${data.strategy_label} · 命中 ${data.results.length} 只（按评分降序）</div>` + renderScanRows(_filterByRange(data.results));
+    el.innerHTML = '<div class="scan-hint">策略：' + (data.strategy_label||"") + ' · <b style="color:#2b8a3e">命中 ' + data.results.length + ' 只</b>（按购买优先级排序：买入在前，卖出在后）</div>' + renderScanRows(_filterByRange(data.results));
     bindScanRows(el);
   }
 
@@ -846,13 +930,23 @@
     const summary = document.getElementById("sfSummary");
     const on = [(r1 && r1.checked), (r2 && r2.checked), (r3 && r3.checked)];
     const keep = (pct) => {
-      if (pct == null) return on[1] || on[2];  // 缺数据默认放行到 中/高
+      if (pct == null) return on[1] || on[2];
       if (pct <= 3) return on[0];
       if (pct <= 8) return on[1];
       return on[2];
     };
     const out = results.filter(r => keep(r.change_pct != null ? r.change_pct : null));
-    if (summary) summary.textContent = `命中 ${out.length}/${results.length} 只`;
+    // 按"购买优先级"重新排序：买入 > 持有 > 卖出；同档按综合分降序
+    const actionRank = { '强烈买入':0, '买入':0, '加仓':0, '持有':1, '持有观察':1, '减仓':2, '卖出':2 };
+    out.sort((a, b) => {
+      const ra = actionRank[a.action] != null ? actionRank[a.action] : 1;
+      const rb = actionRank[b.action] != null ? actionRank[b.action] : 1;
+      if (ra !== rb) return ra - rb;
+      const sa = a.combined != null ? a.combined : (a.score != null ? a.score : 0);
+      const sb = b.combined != null ? b.combined : (b.score != null ? b.score : 0);
+      return sb - sa;
+    });
+    if (summary) summary.textContent = '命中 ' + out.length + '/' + results.length + ' 只（按购买优先级排序：买入在前，卖出在后）';
     return out;
   }
 
@@ -868,8 +962,8 @@
       const rows = isCand ? renderCandidateRows(filtered) : renderScanRows(filtered);
       const hint = st.results.length
         ? (isCand
-            ? `<div class="scan-hint">十五五成长池（纯主板 ${st.total} 只）· 命中 ${st.results.length} 只（综合分=技术50%+基本面40%+赛道趋势10%，按综合分降序）</div>`
-            : `<div class="scan-hint">策略：${strategy} · 已命中 ${st.results.length} 只（实时更新，按评分降序）</div>`)
+            ? '<div class="scan-hint">十五五成长池（纯主板 ' + st.total + ' 只）· 命中 <b style="color:#2b8a3e">' + st.results.length + '</b> 只（按购买优先级排序：买入在前，卖出在后）</div>'
+            : '<div class="scan-hint">策略：' + strategy + ' · 已命中 <b style="color:#2b8a3e">' + st.results.length + '</b> 只（实时更新）</div>')
         : "";
       el.innerHTML = `<div class="scan-progress"><div class="bar"><i id="scanBar" style="width:${pct}%"></i></div>
         <div class="sub">已扫描 ${st.done}/${st.total} 只，命中 ${st.results.length} 只…</div></div>${hint}${rows}`;
@@ -1261,17 +1355,30 @@
       } else {
         const tr = { up: "↑ 看涨", down: "↓ 看跌", sideways: "→ 震荡" }[op.trend] || op.trend;
         const trColor = { up: "#2b8a3e", down: "#c92a2a", sideways: "#868e96" }[op.trend] || "#868e96";
-        const sugg = (op.suggestions || []).map(s => {
+        // 每日开盘建议表：按优先级展示（动作 + 评分 + 价格 + 数量）
+        // 不再展示个股下面的一段分析，按"购买优先级"排序，最值得买的在最上
+        const rows = (op.suggestions || []).map(s => {
           const ac = s.action || "持有";
-          const qty = s.qty ? ` ×${s.qty}股` : (ac === "买入" ? " 资金不足1手" : "");
-          return `<div class="ds-row"><span class="ds-name">${s.name}<span style="color:#999;font-size:10px"> ${s.code}</span></span>
-            <span class="ds-act" style="color:${_dsColor(ac)}">${ac}</span>
-            <span class="ds-price">${s.price != null ? ("@" + s.price) : ""}${qty}</span>
-            <span class="ds-reason">${s.reason || ""}</span></div>`;
-        }).join("");
-        openEl.innerHTML = `<div style="margin:4px 0 2px"><b style="color:${trColor};font-size:14px">${tr}</b> <span class="sub">置信度 ${op.confidence}%</span></div>
-          <div class="sub" style="font-size:11px;color:#666;margin-bottom:4px">${op.market_note || ""}</div>
-          ${sugg || '<span class="sub" style="color:var(--muted)">无明确建议</span>'}`;
+          const score = s.score != null ? s.score : ((s.forecast || {}).pct != null ? Math.round((s.forecast.pct || 0) * 25) : 0);
+          const scoreColor = score > 0 ? '#2b8a3e' : score < 0 ? '#c92a2a' : '#868e96';
+          const fc = s.forecast || {};
+          const fcTxt = fc.trend ? `<span style="margin-left:4px;color:${fc.trend==='偏多'?'#2b8a3e':fc.trend==='偏空'?'#c92a2a':'#868e96'}">${fc.trend}${fc.pct!=null?(fc.pct>=0?'+':'')+fc.pct.toFixed(2)+'%':''}</span>` : '';
+          const qty = s.qty ? '×' + s.qty + '股' : (ac === '买入' ? '资金不足1手' : '');
+          const actionLabel = ac === '买入' ? '强烈购买' : ac === '减仓' ? '减仓' : ac === '卖出' ? '止盈/止损' : ac === '持有' ? '持有' : ac;
+          return '<tr><td><b>' + (s.name || s.code) + '</b><span style="color:#999;font-size:10px"> ' + s.code + '</span></td>' +
+            '<td style="text-align:center;color:' + _dsColor(ac) + ';font-weight:700">' + actionLabel + '</td>' +
+            '<td style="text-align:center;font-weight:800;color:' + scoreColor + '">' + (score>0?'+':'') + score + fcTxt + '</td>' +
+            '<td style="text-align:right;font-weight:700">¥' + (s.price != null ? s.price : '--') + '</td>' +
+            '<td style="text-align:right;color:#495057">' + qty + '</td></tr>';
+        }).join('');
+        const suggTable = rows
+          ? '<table class="ds-table">' +
+              '<thead><tr><th>股票</th><th style="text-align:center">建议</th><th style="text-align:center">评分/预估</th><th style="text-align:right">价格</th><th style="text-align:right">数量</th></tr></thead>' +
+              '<tbody>' + rows + '</tbody></table>'
+          : '<span class="sub" style="color:var(--muted)">无明确建议</span>';
+        openEl.innerHTML = '<div style="margin:4px 0 6px"><b style="color:' + trColor + ';font-size:14px">' + tr + '</b> <span class="sub">置信度 ' + op.confidence + '%</span></div>' +
+          '<div class="sub" style="font-size:11px;color:#666;margin-bottom:6px">' + (op.market_note || '') + '</div>' +
+          suggTable;
       }
     }
     renderDailySnap(d);
@@ -1279,7 +1386,20 @@
     if (revEl) {
       const rv = d.review;
       if (!rv) {
-        revEl.innerHTML = '<span class="sub" style="color:var(--muted)">收盘后（≥15:00）自动复盘：核对建议价是否触达、按建议做T盈亏与胜率。</span>';
+        // 自动区分：今日尚未复盘（含未到 15:00 或今日无快照） vs 跨日累计
+        const today = new Date().toISOString().slice(0, 10);
+        const isToday = (d.date === today);
+        if (isToday) {
+          revEl.innerHTML = '<div class="rev-collecting">' +
+            '<b>🟡 今日复盘还在累积</b><br>' +
+            '· 9:30 / 10:00 / 10:30 / 13:00 / 14:00 五个时点会陆续记录建议价<br>' +
+            '· 15:00 后会自动核对：每只股票的<b>建议价 vs 实际最高/最低/收盘</b><br>' +
+            '· 今晚 17 点后这里就会有今天第一份完整的<b>胜率 / 做T盈亏 / 下次如何改进</b><br>' +
+            '<span style="color:var(--muted);font-size:11px">（每日复盘需要至少一整天的数据积累，今天是启用第 1 天，明天起能看到准确率）</span>' +
+          '</div>';
+        } else {
+          revEl.innerHTML = '<span class="sub" style="color:var(--muted)">' + (d.date || '今日') + ' 尚未到 15:00 / 暂无快照，等收盘后自动复盘。</span>';
+        }
       } else {
         const s = rv.summary || {};
         const rows = (rv.rows || []).map(r => {
