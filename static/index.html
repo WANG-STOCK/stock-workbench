@@ -159,15 +159,24 @@
       </section>
     </div>
 
-    <!-- 中列：AI 建议（每只持仓一张，按股票从上往下排序） -->
+    <!-- 中列：AI 建议（每只持仓一行，从上往下按股票排序） -->
     <main class="center">
       <section class="panel panel-aiadvice">
         <div class="panel-title">
           <span class="dot dot-blue"></span>
-          <span>🤖 AI 建议 · 每只持仓加减仓评分</span>
+          <span>🤖 AI 建议 · 每只持仓一行（今日预估 + 板块 + 技术面 + 做T方案）</span>
           <span class="sub">满 +100 必加仓 · -100 必减仓 · 每 10 秒刷新</span>
         </div>
-        <div id="aiAdviceBody" class="ai-cards">
+        <div class="ai-list-header">
+          <span class="alh-name">股票</span>
+          <span class="alh-score">评分</span>
+          <span class="alh-act">操作</span>
+          <span class="alh-fc">今日预估</span>
+          <span class="alh-sec">板块</span>
+          <span class="alh-tech">技术面</span>
+          <span class="alh-tp">做T方案</span>
+        </div>
+        <div id="aiAdviceBody" class="ai-list">
           <div class="ai-empty">加载 AI 建议中…</div>
         </div>
       </section>

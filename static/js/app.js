@@ -131,7 +131,7 @@
     }).join("");
   }
 
-  // AI 建议卡片（每个持仓一张，按 action 决定底色）
+  // AI 建议列表（每只持仓一行，七列：股票/评分/操作/今日预估/板块/技术面/做T方案）
   function renderAiAdvice(positions) {
     const el = document.getElementById("aiAdviceBody");
     if (!el) return;
@@ -139,36 +139,77 @@
       el.innerHTML = `<div class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</div>`;
       return;
     }
-    el.innerHTML = positions.map(p => {
-      const action = p.action || "不动";
-      const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
-      const score = p.advice_score != null ? p.advice_score : 0;
-      const cls = action === "买入" ? "ai-card-buy" : action === "卖出" ? "ai-card-sell" : "ai-card-hold";
-      // 评分条形（-100..+100 → 0..100% 偏移）
-      const offset = 50 + score / 2;     // -100 → 0, 0 → 50, 100 → 100
-      const fillLeft = Math.max(0, Math.min(100, offset));
-      const it = p.industry_today || {};
-      const opHtml = p.op_price != null ? `<span class="ai-op">建议${label} @ ${fmt(p.op_price, 2)} × ${p.op_qty || 0}股</span>` : "";
-      const reason = p.reason || p.op_basis || "技术面/板块资金综合研判";
-      const track = it.track ? `<span class="muted-mini">${it.track}</span> · ` : "";
-      return `<div class="ai-card ${cls}">
-        <div class="ai-row1">
-          <div class="ai-name"><b>${p.name || p.code}</b><span class="code-mini"> ${p.code}</span></div>
-          <div class="ai-action">${label}</div>
-          <div class="ai-score">${score > 0 ? "+" : ""}${score}</div>
-        </div>
-        <div class="ai-bar"><div class="ai-bar-fill" style="left:${fillLeft}%"></div><div class="ai-bar-center"></div></div>
-        <div class="ai-row2">
-          <div class="ai-reason">${reason}</div>
-        </div>
-        <div class="ai-row3">
-          ${track}
-          <span class="${it.trend_pct > 0 ? "up" : it.trend_pct < 0 ? "down" : ""}">${it.trend_pct != null ? "今日赛道 " + (it.trend_pct >= 0 ? "+" : "") + it.trend_pct.toFixed(2) + "%" : "今日赛道 --"}</span>
-          ${it.fund_net != null ? ' · <span class="' + (it.fund_net > 0 ? "up" : "down") + '">' + (it.fund_net >= 0 ? "资金净流入 +" : "资金净流出 ") + Math.abs(it.fund_net).toFixed(2) + ' 亿</span>' : ""}
-          ${opHtml}
-        </div>
-      </div>`;
-    }).join("");
+    el.innerHTML = positions.map(p => _aiRowHtml(p)).join("");
+  }
+
+  function _aiRowHtml(p) {
+    const action = p.action || "不动";
+    const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
+    const score = p.advice_score != null ? p.advice_score : 0;
+    const rowCls = action === "买入" ? "ai-row-buy" : action === "卖出" ? "ai-row-sell" : "ai-row-hold";
+
+    // 列 1：股票 + 现价
+    const priceHtml = p.price != null ? `<div class="ai-c-price">现价 <b>${fmt(p.price, 2)}</b>${p.change_pct != null ? ` <span class="${p.change_pct >= 0 ? 'up' : 'down'}">${signed(p.change_pct, 2)}%</span>` : ''}</div>` : '';
+
+    // 列 4：今日预估（forecast）
+    const fc = p.forecast || {};
+    const fcTrend = fc.trend || (p.outlook ? p.outlook.trend : "震荡");
+    const fcCls = fcTrend === "偏多" ? "up" : fcTrend === "偏空" ? "down" : "flat";
+    const fcPct = fc.pct != null ? `<span class="fc-pct ${fcCls}">${fc.pct >= 0 ? '+' : ''}${fc.pct.toFixed(2)}%</span>` : '';
+    const basisHtml = (fc.basis || (p.outlook ? [p.outlook.reason] : [])).filter(Boolean).slice(0, 3)
+      .map(b => `<li>${b}</li>`).join("");
+
+    // 列 5：板块
+    const sec = p.sector_detail || p.industry_today || {};
+    const secName = sec.name || sec.track || sec.sector || '—';
+    const secTrend = sec.trend_pct != null ? sec.trend_pct : null;
+    const secFund = sec.fund_net != null ? sec.fund_net : null;
+    const secPctCls = secTrend == null ? '' : (secTrend >= 0 ? 'up' : 'down');
+    const secPctTxt = secTrend == null ? '—' : `${secTrend >= 0 ? '+' : ''}${secTrend.toFixed(2)}%`;
+    const secFundTxt = secFund == null ? '' : `<span class="sec-fund">${secFund >= 0 ? '资金流入 +' : '资金流出 '}${Math.abs(secFund).toFixed(1)}亿</span>`;
+    const upRatioTxt = sec.up_ratio != null ? `<span class="sec-fund">· 上涨占比 ${(sec.up_ratio * 100).toFixed(0)}%</span>` : '';
+
+    // 列 6：技术面（MA + MACD/KDJ/BOLL + 关键支撑压力位）
+    const tech = p.technical || {};
+    const ma5 = tech.ma5, ma10 = tech.ma10, ma20 = tech.ma20;
+    let maHtml = '';
+    if (ma5 && ma10 && ma20) {
+      const trendCls = (p.price != null && p.price > ma5 && ma5 > ma10 && ma10 > ma20) ? 'gold' :
+                       (p.price != null && p.price < ma5 && ma5 < ma10 && ma10 < ma20) ? 'dead' : 'mid';
+      maHtml = `<div class="tech-ma"><span class="tech-state ${trendCls}">MA${trendCls === 'gold' ? '多头' : trendCls === 'dead' ? '空头' : '纠缠'}</span></div>`;
+    }
+    const macdState = tech.macd_state || '—';
+    const kdjState = tech.kdj_state || '—';
+    const bollPos = tech.boll_pos || '中轨';
+    const macdCls = macdState.includes('金叉') ? 'gold' : macdState.includes('死叉') ? 'dead' :
+                    macdState.includes('0轴上') ? 'zero-up' : macdState.includes('0轴下') ? 'zero-down' : 'mid';
+    const kdjCls = kdjState.includes('超买') ? 'ob' : kdjState.includes('超卖') ? 'os' : 'mid';
+    const bollCls = bollPos === '上轨' ? 'boll-up' : bollPos === '下轨' ? 'boll-down' : 'boll-mid';
+    const srHtml = (tech.support || tech.resist) ?
+      `<div class="tech-levels">支撑 <b style="color:#2b8a3e">${tech.support != null ? fmt(tech.support, 2) : '—'}</b> · 压力 <b style="color:#c92a2a">${tech.resist != null ? fmt(tech.resist, 2) : '—'}</b></div>` : '';
+
+    // 列 7：做T方案
+    const opPrice = p.op_price, opQty = p.op_qty;
+    let tpHtml = '';
+    if (action === "买入" && opPrice) {
+      tpHtml = `<div class="tp-line"><span class="tp-tag buy">买</span><span class="tp-price buy">${fmt(opPrice, 2)}</span><span class="tp-qty">×${opQty || 0}股</span></div>`;
+    } else if (action === "卖出" && opPrice) {
+      tpHtml = `<div class="tp-line"><span class="tp-tag sell">卖</span><span class="tp-price sell">${fmt(opPrice, 2)}</span><span class="tp-qty">×${opQty || 0}股</span></div>`;
+    } else {
+      tpHtml = `<div class="tp-line"><span class="tp-tag hold">持有</span><span class="tp-qty">等价格到位</span></div>`;
+    }
+    // 时机：参考 op_basis（如「多头移动止盈」「回踩 MA20 买」）
+    const tpBasis = p.op_basis ? `<div class="tp-basis">时机：${p.op_basis}</div>` : (p.reason ? `<div class="tp-basis">时机：${p.reason}</div>` : '');
+
+    return `<div class="ai-row ${rowCls}">
+      <div class="ai-c-name"><b>${p.name || p.code}</b><span class="code-mini">${p.code}</span>${priceHtml}</div>
+      <div class="ai-c-score">${score > 0 ? "+" : ""}${score}</div>
+      <div class="ai-c-action">${label}</div>
+      <div class="ai-c-fc"><span class="fc-trend ${fcCls}">${fcTrend}${fcPct}</span><ul class="fc-basis">${basisHtml}</ul></div>
+      <div class="ai-c-sec"><span class="sec-name">${secName}</span><div><span class="sec-pct ${secPctCls}">${secPctTxt}</span> ${secFundTxt}${upRatioTxt}</div></div>
+      <div class="ai-c-tech">${maHtml}<div><span class="tech-state ${macdCls}">MACD ${macdState}</span><span class="tech-state ${kdjCls}">${kdjState}</span><span class="tech-state ${bollCls}">BOLL ${bollPos}</span></div>${srHtml}</div>
+      <div class="ai-c-tp">${tpHtml}${tpBasis}</div>
+    </div>`;
   }
 
   // 给自选股注入今日赛道（板块资金流走的是同个数据源，后端 positions_advice 已含，自选侧复用同 cache）
@@ -1279,28 +1320,82 @@
     const el = $("#reviewBox");
     if (!el) return;
     try {
-      const d = await api("GET", "/api/review");
-      if (!d || !d.rows || !d.rows.length) {
-        el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px">今日暂无复盘记录。开盘后本工作台会自动记录每只持仓的「开盘建议 / 当日最高 / 收盘」，用来复盘你的判断准确率与按建议做T的盈亏。</div>`;
-        return;
+      // 主数据源：/api/daily_strategy（含四时点 + 复盘 + calibration）
+      let d = await api("GET", "/api/daily_strategy").catch(() => null);
+      if (!d || d.error) return;
+      const review = d.review;
+      const open = d.open;
+      const snaps = d.snapshots || {};
+      // 1) 顶部汇总
+      const summary = (review && review.summary) || {};
+      const winRate = summary.win_rate || 0;
+      const winColor = winRate >= 60 ? "#2b8a3e" : winRate >= 40 ? "#fab005" : "#c92a2a";
+      const totalPnl = summary.total_pnl || 0;
+      const summaryHtml = `<div class="rev-summary">
+        <div class="rev-sum-item"><div class="rev-sum-label">准确率</div><div class="rev-sum-val" style="color:${winColor}">${winRate.toFixed(1)}%</div></div>
+        <div class="rev-sum-item"><div class="rev-sum-label">建议次数</div><div class="rev-sum-val">${summary.evaluated || 0}</div></div>
+        <div class="rev-sum-item"><div class="rev-sum-label">正确数</div><div class="rev-sum-val">${summary.win_count || 0}</div></div>
+        <div class="rev-sum-item"><div class="rev-sum-label">做T累计盈亏</div><div class="rev-sum-val" style="color:${totalPnl >= 0 ? '#2b8a3e' : '#c92a2a'}">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(0)}</div></div>
+      </div>`;
+      // 2) calibration 改进建议
+      const cal = (review && review.calibration) || {};
+      const tipsHtml = (cal.tips || []).map(t => `<li>${t}</li>`).join("");
+      const calHtml = tipsHtml ? `<details class="rev-cal" open><summary>🎯 下次如何改进（自动校准）</summary><ul class="rev-cal-tips">${tipsHtml}</ul></details>` : "";
+      // 3) 四时点详细对比表
+      const timeLabels = ["09:30", "10:00", "10:30", "13:00", "14:00"];
+      const detailRows = [];
+      if (open && open.suggestions) {
+        open.suggestions.forEach(s => {
+          if (s.role !== "holding") return;
+          detailRows.push({src: "开盘判断", code: s.code, name: s.name,
+                           action: s.action, price: s.price, qty: s.qty});
+        });
       }
-      const rows = d.rows.map(r => {
-        const ca = r.correct == null ? "—" : (r.correct ? "✅对" : "❌错");
-        const caColor = r.correct == null ? "#868e96" : (r.correct ? "#2b8a3e" : "#c92a2a");
-        const pnl = r.pnl != null ? `<b style="color:${r.pnl >= 0 ? '#2b8a3e' : '#c92a2a'}">${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(0)}</b>` : "—";
-        const oa = r.open_action || "—";
-        const oaColor = ACT_COLOR[oa] || "#868e96";
-        return `<div class="rev-row">
-          <span class="rev-name">${r.name || r.code}<br><span style="color:#999;font-size:10px">${r.code}</span></span>
-          <span class="rev-act" style="color:${oaColor}">${oa}</span>
-          <span>建议价<b>${r.open_op_price != null ? fmt(r.open_op_price) : '—'}</b></span>
-          <span>最高<b>${r.high != null ? fmt(r.high) : '—'}</b></span>
-          <span>收盘<b>${r.close_price != null ? fmt(r.close_price) : '—'}</b></span>
-          <span style="color:${caColor}">${ca}</span>
-          <span>做T盈亏${pnl}</span>
-        </div>`;
+      timeLabels.forEach(t => {
+        const snap = snaps[t];
+        if (snap && snap.rows) {
+          snap.rows.forEach(s => {
+            if (s.role !== "holding") return;
+            detailRows.push({src: t, code: s.code, name: s.name,
+                             action: s.action, price: s.price, qty: s.qty});
+          });
+        }
+      });
+      // 与实际 high/low/close 比对
+      const reviewMap = {};
+      (review && review.rows || []).forEach(r => {
+        reviewMap[`${r.code}|${r.source}`] = r;
+      });
+      const tableRows = detailRows.map(dr => {
+        const rev = reviewMap[`${dr.code}|${dr.src}`] || {};
+        const ca = rev.correct == null ? "—" : (rev.correct ? "✅对" : "❌错");
+        const caColor = rev.correct == null ? "#868e96" : (rev.correct ? "#2b8a3e" : "#c92a2a");
+        const pnl = rev.pnl != null ? `${rev.pnl >= 0 ? '+' : ''}${rev.pnl.toFixed(0)}` : "—";
+        const pnlColor = rev.pnl == null ? '#868e96' : (rev.pnl >= 0 ? '#2b8a3e' : '#c92a2a');
+        const hi = rev.high != null ? rev.high.toFixed(2) : "—";
+        const lo = rev.low != null ? rev.low.toFixed(2) : "—";
+        const cl = rev.close != null ? rev.close.toFixed(2) : "—";
+        const devClose = rev.dev_close_pct != null ? ` <span style="color:#868e96;font-size:10px">(${rev.dev_close_pct >= 0 ? '+' : ''}${rev.dev_close_pct.toFixed(1)}% vs 收盘)</span>` : "";
+        const actColor = dr.action === "买入" ? "#2b8a3e" : dr.action === "卖出" ? "#c92a2a" : "#495057";
+        return `<tr>
+          <td>${dr.src}</td>
+          <td>${dr.name || dr.code}</td>
+          <td style="color:${actColor};font-weight:600">${dr.action || '—'}</td>
+          <td>${dr.price != null ? dr.price.toFixed(2) : '—'}</td>
+          <td>${hi}</td>
+          <td>${lo}</td>
+          <td>${cl}${devClose}</td>
+          <td style="color:${caColor}">${ca}</td>
+          <td style="color:${pnlColor};font-weight:600">${pnl}</td>
+        </tr>`;
       }).join("");
-      el.innerHTML = `<div style="font-size:11px;color:#666;margin-bottom:4px">${d.date} · 共 ${d.count} 只（按判断对错/盈亏排序；做T盈亏 = 按开盘建议价模拟操作至收盘的估算）</div>` + rows;
+      const tableHtml = tableRows ? `<details class="rev-detail" open><summary>📋 四时点建议 vs 实际（点击折叠）</summary>
+        <table class="rev-table">
+          <thead><tr><th>时点</th><th>股票</th><th>动作</th><th>建议价</th><th>最高</th><th>最低</th><th>收盘</th><th>判断</th><th>做T盈亏</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </details>` : `<div style="color:var(--muted);font-size:11px">暂无四时点数据</div>`;
+      el.innerHTML = summaryHtml + calHtml + tableHtml;
     } catch (e) { /* ignore */ }
   }
 

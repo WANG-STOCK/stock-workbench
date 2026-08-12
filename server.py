@@ -387,6 +387,197 @@ def _build_position(analysis, qs, code=None):
     return pos
 
 
+def _build_forecast(a, regime, outlook, prev_close, action):
+    """今日预估：综合开盘价/集合竞价/板块涨跌/资金净流/均线方向，给出 (trend, pct, basis[])。"""
+    ind = (a or {}).get("indicators") or {}
+    macd = ind.get("macd") or {}
+    kdj = ind.get("kdj") or {}
+    ma = ind.get("ma") or {}   # ma 是 dict: {ma5, ma10, ma20, ma60}
+    ma5 = ma.get("ma5")
+    ma10 = ma.get("ma10")
+    ma20 = ma.get("ma20")
+    # MACD/KDJ 在 indicators 模块里就是标量（末值）
+    dif = macd.get("dif")
+    dea = macd.get("dea")
+    hist = macd.get("hist")
+    k_v = kdj.get("k")
+    d_v = kdj.get("d")
+    price = (a or {}).get("price")
+    op = (a or {}).get("open")
+    basis = []
+    pct = 0.0
+    # 1) 开盘跳空（集合竞价）
+    if op and prev_close:
+        gap = (op - prev_close) / prev_close * 100
+        if gap >= 0.5:
+            basis.append(f"高开 +{gap:.1f}%（集合竞价偏多）")
+            pct += 0.5
+        elif gap <= -0.5:
+            basis.append(f"低开 {gap:.1f}%（集合竞价偏空）")
+            pct -= 0.5
+    # 2) 板块资金流
+    if regime:
+        tpct = regime.get("trend_pct")
+        fn = regime.get("fund_net")
+        if tpct is not None:
+            if tpct >= 1.5:
+                basis.append(f"所属板块 +{tpct:.1f}% 强势")
+                pct += tpct * 0.4
+            elif tpct <= -1.5:
+                basis.append(f"所属板块 {tpct:.1f}% 弱势")
+                pct += tpct * 0.4  # 已是负
+        if fn is not None:
+            if fn >= 2:
+                basis.append(f"资金净流入 +{fn:.1f}亿")
+                pct += 0.8
+            elif fn <= -2:
+                basis.append(f"资金净流出 {fn:.1f}亿")
+                pct -= 0.8
+    # 3) 均线趋势（多头/空头/震荡）
+    if ma5 and ma10 and ma20 and price:
+        if price > ma5 > ma10 > ma20:
+            basis.append("价>MA5>MA10>MA20 多头排列")
+            pct += 1.2
+        elif price < ma5 < ma10 < ma20:
+            basis.append("价<MA5<MA10<MA20 空头排列")
+            pct -= 1.2
+        elif price > ma20 and ma5 > ma10:
+            basis.append("价站上MA20、MA5>MA10 偏多")
+            pct += 0.6
+        elif price < ma20 and ma5 < ma10:
+            basis.append("价跌破MA20、MA5<MA10 偏空")
+            pct -= 0.6
+        else:
+            basis.append("均线交织 震荡")
+    # 4) MACD 方向
+    if dif is not None and dea is not None:
+        if dif > dea and (hist is not None and hist > 0):
+            basis.append("MACD 金叉 红柱")
+            pct += 0.5
+        elif dif < dea and (hist is not None and hist < 0):
+            basis.append("MACD 死叉 绿柱")
+            pct -= 0.5
+    # 5) KDJ 状态
+    if k_v is not None and d_v is not None:
+        if k_v > 80 and d_v > 80:
+            basis.append(f"KDJ({k_v:.0f},{d_v:.0f}) 超买")
+            pct -= 0.4
+        elif k_v < 20 and d_v < 20:
+            basis.append(f"KDJ({k_v:.0f},{d_v:.0f}) 超卖")
+            pct += 0.4
+    # 定性：把 pct 映射到 trend
+    if pct >= 0.8:
+        trend = "偏多"
+    elif pct <= -0.8:
+        trend = "偏空"
+    else:
+        trend = "震荡"
+    if outlook and outlook.get("trend"):
+        trend = outlook["trend"]   # 以 sig.day_outlook 的定性为准（已综合技术+资金）
+    return {
+        "trend": trend,
+        "pct": round(pct, 2),
+        "basis": basis[:6],         # 最多 6 条
+    }
+
+
+def _build_sector_detail(regime):
+    """板块详情：把 strength 结果翻译成中文展示。"""
+    if not regime:
+        return None
+    name = regime.get("track") or regime.get("sector") or "—"
+    tpct = regime.get("trend_pct")
+    fn = regime.get("fund_net")
+    up_ratio = regime.get("up_ratio")
+    state = "强"
+    if tpct is not None and tpct < 0:
+        state = "弱"
+    elif tpct is not None and tpct > 0:
+        state = "强"
+    return {
+        "name": name,
+        "track": regime.get("track"),
+        "sector": regime.get("sector"),
+        "trend_pct": tpct,
+        "fund_net": fn,
+        "up_ratio": up_ratio,
+        "state": state,
+    }
+
+
+def _build_technical(a, tl, pl, price):
+    """技术面：MA + MACD/KDJ/BOLL 状态 + 关键支撑压力位。"""
+    ind = (a or {}).get("indicators") or {}
+    macd = ind.get("macd") or {}
+    kdj = ind.get("kdj") or {}
+    boll = ind.get("boll") or {}
+    ma = ind.get("ma") or {}
+    ma5 = ma.get("ma5")
+    ma10 = ma.get("ma10")
+    ma20 = ma.get("ma20")
+    dif = macd.get("dif")
+    dea = macd.get("dea")
+    hist = macd.get("hist")
+    k_v = kdj.get("k")
+    d_v = kdj.get("d")
+    boll_upper = boll.get("upper")
+    boll_mid = boll.get("mid")
+    boll_lower = boll.get("lower")
+    # MACD 状态
+    macd_state = "中位"
+    if dif is not None and dea is not None:
+        if dif > dea and (hist is None or hist > 0):
+            macd_state = "金叉红柱" if (dif - dea) > 0.1 else "红柱收敛"
+        elif dif < dea and (hist is None or hist < 0):
+            macd_state = "死叉绿柱" if (dea - dif) > 0.1 else "绿柱收敛"
+        elif dif > 0:
+            macd_state = "0轴上"
+        else:
+            macd_state = "0轴下"
+    # KDJ 状态
+    kdj_state = "中位"
+    if k_v is not None:
+        if k_v > 80:
+            kdj_state = f"超买(K={k_v:.0f})"
+        elif k_v < 20:
+            kdj_state = f"超卖(K={k_v:.0f})"
+    # BOLL 位置
+    boll_pos = "中轨"
+    if price is not None:
+        if boll_upper and price >= boll_upper:
+            boll_pos = "上轨"
+        elif boll_lower and price <= boll_lower:
+            boll_pos = "下轨"
+    # 支撑 / 压力位（优先用 tl 的 open/buy/sell，再用 price_levels）
+    support = None
+    resist = None
+    if tl:
+        support = tl.get("low") or tl.get("buy")
+        resist = tl.get("high") or tl.get("sell")
+    if not support and pl:
+        support = pl.get("support")
+    if not resist and pl:
+        resist = pl.get("resist")
+    # MA20 兜底
+    if not support and ma20:
+        support = round(ma20 * 0.98, 2)
+    if not resist and ma20:
+        resist = round(ma20 * 1.05, 2)
+    return {
+        "ma5": round(ma5, 2) if ma5 else None,
+        "ma10": round(ma10, 2) if ma10 else None,
+        "ma20": round(ma20, 2) if ma20 else None,
+        "macd_state": macd_state,
+        "kdj_state": kdj_state,
+        "boll_pos": boll_pos,
+        "boll_upper": round(boll_upper, 2) if boll_upper else None,
+        "boll_mid": round(boll_mid, 2) if boll_mid else None,
+        "boll_lower": round(boll_lower, 2) if boll_lower else None,
+        "support": support,
+        "resist": resist,
+    }
+
+
 def _advise_position(code, capital):
     """为单只持仓计算完整操作建议：买/卖/不动 + 操作价 + 操作量 + 行业强弱。
 
@@ -435,7 +626,8 @@ def _advise_position(code, capital):
         action = "卖出"
     else:
         action = "不动"
-    # 操作价：买用当日买点/支撑，卖用当日卖点/阻力
+    # 操作价：买用当日买点/支撑，卖用当日卖点/阻力 —— 价格必须约束在当前价 ±3% 内，
+    # 否则当天到不了那个价。建议卖出/买入是"现在/明天可执行"的动作，不是看天价。
     pl = a.get("price_levels") or {}
     if action == "买入":
         op_price = (tl or {}).get("buy") or pl.get("buy")
@@ -443,6 +635,12 @@ def _advise_position(code, capital):
         op_price = (tl or {}).get("sell") or pl.get("sell")
     else:
         op_price = None
+    if op_price and price:
+        # 卖出不能高于现价 +3%（否则永远到不了），买入不能低于现价 -3%（追跌不接飞刀）
+        if action == "卖出" and op_price > price * 1.03:
+            op_price = round(price * 1.015, 2)  # 弱市/超买保守一点
+        elif action == "买入" and op_price < price * 0.97:
+            op_price = round(price * 0.985, 2)
     # 操作量：买=加仓股数，卖=减仓股数（不超持仓），不动=0
     delta = int(pos.get("delta_shares") or 0)
     if action == "买入":
@@ -485,6 +683,12 @@ def _advise_position(code, capital):
             "fund_net": regime.get("fund_net"),         # 行业大类（科技/医药/电力）当日资金净流入（亿元）
             "up_ratio": regime.get("up_ratio"),         # 赛道成分股上涨占比（0~1）
         }
+    # ===== 今日预估（涨/跌/震荡 + pct + 依据）=====
+    forecast = _build_forecast(a, regime, outlook, prev_close, action)
+    # ===== 板块详情（涨跌幅 + 资金净流入 + 上涨占比）=====
+    sector_detail = _build_sector_detail(regime)
+    # ===== 技术面（MA + MACD + KDJ + BOLL + 关键支撑压力位）=====
+    technical = _build_technical(a, tl, pl, price)
     return {
         "code": code, "ok": True,
         "name": _fp.get("name") or code,
@@ -503,6 +707,9 @@ def _advise_position(code, capital):
         "industry_today": industry_today,
         "indicators": a.get("indicators"),
         "intraday": intraday,
+        "forecast": forecast,
+        "sector_detail": sector_detail,
+        "technical": technical,
     }
 
 

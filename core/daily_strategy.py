@@ -26,8 +26,8 @@ STATIC_POSITIONS = os.path.join(STATIC_DIR, "positions.json")
 POOL_FILE = os.path.join(DATA_DIR, "industry_pool.json")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 
-SNAP_TIMES = ["09:30", "10:30", "13:00", "14:00"]
-SNAP_MIN = {"09:30": 570, "10:30": 630, "13:00": 780, "14:00": 840}
+SNAP_TIMES = ["09:30", "10:00", "10:30", "13:00", "14:00"]
+SNAP_MIN = {"09:30": 570, "10:00": 600, "10:30": 630, "13:00": 780, "14:00": 840}
 
 
 # ---------------- 基础 IO ----------------
@@ -252,10 +252,12 @@ def open_judgment(date=None):
         price = (q.get("price") or (bars[-1]["close"] if bars else None))
         price = round(price, 2) if price else None
         qty = size_sell(held) if action in ("卖出", "减仓") else 0
+        forecast = _quick_forecast(bars, q, score, sig)
         sugg.append({
             "code": code, "name": name, "role": "holding",
             "action": action, "price": price, "qty": qty,
             "reason": reason, "track": p.get("track", ""), "grade": p.get("grade", ""),
+            "forecast": forecast,
         })
 
     for p in cand:
@@ -271,10 +273,12 @@ def open_judgment(date=None):
         price = round(price, 2) if price else None
         qty = size_buy(price) if price else 0
         reason = ("超卖反弹" if os_ else "多头初现") + "、" + "、".join(sig[:2])
+        forecast = _quick_forecast(bars, q, score, sig)
         sugg.append({
             "code": code, "name": name, "role": "candidate",
             "action": action, "price": price, "qty": qty,
             "reason": reason, "track": p.get("track", ""), "grade": p.get("grade", ""),
+            "forecast": forecast,
         })
 
     total = bull + bear
@@ -299,6 +303,54 @@ def open_judgment(date=None):
     day["open"] = rec
     _save(d)
     return rec
+
+
+def _quick_forecast(bars, q, score, sig):
+    """轻量级今日预估（开盘判断/快照用，不需要 MACD/KDJ）。"""
+    basis = []
+    pct = 0.0
+    prev_close = q.get("prev_close")
+    op = q.get("open")
+    price = q.get("price")
+    closes = [b["close"] for b in bars] if bars else []
+    if op and prev_close:
+        gap = (op - prev_close) / prev_close * 100
+        if gap >= 0.5:
+            basis.append(f"高开 +{gap:.1f}%（集合竞价偏多）")
+            pct += 0.5
+        elif gap <= -0.5:
+            basis.append(f"低开 {gap:.1f}%（集合竞价偏空）")
+            pct -= 0.5
+    if len(closes) >= 20 and price:
+        ma5 = sum(closes[-5:]) / 5
+        ma10 = sum(closes[-10:]) / 10
+        ma20 = sum(closes[-20:]) / 20
+        if price > ma5 > ma10 > ma20:
+            basis.append("价>MA5>MA10>MA20 多头")
+            pct += 1.2
+        elif price < ma5 < ma10 < ma20:
+            basis.append("价<MA5<MA10<MA20 空头")
+            pct -= 1.2
+        elif price > ma20:
+            basis.append("价站上MA20 偏多")
+            pct += 0.5
+        elif price < ma20:
+            basis.append("价跌破MA20 偏空")
+            pct -= 0.5
+    # 技术打分辅助
+    if score >= 2:
+        pct += 0.5
+    elif score <= -2:
+        pct -= 0.5
+    if pct >= 0.8:
+        trend = "偏多"
+    elif pct <= -0.8:
+        trend = "偏空"
+    else:
+        trend = "震荡"
+    if not basis:
+        basis.append("信号不足 震荡")
+    return {"trend": trend, "pct": round(pct, 2), "basis": basis[:5]}
 
 
 # ---------------- 四时点快照 ----------------
@@ -379,6 +431,7 @@ def _day_hlc(code):
 
 
 def generate_review(date=None):
+    """收盘复盘：四时点建议价 vs 尾盘 + 最高最低，输出准确率 + 下次如何改进（calibration）。"""
     date = date or _today()
     d = _load()
     day = d.get(date, {})
@@ -408,6 +461,16 @@ def generate_review(date=None):
         hit = None
         pnl = None
         correct = None
+        # 建议价相对最高/最低/收盘的偏差（用于诊断建议价是否合理）
+        dev_hi = None
+        dev_lo = None
+        dev_close = None
+        if price and cl is not None:
+            dev_close = round((price - cl) / cl * 100, 2)
+        if price and hi:
+            dev_hi = round((price - hi) / hi * 100, 2)
+        if price and lo:
+            dev_lo = round((price - lo) / lo * 100, 2)
         if price and cl is not None:
             if action == "买入":
                 hit = (lo is not None and lo <= price)
@@ -420,7 +483,9 @@ def generate_review(date=None):
         rows.append({
             "code": code, "name": name, "role": s.get("role"),
             "source": src, "action": action, "price": price, "qty": qty,
+            "high": hi, "low": lo, "close": cl,
             "hit": hit, "pnl": pnl, "correct": correct,
+            "dev_hi_pct": dev_hi, "dev_lo_pct": dev_lo, "dev_close_pct": dev_close,
         })
 
     decided = [r for r in rows if r["correct"] is not None]
@@ -432,10 +497,84 @@ def generate_review(date=None):
         "win_count": win,
         "total_pnl": total_pnl,
     }
-    rec = {"closed_at": _now_str(), "summary": summary, "rows": rows}
+    # ===== 自适应校准：根据今天的不准确情况，下次如何改进 =====
+    calibration = _calibrate(rows, decided)
+    rec = {
+        "closed_at": _now_str(),
+        "summary": summary,
+        "rows": rows,
+        "calibration": calibration,
+    }
     day["review"] = rec
     _save(d)
     return rec
+
+
+def _calibrate(rows, decided):
+    """根据今天的复盘输出下次如何改进（calibration）。
+
+    规则：
+    - 卖出建议但收盘 > 建议价×1.03 → 卖价过高 → 下次约束在 +1.5% 内
+    - 买入建议但收盘 < 建议价×0.97 → 买价过低/追跌 → 下次约束在 -1.5% 内
+    - 命中率 < 40% → 该动作方向判断差 → 建议降低操作频率（更多「持有」）
+    - 命中率 ≥ 70% → 当前规则有效 → 沿用
+    """
+    tips = []
+    detail = {"sell_too_high": [], "buy_too_low": [], "miss_actions": [], "good_actions": []}
+    if not decided:
+        return {"tips": ["今日没有可判断的买卖建议，无法校准"], "detail": detail}
+    # 卖出价偏离
+    sell_miss = [r for r in decided if r["action"] == "卖出" and r["dev_close_pct"] is not None and r["dev_close_pct"] > 3]
+    for r in sell_miss[:5]:
+        detail["sell_too_high"].append({"code": r["code"], "name": r["name"], "source": r["source"],
+                                       "price": r["price"], "close": r["close"], "dev_pct": r["dev_close_pct"]})
+    if sell_miss:
+        tips.append(f"⚠️ {len(sell_miss)} 次卖价高于收盘+3%（价格当天到不了），下次自动约束到 +1.5% 内")
+    # 买价偏离
+    buy_miss = [r for r in decided if r["action"] == "买入" and r["dev_close_pct"] is not None and r["dev_close_pct"] < -3]
+    for r in buy_miss[:5]:
+        detail["buy_too_low"].append({"code": r["code"], "name": r["name"], "source": r["source"],
+                                     "price": r["price"], "close": r["close"], "dev_pct": r["dev_close_pct"]})
+    if buy_miss:
+        tips.append(f"⚠️ {len(buy_miss)} 次买价低于收盘-3%（追跌），下次约束到 -1.5% 内")
+    # 按方向胜率
+    by_action = {}
+    for r in decided:
+        by_action.setdefault(r["action"], []).append(r)
+    for act, lst in by_action.items():
+        wr = sum(1 for r in lst if r["correct"]) / max(len(lst), 1) * 100
+        if wr < 40 and len(lst) >= 2:
+            tips.append(f"📉 {act}方向胜率仅 {wr:.0f}%（{len(lst)}次），下次该方向降低操作频率")
+            detail["miss_actions"].append({"action": act, "win_rate": round(wr, 1), "count": len(lst)})
+        elif wr >= 70 and len(lst) >= 2:
+            tips.append(f"✅ {act}方向胜率 {wr:.0f}%（{len(lst)}次），规则有效，继续沿用")
+            detail["good_actions"].append({"action": act, "win_rate": round(wr, 1), "count": len(lst)})
+    # 按时点胜率
+    by_src = {}
+    for r in decided:
+        by_src.setdefault(r["source"], []).append(r)
+    for src, lst in by_src.items():
+        wr = sum(1 for r in lst if r["correct"]) / max(len(lst), 1) * 100
+        if wr < 40 and len(lst) >= 3:
+            tips.append(f"⏰ {src}时点胜率 {wr:.0f}%（{len(lst)}次），该时点判断质量差，下次该时点更保守")
+    if not tips:
+        tips.append("✅ 今日建议整体合理，继续沿用现有规则")
+    # 持久化校准建议（供 open_judgment/snapshot 读取并应用）
+    try:
+        cal = _load_json(os.path.join(DATA_DIR, "strategy_calibration.json"), {"history": []})
+        cal.setdefault("history", []).append({
+            "date": _today(), "tips": tips,
+            "sell_too_high_count": len(sell_miss),
+            "buy_too_low_count": len(buy_miss),
+            "miss_actions": detail["miss_actions"],
+            "good_actions": detail["good_actions"],
+        })
+        cal["history"] = cal["history"][-30:]   # 保留最近 30 天
+        cal["latest_tips"] = tips
+        _save_json(os.path.join(DATA_DIR, "strategy_calibration.json"), cal)
+    except Exception:
+        pass
+    return {"tips": tips, "detail": detail}
 
 
 # ---------------- 编排（自动维护） ----------------
