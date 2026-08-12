@@ -3,10 +3,26 @@
   const $ = (s) => document.querySelector(s);
   let API_BASE = localStorage.getItem("wb_api_base") || "";
   const api = async (method, url, body) => {
-    const u = API_BASE ? (API_BASE.replace(/\/$/, "") + url) : url;
-    const opt = { method, headers: { "Content-Type": "application/json" } };
-    if (body) opt.body = JSON.stringify(body);
-    const r = await fetch(u, opt);
+    const build = (base) => {
+      const u = base ? (base.replace(/\/$/, "") + url) : url;
+      const opt = { method, headers: { "Content-Type": "application/json" } };
+      if (body) opt.body = JSON.stringify(body);
+      return fetch(u, opt);
+    };
+    let r, usedBase = API_BASE;
+    try {
+      r = await build(API_BASE);
+    } catch (e) {
+      // API_BASE 失效（地址改过/服务迁移）→ 自动回退到同源相对路径
+      if (API_BASE) { r = await build(""); usedBase = ""; }
+      else throw e;
+    }
+    // 设了 API_BASE 但返回非 2xx（如 404/500，多半是地址不对），再试一次同源
+    if (API_BASE && !r.ok) {
+      const r2 = await build("");
+      if (r2.ok) { r = r2; usedBase = ""; }
+    }
+    if (!r.ok) throw new Error("HTTP " + r.status + " @ " + (usedBase || "同源") + url);
     return r.json();
   };
   const ACT_COLOR = {
@@ -37,31 +53,44 @@
 
   // ---------- 初始化 ----------
   async function init() {
-    chart = new StockChart($("#chart"), $("#tooltip"));
-    const cfg = await api("GET", "/api/config");
-    $("#tdxStatus").textContent = cfg.tdx_available
-      ? "数据源：通达信本地 + 在线" : "数据源：在线行情（未配置通达信）";
-    $("#marketBadge").textContent = cfg.market || "A股";
+    // 图表初始化失败不应拖垮整个页面
+    try { chart = new StockChart($("#chart"), $("#tooltip")); }
+    catch (e) { console.warn("图表初始化失败：", e); chart = null; }
+
+    let cfg = {};
+    try { cfg = (await api("GET", "/api/config")) || {}; }
+    catch (e) {
+      console.warn("配置加载失败，使用离线默认值：", e);
+      toast("未能连接后端，已用离线默认值（部分功能可能受限）");
+    }
+    try {
+      $("#tdxStatus").textContent = cfg.tdx_available
+        ? "数据源：通达信本地 + 在线" : "数据源：在线行情（未配置通达信）";
+      $("#marketBadge").textContent = cfg.market || "A股";
+    } catch (e) {}
 
     bindEvents();
     // 还原现金（持仓汇总条可编辑，localStorage 持久化）
     const _cash = localStorage.getItem("wb_cash");
     if (_cash != null) $("#cashInput").value = _cash;
-    await loadWatchlist();
-    await loadPositions();   // 内部会触发批量持仓建议渲染
-    setupWeights(cfg);
-    $("#availCapital").value = (cfg.available_capital != null ? cfg.available_capital : 100000);
-    $("#apiBase").value = API_BASE;
-    $("#tdxPath").value = cfg.tdx_path || "";
-    $("#tdxPathTip").textContent = cfg.tdx_available
-      ? "已启用本地数据：" + cfg.tdx_path
-      : "填好后，选股下拉选「通达信全市场」即可扫描全部 A 股日线（需先在通达信下载日线数据）。";
+    // 任何一步失败都不影响其余渲染（避免整页白屏）
+    try { await loadWatchlist(); } catch (e) { console.warn("自选加载失败：", e); }
+    try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
+    try { setupWeights(cfg); } catch (e) {}
+    try {
+      $("#availCapital").value = (cfg.available_capital != null ? cfg.available_capital : 100000);
+      $("#apiBase").value = API_BASE;
+      $("#tdxPath").value = cfg.tdx_path || "";
+      $("#tdxPathTip").textContent = cfg.tdx_available
+        ? "已启用本地数据：" + cfg.tdx_path
+        : "填好后，选股下拉选「通达信全市场」即可扫描全部 A 股日线（需先在通达信下载日线数据）。";
+    } catch (e) {}
     startClock();
     startMonitor();
     startLiveView();
     state.timers.push(setInterval(loadPositionAdvice, 10000));
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
-    loadReview();
+    try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
     // 调试与共享链接：?code=sh600105 自动打开该股；?demo=1 同时跑一次候选扫描
     const _qp = new URLSearchParams(location.search);
@@ -131,13 +160,28 @@
     $("#saveWeights").addEventListener("click", saveWeights);
     $("#resetWeights").addEventListener("click", resetWeights);
     $("#saveApiBase").addEventListener("click", async () => {
-      API_BASE = $("#apiBase").value.trim();
-      localStorage.setItem("wb_api_base", API_BASE);
+      const v = $("#apiBase").value.trim();
+      if (!v) {
+        API_BASE = "";
+        localStorage.removeItem("wb_api_base");
+        toast("已切回本机（同源）");
+        return;
+      }
+      if (!/^https?:\/\//i.test(v)) {
+        toast("地址需以 http:// 或 https:// 开头，未保存");
+        return;
+      }
+      // 先测试连通性，避免存了个连不上的地址 → 整页白屏
       try {
-        await api("POST", "/api/config", { cloud_url: API_BASE });
-        toast(API_BASE ? "已设云端后端：" + API_BASE : "已切回本机");
+        const test = await fetch(v.replace(/\/$/, "") + "/api/config", { method: "GET" });
+        if (!test.ok) throw new Error("HTTP " + test.status);
+        await test.json().catch(() => ({}));
+        API_BASE = v;
+        localStorage.setItem("wb_api_base", API_BASE);
+        try { await api("POST", "/api/config", { cloud_url: API_BASE }); } catch (e) {}
+        toast("已设云端后端：" + API_BASE);
       } catch (e) {
-        toast("云端地址已在本页生效，但后端未保存（推送链接仍指向本机）");
+        toast("该地址连不上（" + e.message + "），未保存，仍用本机");
       }
     });
     $("#saveTdx").addEventListener("click", async () => {
@@ -186,8 +230,12 @@
 
   async function saveWatchlist() {
     // 用 items 增量合并，保留已有元数据（添加时间/价格/推荐买价）
-    await api("POST", "/api/watchlist", { items: state.watchlist });
+    return await api("POST", "/api/watchlist", { items: state.watchlist });
   }
+
+  // 代码归一化（去空格/转小写），避免 sh600519 / SH600519 / 600519 误判重复或漏判
+  function _normCode(c) { return (c || "").toString().trim().toLowerCase(); }
+  function _inWatch(code) { const n = _normCode(code); return state.watchlist.some(w => _normCode(w.code) === n); }
 
   function renderWatchlist() {
     const ul = $("#watchlist");
@@ -241,13 +289,15 @@
 
   async function addCurrentToWatch() {
     if (!state.current.code) { toast("请先选择一只股票"); return; }
-    if (state.watchlist.some(w => w.code === state.current.code)) { toast("已在自选"); return; }
+    if (_inWatch(state.current.code)) { toast("已在自选"); return; }
     const m = state.watchMeta[state.current.code] || {};
     state.watchlist.push({
       code: state.current.code, name: m.name || state.current.name || state.current.code,
       add_time: new Date().toISOString(), add_price: m.price != null ? m.price : null, scan_buy: null,
     });
-    await saveWatchlist(); renderWatchlist(); await computeSignals();
+    renderWatchlist();
+    try { const r = await saveWatchlist(); if (r && r.items) state.watchlist = r.items; } catch (e) { toast("已加入本地自选（云端保存失败）"); }
+    await computeSignals();
   }
 
   async function pollQuotes() {
@@ -418,6 +468,13 @@
   }
 
   // ---------- 选股 ----------
+  // 已在自选的股把「+自选」置灰为「已添加」，避免误点又弹「已在自选」
+  function _watchBtn(r) {
+    if (_inWatch(r.code)) {
+      return `<button class="scan-add added" disabled data-code="${r.code}">已添加</button>`;
+    }
+    return `<button class="scan-add" data-code="${r.code}" data-name="${r.name || r.code}" data-price="${r.price != null ? r.price : ''}" data-buy="${r.buy_price != null ? r.buy_price : ''}">+自选</button>`;
+  }
   function renderScanRows(results, limit) {
     const rows = (results || []).slice(0, limit || 200).map(r => {
       const c = ACT_COLOR[r.action] || "#868e96";
@@ -431,7 +488,7 @@
         <span class="sc-name">${r.name || r.code}<br><span style="color:var(--muted);font-size:11px">${r.code}</span></span>
         <span class="sc-score ${chgClass(r.score)}">${r.score > 0 ? "+" : ""}${r.score}</span>
         ${extra}
-        <button class="scan-add" data-code="${r.code}" data-name="${r.name || r.code}" data-price="${r.price != null ? r.price : ''}" data-buy="${r.buy_price != null ? r.buy_price : ''}">+自选</button>
+        ${_watchBtn(r)}
       </div>`;
     }).join("");
     return rows;
@@ -467,7 +524,7 @@
           <span style="color:#666;font-size:12px">· ${r.track}</span>
           <span style="color:#666;font-size:12px">· 赛道 ${r.sector_trend != null ? (r.sector_trend >= 0 ? "↑" : "↓") + fmt(r.sector_trend) + "%" : "—"}${r.sector_fund != null ? "　主力" + (r.sector_fund >= 0 ? "+" : "") + r.sector_fund.toFixed(1) + "亿" : ""}</span>
           <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}${r.expect_score != null ? "/预期" + r.expect_score : ""}）</span></span>
-          <button class="scan-add" data-code="${r.code}" data-name="${r.name || r.code}" data-price="${r.price != null ? r.price : ''}" data-buy="${r.buy_price != null ? r.buy_price : ''}">+自选</button>
+          ${_watchBtn(r)}
         </div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;flex-wrap:wrap">
           <span>现价 <b>${fmt(r.price)}</b></span>
@@ -501,8 +558,9 @@
   }
 
   // 扫描结果「加自选」：记录添加时间/添加时价格/推荐买价
+  // 扫描结果「加自选」：记录添加时间/添加时价格/推荐买价
   async function addToWatch(code, name, price, buy) {
-    if (state.watchlist.some(w => w.code === code)) { toast("已在自选"); return; }
+    if (_inWatch(code)) { toast("已在自选：" + (name || code)); return; }
     const item = {
       code, name: name || code,
       add_time: new Date().toISOString(),
@@ -510,7 +568,14 @@
       scan_buy: buy != null && buy !== "" ? parseFloat(buy) : null,
     };
     state.watchlist.push(item);
-    await saveWatchlist(); renderWatchlist(); await computeSignals();
+    renderWatchlist();   // 乐观渲染：先让用户立刻看到，不被保存请求阻塞
+    try {
+      const r = await saveWatchlist();
+      if (r && r.items) state.watchlist = r.items;  // 以服务端为准，避免重复/错位
+    } catch (e) {
+      toast("已加入本地自选（云端保存失败，下次刷新会重试）");
+    }
+    await computeSignals();
     toast("已加入自选：" + (name || code));
   }
 

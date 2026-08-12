@@ -372,6 +372,8 @@ button.mini:hover { background: #dde7f0; }
 /* ---------- 扫描「加自选」按钮 ---------- */
 .scan-add { margin-left: auto; align-self: center; border: 1px solid #4c6ef5; color: #4c6ef5; background: #fff; border-radius: 10px; font-size: 10px; padding: 1px 7px; cursor: pointer; }
 .scan-add:hover { background: #4c6ef5; color: #fff; }
+.scan-add.added, .scan-add[disabled] { border-color: #ced4da; color: #adb5bd; background: #f1f3f5; cursor: default; }
+.scan-add.added:hover, .scan-add[disabled]:hover { background: #f1f3f5; color: #adb5bd; }
 
 /* ---------- 持仓行内联编辑 ---------- */
 .pos-edit { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--muted); }
