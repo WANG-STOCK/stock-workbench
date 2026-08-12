@@ -63,13 +63,32 @@ def fetch_kline_em(code, period="1m", limit=60):
            f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
            f"&klt={klt}&fqt=0&end=20500101&lmt={limit}")
     import subprocess
+    raw = ""
+    # Git Bash 子进程下：用 shell=True 让 bash 把 Windows 路径标准化后再调 curl；
+    # 若用 ['curl', ...] 可能撞其它实现的 curl（rc=56）。东财 kline 端点容易被风控抖动，
+    # 加重试 3 次，失败时 fallback 到 5 分钟（保证盘中建议面板始终有数据）
     try:
-        out = subprocess.run(
-            ["curl", "-s", "--max-time", "12", "-A",
-             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-             url],
-            capture_output=True, text=True, timeout=15)
-        raw = out.stdout
+        for attempt in range(3):
+            for hdr_args in (
+                '-H "Referer: https://quote.eastmoney.com/" -H "Accept: */*"',
+                '',
+            ):
+                cmd = f'curl -s --max-time 10 {hdr_args} "{url}"'.strip()
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=13, shell=True)
+                if out.returncode == 0 and out.stdout and '"klines"' in out.stdout and len(out.stdout) > 1000:
+                    raw = out.stdout
+                    break
+            if raw:
+                break
+            import time as _t
+            _t.sleep(1.0)
+        # Fallback：东财 1m 拉不到时用 5m 数据顶上（盘中建议面板不断）
+        if not raw and period == "1m":
+            try:
+                fb = fetch_kline_online(code, "5m", max(limit, 60))
+                return fb or []
+            except Exception:
+                return []
         if not raw:
             return []
         data = json.loads(raw)
