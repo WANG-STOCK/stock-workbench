@@ -12,10 +12,36 @@
       <span class="logo">📈</span>
       <span>婷婷量化AI</span>
     </div>
-    <div class="status">
-      <span class="badge" id="marketBadge">A股 · 沪深</span>
-      <span class="badge" id="tdxStatus">数据源：检测中…</span>
-      <span class="badge clock" id="clock">--:--:--</span>
+    <div class="global-search">
+      <input id="globalSearch" class="input gs-input" placeholder="🔍 搜索股票 / 代码 / 拼音">
+      <div id="globalSearchResults" class="global-search-results"></div>
+    </div>
+    <div class="topbar-actions">
+      <details class="top-menu top-period">
+        <summary>📊 周期</summary>
+        <div class="top-menu-body">
+          <button class="period-opt" data-period="1m">1分</button>
+          <button class="period-opt" data-period="5m">5分</button>
+          <button class="period-opt" data-period="15m">15分</button>
+          <button class="period-opt" data-period="daily">日</button>
+          <button class="period-opt" data-period="weekly">周</button>
+        </div>
+      </details>
+      <button id="globalJudge" class="top-btn" title="按当前持仓+候选一键判案">⚖ 全局判案</button>
+      <details class="top-menu top-account">
+        <summary>📋 账户</summary>
+        <div class="top-menu-body account-body">
+          <div class="kpi"><div class="kpi-label">总资产</div><div class="kpi-val" id="kpiAsset">--</div></div>
+          <div class="kpi"><div class="kpi-label">可用资金</div><div class="kpi-val" id="kpiCash">--</div></div>
+          <div class="kpi kpi-today"><div class="kpi-label">当日盈亏</div><div class="kpi-val" id="kpiToday">--</div></div>
+          <div class="kpi kpi-total"><div class="kpi-label">累计盈亏</div><div class="kpi-val" id="kpiTotal">--</div></div>
+        </div>
+      </details>
+      <span class="status">
+        <span class="badge" id="marketBadge">A股 · 沪深</span>
+        <span class="badge" id="tdxStatus">数据源：检测中…</span>
+        <span class="badge clock" id="clock">--:--:--</span>
+      </span>
     </div>
   </header>
 
@@ -107,9 +133,6 @@
               <button type="button" class="ip-btn" data-period="5m">5分钟</button>
             </span>
             <span class="sub">每 5 秒刷新</span>
-          </div>
-          <div class="sub" style="font-size:11px;color:var(--muted);margin:4px 0 8px;line-height:1.5">
-            解决"拉升到 6 个点跌到 4 个点该不该卖"这类<strong>分时转折</strong>判断，不是日 K 综合评分。
           </div>
           <ul id="intradayList" class="intraday-list"></ul>
         </section>
@@ -234,8 +257,16 @@
           </div>
           <div class="sub" style="font-size:11px;color:var(--muted);margin:-4px 0 8px;line-height:1.5">「可用资金」= 你当前空闲、可以用来买股票的总钱数（元）。默认 10 万，按实际改。它只决定「扫描候选股」时每只建议买多少股，不影响行情和持仓。</div>
           <div class="row">
-            <button id="scanBtn" class="btn wide">扫描候选</button>
+            <button id="scanBtn" class="btn wide">▶ 开始扫描</button>
             <button id="rebuildBtn" class="btn scan-rebuild" title="重新生成 A 股池">重建池</button>
+          </div>
+          <div class="scan-filters">
+            <span class="sf-label">涨幅区间</span>
+            <label class="sf-chip"><input type="checkbox" id="sfRng1" checked> ≤3%</label>
+            <label class="sf-chip"><input type="checkbox" id="sfRng2" checked> 3~8%</label>
+            <label class="sf-chip"><input type="checkbox" id="sfRng3" checked> >8%</label>
+            <span style="flex:1"></span>
+            <span id="sfSummary" class="sub" style="color:var(--muted)"></span>
           </div>
           <div id="screenerResults" class="screener-results"></div>
 

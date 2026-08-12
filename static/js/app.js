@@ -48,6 +48,37 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), sec * 1000);
   }
 
+  // 账户中心 KPI（P1）：从 /api/positions_advice 拿带实时价的数据计算
+  async function refreshKpi() {
+    try {
+      const d = await api("GET", "/api/positions_advice");
+      if (!d || !d.ok) return;
+      const positions = d.positions || [];
+      const cash = +(d.capital || 0);
+      let mv = 0, cost = 0, today = 0;
+      for (const p of positions) {
+        const price = +(p.price || p.now || 0);
+        const c = +(p.cost || 0);
+        const qty = +(p.shares || 0);
+        const prev = +p.prev_close || (c && p.change_pct != null ? price / (1 + p.change_pct / 100) : 0);
+        mv += price * qty;
+        cost += c * qty;
+        if (prev) today += (price - prev) * qty;
+      }
+      const asset = (d.total_value != null ? +d.total_value : mv + cash);
+      const total = mv - cost;
+      const set = (id, val, cls) => {
+        const el = $(id); if (!el) return;
+        el.textContent = val;
+        el.classList.remove("up", "down"); if (cls) el.classList.add(cls);
+      };
+      set("#kpiAsset", fmt(asset, 0));
+      set("#kpiCash", fmt(cash, 0));
+      set("#kpiToday", (today >= 0 ? "+" : "") + fmt(today, 0), today > 0 ? "up" : today < 0 ? "down" : "");
+      set("#kpiTotal", (total >= 0 ? "+" : "") + fmt(total, 0), total > 0 ? "up" : total < 0 ? "down" : "");
+    } catch (e) { /* ignore */ }
+  }
+
   function fmt(n, d = 2) { return n == null ? "--" : Number(n).toFixed(d); }
   function chgClass(v) { return v > 0 ? "up" : v < 0 ? "down" : ""; }
 
@@ -169,6 +200,73 @@
         state.current.period = b.dataset.period;
         if (state.current.code) loadKline();
       }));
+
+    // 全局搜索（P1）：跨面板股票查找
+    const gs = $("#globalSearch");
+    const gsResults = $("#globalSearchResults");
+    let gsTimer;
+    if (gs) gs.addEventListener("input", e => {
+      clearTimeout(gsTimer);
+      const q = e.target.value.trim();
+      if (!q) { gsResults.classList.remove("open"); gsResults.innerHTML = ""; return; }
+      gsTimer = setTimeout(async () => {
+        const list = await api("GET", "/api/search?q=" + encodeURIComponent(q));
+        if (!list || !list.length) { gsResults.innerHTML = '<div class="gsr-row"><span>无匹配</span></div>'; gsResults.classList.add("open"); return; }
+        gsResults.innerHTML = list.slice(0, 8).map(it =>
+          `<div class="gsr-row" data-code="${it.code}" data-name="${it.name}">
+             <span>${it.name}</span><span class="gsr-meta">${it.code}</span></div>`).join("");
+        gsResults.classList.add("open");
+        gsResults.querySelectorAll(".gsr-row[data-code]").forEach(el =>
+          el.addEventListener("click", () => {
+            openStock(el.dataset.code, el.dataset.name);
+            gs.value = ""; gsResults.classList.remove("open"); gsResults.innerHTML = "";
+          }));
+      }, 220);
+    });
+    document.addEventListener("click", e => {
+      if (gs && !gs.contains(e.target) && !gsResults.contains(e.target)) {
+        gsResults.classList.remove("open");
+      }
+    });
+
+    // 顶部周期菜单（P1）：联动主周期切换
+    document.querySelectorAll(".top-period .period-opt").forEach(b =>
+      b.addEventListener("click", () => {
+        const p = b.dataset.period;
+        document.querySelectorAll(".top-period .period-opt").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        document.querySelectorAll("#periodBtns button").forEach(x =>
+          x.classList.toggle("active", x.dataset.period === p));
+        state.current.period = p;
+        if (state.current.code) loadKline();
+        // 关掉 dropdown
+        const menu = b.closest(".top-menu"); if (menu) menu.removeAttribute("open");
+      }));
+
+    // 全局判案（P1）：触发每日策略的"open_judgment"并弹窗综述
+    const gj = $("#globalJudge");
+    if (gj) gj.addEventListener("click", async () => {
+      gj.disabled = true; const old = gj.textContent; gj.textContent = "判案中…";
+      try {
+        const r = await api("GET", "/api/daily_strategy");
+        const op = r && r.open;
+        if (!op) { toast("暂无开盘判断，先把持仓同步并等 09:28 自动化跑", true); return; }
+        const t = op.trend, conf = op.confidence, dt = (op.ts || "").slice(11, 16);
+        const sugg = (op.suggestions || []).slice(0, 6);
+        const body = sugg.map(s => `· ${s.action} ${s.name}(${s.code})${s.price?" @"+s.price:""}${s.qty?" ×"+s.qty+"股":""}`).join("\n");
+        const html = `<div style="text-align:left;font-size:13px;line-height:1.7">
+          <div>大势：<b style="color:${t==='看涨'?'#c92a2a':t==='看跌'?'#2b8a3e':'#888'}">${t}</b>　置信 ${conf}%　<span style="color:#999">(更新于 ${dt})</span></div>
+          <div style="margin:8px 0 4px;color:#666">前 6 条建议：</div>
+          <pre style="margin:0;white-space:pre-wrap;font-family:inherit">${body || "(空)"}</pre>
+        </div>`;
+        if (window.WorkBuddyShowModal) window.WorkBuddyShowModal(html, "⚖ 全局判案 · 今日开盘判断");
+        else alert(`大势 ${t} / 置信 ${conf}%\n\n${body}`);
+      } catch (e) { toast("判案失败：" + e.message, true); }
+      finally { gj.disabled = false; gj.textContent = old; }
+    });
+
+    // 账户中心 KPI（P1）：10 秒拉一次
+    refreshKpi(); state.timers.push(setInterval(refreshKpi, 10000));
 
     // 指标开关（HTML 已精简为 BOLL/MACD/KDJ 三项，无 RSI）
     ["tgBoll", "tgMacd", "tgKdj"].forEach(id =>
@@ -639,8 +737,27 @@
       el.innerHTML = `<div class="signal-empty">${data.count ? "无符合「" + (data.strategy_label || strategy) + "」的标的" : "该范围暂无股票（自选为空 / 未配置通达信 / universe.txt 为空）"}</div>`;
       return;
     }
-    el.innerHTML = `<div class="scan-hint">策略：${data.strategy_label} · 命中 ${data.results.length} 只（按评分降序）</div>` + renderScanRows(data.results);
+    el.innerHTML = `<div class="scan-hint">策略：${data.strategy_label} · 命中 ${data.results.length} 只（按评分降序）</div>` + renderScanRows(_filterByRange(data.results));
     bindScanRows(el);
+  }
+
+  // 涨幅区间前端过滤（P4）：根据勾选筛选
+  function _filterByRange(results) {
+    if (!Array.isArray(results)) return results || [];
+    const r1 = document.getElementById("sfRng1");
+    const r2 = document.getElementById("sfRng2");
+    const r3 = document.getElementById("sfRng3");
+    const summary = document.getElementById("sfSummary");
+    const on = [(r1 && r1.checked), (r2 && r2.checked), (r3 && r3.checked)];
+    const keep = (pct) => {
+      if (pct == null) return on[1] || on[2];  // 缺数据默认放行到 中/高
+      if (pct <= 3) return on[0];
+      if (pct <= 8) return on[1];
+      return on[2];
+    };
+    const out = results.filter(r => keep(r.change_pct != null ? r.change_pct : null));
+    if (summary) summary.textContent = `命中 ${out.length}/${results.length} 只`;
+    return out;
   }
 
   async function pollScan(strategy) {
@@ -650,7 +767,9 @@
       const total = st.total || 1;
       const pct = Math.min(100, Math.round((st.done / total) * 100));
       const isCand = st.scope === "candidate";
-      const rows = isCand ? renderCandidateRows(st.results) : renderScanRows(st.results);
+      // 涨幅区间筛选（P4）：仅作用于候选池和全市场扫描
+      const filtered = isCand || st.scope === "online_all" ? _filterByRange(st.results) : (st.results || []);
+      const rows = isCand ? renderCandidateRows(filtered) : renderScanRows(filtered);
       const hint = st.results.length
         ? (isCand
             ? `<div class="scan-hint">十五五成长池（纯主板 ${st.total} 只）· 命中 ${st.results.length} 只（综合分=技术50%+基本面40%+赛道趋势10%，按综合分降序）</div>`
@@ -808,7 +927,7 @@
       const opPrice = p.op_price != null ? fmt(p.op_price) : "--";
       const opQty = p.op_qty != null ? p.op_qty : 0;
       const badgeTxt = act === "买入" ? "建议买入" : act === "卖出" ? "建议卖出" : "建议不动";
-      const basis = p.op_basis ? `📐 价格逻辑：${p.op_basis}（随股价移动，不再死板）` : "";
+      const basis = p.op_basis ? `📐 价格逻辑：${p.op_basis}` : "";
       // 基本面/预期（PE + 机构目标价 + 新闻，best-effort）
       let factTxt = "";
       const f = p.facts;
