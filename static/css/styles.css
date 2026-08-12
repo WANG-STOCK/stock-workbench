@@ -339,6 +339,12 @@ button.mini:hover { background: #dde7f0; }
 .it-wait { color: var(--muted); }
 @keyframes it-blink { 0%,100% { box-shadow: 0 0 0 0 rgba(201,42,42,0.0);} 50% { box-shadow: 0 0 0 3px rgba(201,42,42,0.25);} }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+/* 盘中分时周期切换按钮 */
+.intraday-periods { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; }
+.ip-btn { font-size: 11px; padding: 2px 9px; border: 1px solid #ff6b35; border-radius: 999px; background: #fff; color: #c2410c; cursor: pointer; transition: all .2s; line-height: 1.6; }
+.ip-btn.active { background: #ff6b35; color: #fff; }
+.ip-btn:hover { background: #ffe5d0; }
+.ip-btn.active:hover { background: #e8590c; }
 
 /* ---------- 评分权重 ---------- */
 .weight-sliders { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }

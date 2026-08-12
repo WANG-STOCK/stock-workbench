@@ -16,7 +16,7 @@ import urllib.parse
 import json
 
 SINA_KLINE = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
-SCALE_MAP = {"5m": 5, "15m": 15, "30m": 30, "60m": 60, "daily": 240, "weekly": 1200}
+SCALE_MAP = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "daily": 240, "weekly": 1200}
 TDX_PERIODS = ("daily", "weekly")
 
 # K线磁盘缓存：让全市场扫描首次之后极快（按"当天"过期，次日自动刷新）
@@ -48,6 +48,46 @@ def fetch_kline_online(code, period="daily", limit=300):
             "low": float(d["low"]),
             "close": float(d["close"]),
             "volume": float(d["volume"]),
+        })
+    return bars
+
+
+# 东方财富 1 分钟线（新浪 scale=1 返回 null、腾讯 m1/min 接口不存在，故 1m 走东财）
+def fetch_kline_em(code, period="1m", limit=60):
+    market = "1" if code.startswith("sh") else "0"
+    num = code[2:]
+    secid = f"{market}.{num}"
+    klt = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60}.get(period, 1)
+    url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+           f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
+           f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
+           f"&klt={klt}&fqt=0&end=20500101&lmt={limit}")
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["curl", "-s", "--max-time", "12", "-A",
+             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+             url],
+            capture_output=True, text=True, timeout=15)
+        raw = out.stdout
+        if not raw:
+            return []
+        data = json.loads(raw)
+    except Exception:
+        return []
+    kl = data.get("data", {}).get("klines") if data.get("data") else None
+    if not kl:
+        return []
+    bars = []
+    for line in kl:
+        parts = line.split(",")
+        if len(parts) < 6:
+            continue
+        bars.append({
+            "date": parts[0],
+            "open": float(parts[1]), "close": float(parts[2]),
+            "high": float(parts[3]), "low": float(parts[4]),
+            "volume": float(parts[5]),
         })
     return bars
 
@@ -157,6 +197,9 @@ def get_kline(code, period="daily", limit=300, tdx_path=None):
             else:
                 bars = daily
             return bars[-limit:] if limit else bars
+    # 1 分钟线：新浪 scale=1 不返回数据、腾讯 m1/min 不存在，统一走东方财富（在线、不缓存，保证盘中时效）
+    if period == "1m":
+        return fetch_kline_em(code, period, limit)
     # 在线 + 磁盘缓存（避免每次全市场扫描都重新拉取）
     cached = _kline_disk_get(code, period, limit)
     if cached is not None:

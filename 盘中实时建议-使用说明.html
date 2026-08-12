@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>婷婷量化AI · 盘中实时建议使用说明</title>
 <style>
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 760px; margin: 24px auto; padding: 0 18px; color: #1f2933; line-height: 1.7; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 780px; margin: 24px auto; padding: 0 18px; color: #1f2933; line-height: 1.7; }
   h1 { font-size: 22px; color: #c2410c; }
   h2 { font-size: 17px; color: #1d4ed8; margin-top: 28px; border-left: 4px solid #1d4ed8; padding-left: 10px; }
   .case { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
@@ -16,6 +16,8 @@
   ol li, ul li { margin: 6px 0; }
   .warn { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; font-size: 14px; }
   code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+  .btn-demo { display:inline-block;font-size:11px;padding:2px 9px;border:1px solid #ff6b35;border-radius:999px;color:#c2410c;margin:0 2px; }
+  .btn-demo.on { background:#ff6b35;color:#fff; }
 </style>
 </head>
 <body>
@@ -25,23 +27,28 @@
   <h2>面板在哪里</h2>
   <ul>
     <li>首页顶部新增一个<strong>橙色"⚡ 盘中实时建议"面板</strong>，<strong>每 5 秒自动刷新</strong>（带脉动圆点）。</li>
+    <li>面板标题右侧有周期切换：<span class="btn-demo on">1分钟</span><span class="btn-demo">5分钟</span>，<strong>默认 1 分钟</strong>（最及时）。</li>
     <li>每只<strong>持仓卡片底部</strong>也有一行内联分时建议，随时可见。</li>
     <li>遇到"立即卖出"等强卖场景，该行会<strong>红色闪烁</strong>警示，不会让你错过。</li>
   </ul>
 
-  <h2>颜色与动作含义</h2>
+  <h2>周期怎么选</h2>
   <ul>
-    <li><span class="tag t-red">立即 / 5分钟内止盈</span> 红字 + 可能闪烁 → 该卖了，别犹豫</li>
-    <li><span class="tag t-blue">持有观察</span> 蓝字 → 暂时不急，再看几根</li>
-    <li><span class="tag t-green">低吸加仓</span> 绿字 → 可以买一点</li>
+    <li><span class="btn-demo on">1分钟</span> <strong>最及时</strong>：适合盯盘、抓分时转折，信号更敏感（推荐盘中用）。</li>
+    <li><span class="btn-demo">5分钟</span> <strong>更稳</strong>：过滤噪声，信号更滞后但更确定，适合不想被短线抖动干扰时。</li>
+    <li>两者可随时切换，切换后立刻按新周期重算。</li>
   </ul>
 
-  <h2>实测案例（2026-08-12 13:51 生益科技 sh600183）</h2>
+  <h2>关于"30 秒级"时效</h2>
+  <p>免费行情接口<strong>没有 30 秒 K 线</strong>，最小可用的是 1 分钟线。我们用 <strong>1 分钟 K 线（东方财富）+ 实时价每 5 秒刷新</strong> 来逼近秒级监控，时效已足够盯盘。真正的逐笔 tick 级别需付费数据源，暂未接入。</p>
+
+  <h2>实测对比案例（2026-08-12 14:08 生益科技 sh600183）</h2>
   <div class="case">
-    <p>日内最高 <strong>+7.17%</strong>，现价 <strong>+3.20%</strong>，已回落 <strong>3.97%</strong>。</p>
-    <p>系统识别场景：<strong>急涨后回落</strong> → 建议 <span class="tag t-blue">持有观察</span></p>
-    <p>原因：缩量（量比 0.48）上攻乏力，但 MACD 仍扩张、未破位，所以先不急着卖，再看一根。</p>
-    <p>👉 这正是您说的"<strong>拉升到 6 个点又跌到 4 个点，该不该卖</strong>"——系统现在会按分时实时盯这个动作，而不是只看日K。</p>
+    <p>日内最高 <strong>+7.17%</strong>，现价 <strong>+2.6%</strong> 左右，已从高点回落约 4.5%。</p>
+    <p>同一时刻两个周期给出不同判断，体现多周期价值：</p>
+    <p>· <span class="btn-demo on">1分钟</span> → <strong>持有观察</strong>：KDJ J=80.8（未到极端）、RSI 36.9、缩量，MACD 仍扩张 → 再等一根</p>
+    <p>· <span class="btn-demo">5分钟</span> → <span class="tag t-red">立即止盈</span>：KDJ J=94.2 超买且拐头向下 → 该卖了</p>
+    <p>👉 建议<strong>以 1 分钟为主盯转折、5 分钟为辅确认</strong>：1 分钟先给"减速"信号，5 分钟确认"超买拐头"时果断止盈。</p>
   </div>
 
   <h2>下一步：王总您来点一下推送</h2>
@@ -50,7 +57,7 @@
     <li>左上会显示 <code>stock-workbench</code> 仓库，并提示有若干 commits 待推送（"ahead"）。</li>
     <li>点右上角蓝色 <strong>Push origin</strong> 按钮（之前已配好代理 <code>127.0.0.1:2334</code>，应能正常连）。</li>
     <li>等进度条走完（几秒到 1 分钟）。</li>
-    <li>Render 会<strong>自动重新部署</strong>（约 1–2 分钟），完成后在网站按 <code>Ctrl+Shift+R</code> 硬刷新即可看到新面板。</li>
+    <li>Render 会<strong>自动重新部署</strong>（约 1–2 分钟），完成后在网站按 <code>Ctrl+Shift+R</code> 硬刷新即可看到新面板与周期切换。</li>
   </ol>
 
   <div class="warn">

@@ -444,10 +444,10 @@ def _advise_position(code, capital):
 
 
 # ---------- 盘中实时建议（高频刷新，按分时判断该不该买/卖） ----------
-def _intraday_for(code, price=None, prev_close=None):
+def _intraday_for(code, price=None, prev_close=None, period="1m"):
     """对单只股票计算盘中实时建议（场景+动作+价+止损+原因）。
 
-    优先用实时行情（腾讯实时接口）做"这一刻"的价；分时图（5min K 线）做动作判断。
+    优先用实时行情（腾讯实时接口）做"这一刻"的价；分时图（默认 1min K 线，可切 5m）做动作判断。
     """
     try:
         quote = ds.fetch_realtime([code]).get(code) or {}
@@ -460,14 +460,17 @@ def _intraday_for(code, price=None, prev_close=None):
     if not price or not prev_close:
         return {"scenario": "数据不足", "reasons": ["实时价或昨收缺失"]}
     try:
-        bars5m = _cache_get(code, "5m", 48) or ds.get_kline(code, "5m", 48, _tdx_path or None)
-        _cache_set(code, "5m", 48, bars5m)
+        if period == "1m":
+            bars = ds.get_kline(code, period, 60)  # 东财在线、不缓存，保证盘中时效
+        else:
+            bars = _cache_get(code, period, 60) or ds.get_kline(code, period, 60, _tdx_path or None)
+            _cache_set(code, period, 60, bars)
     except Exception:
-        bars5m = []
+        bars = []
     if not quote:
         quote = {"code": code, "price": price, "prev_close": prev_close,
                  "high": price, "low": price, "open": prev_close, "volume": 0}
-    return intraday_mod.intraday_advice(quote, bars5m or [], prev_close)
+    return intraday_mod.intraday_advice(quote, bars or [], prev_close)
 
 
 # ---------- 请求处理 ----------
@@ -770,13 +773,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, _review_summary(date))
             return
         if route == "/api/intraday_advice":
-            # 盘中实时建议：基于 5min K 线 + 实时价，给"该不该买/卖"的瞬时判断
+            # 盘中实时建议：基于 1min/5min K 线 + 实时价，给"该不该买/卖"的瞬时判断
             code = qs.get("code", [""])[0].strip().lower()
             if not code:
                 self._send(400, {"error": "code required"}); return
-            # 复用 _intraday_for：自动取实时价 + 5min K 线
-            res = _intraday_for(code)
+            period = qs.get("period", ["1m"])[0].strip().lower()
+            if period not in ("1m", "5m", "15m", "30m", "60m"):
+                period = "1m"
+            # 复用 _intraday_for：自动取实时价 + 指定周期 K 线
+            res = _intraday_for(code, period=period)
             res["code"] = code
+            res["period"] = period
             self._send(200, res)
             return
         self._send(404, {"error": "unknown route"})

@@ -92,6 +92,17 @@
     // 盘中实时建议：5 秒高频刷新（解决"拉升到6个点跌到4个点该不该卖"的分时判断）
     pollIntraday();
     state.timers.push(setInterval(pollIntraday, 5000));
+    // 盘中分时周期切换（1分钟 / 5分钟）
+    const periodBox = document.getElementById("intradayPeriods");
+    if (periodBox) {
+      periodBox.addEventListener("click", e => {
+        const btn = e.target.closest(".ip-btn");
+        if (!btn) return;
+        intradayPeriod = btn.dataset.period || "1m";
+        periodBox.querySelectorAll(".ip-btn").forEach(b => b.classList.toggle("active", b === btn));
+        pollIntraday();
+      });
+    }
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
@@ -931,6 +942,7 @@
   // 盘中实时建议：每只持仓 + 当前查看股票，按 5min K 线的分时判断"该不该买/卖"
   // 高频刷新（5 秒），解决日 K 综合评分"来不及"的问题
   let _intradaySeq = 0;
+  let intradayPeriod = "1m";  // 分时周期：1m / 5m，前端可切换
   async function pollIntraday() {
     const seq = ++_intradaySeq;
     try {
@@ -941,7 +953,7 @@
       if (!codes.size) return;
       // 并行请求
       const results = await Promise.allSettled(
-        Array.from(codes).map(c => api("GET", "/api/intraday_advice?code=" + c))
+        Array.from(codes).map(c => api("GET", "/api/intraday_advice?code=" + c + "&period=" + intradayPeriod))
       );
       if (seq !== _intradaySeq) return;  // 被更新的轮询抢占
       state.intraday = {};
