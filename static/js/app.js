@@ -49,32 +49,24 @@
   }
 
   // 账户 + AI 建议（账户总览+持仓 dashboard）取一次 /api/positions_advice，
-  // 同时算出 4 个大字 KPI、渲染持仓表、渲染 AI 建议卡片。
+  // 同时算出 4 个大字 KPI（现金来自后端账户数据/截图，当日盈亏为真实账户级差值）、
+  // 渲染持仓表、渲染 AI 建议卡片、回填当日交易录入的代码下拉。
   async function renderAccount() {
     try {
-      const cashInput = document.getElementById("cashInput");
-      let cash = +(cashInput && cashInput.value) || 100000;
       const d = await api("GET", "/api/positions_advice");
       if (!d || !d.ok) return;
-      d.capital = cash;
       const positions = d.positions || [];
       state.posAdvice = positions;
 
-      // 大字 KPI
-      let mv = 0, cost = 0, today = 0;
-      for (const p of positions) {
-        const price = +(p.price || 0);
-        const c = +(p.cost || 0);
-        const qty = +(p.shares || 0);
-        mv += price * qty;
-        cost += c * qty;
-        const prev = p.prev_close != null ? +p.prev_close
-                   : (c && p.change_pct != null ? price / (1 + p.change_pct / 100) : 0);
-        if (prev) today += (price - prev) * qty;
-      }
-      const asset = mv + cash;
+      const cash = +(d.cash || 0);
+      const mv = +(d.market_value || 0);
+      const asset = +(d.total_value || 0);
+      const today = +(d.daily_pnl || 0);          // 真实当日盈亏（账户级：当前资产 − 开盘基准资产）
+      const todayPct = +(d.daily_pnl_pct || 0);
+      // 累计盈亏 = 持仓市值 − 持仓成本
+      let cost = 0;
+      for (const p of positions) cost += (+(p.cost || 0)) * (+(p.shares || 0));
       const total = mv - cost;
-      const todayPct = mv > 0 ? (today / mv * 100) : 0;
 
       const setv = (id, v, cls) => {
         const el = document.getElementById(id); if (!el) return;
@@ -88,13 +80,18 @@
       setv("akToday",  signed(today, 0), today > 0 ? "up" : today < 0 ? "down" : "");
       document.getElementById("akAssetSub").textContent = `现金占 ${(cash / Math.max(asset, 1) * 100).toFixed(0)}%`;
       document.getElementById("akPositionSub").textContent = `${positions.length} 只持仓`;
-      document.getElementById("akTodaySub").textContent = signed(todayPct, 2) + "% (vs 昨收)";
+      document.getElementById("akTodaySub").textContent = signed(todayPct, 2) + "% (vs 开盘基准)";
 
       // 兼容顶部折叠账户中心
       setv("kpiAsset", fmt(asset, 0));
       setv("kpiCash",  fmt(cash, 0));
       setv("kpiToday", signed(today, 0), today > 0 ? "up" : today < 0 ? "down" : "");
       setv("kpiTotal", signed(total, 0), total > 0 ? "up" : total < 0 ? "down" : "");
+
+      // 当日交易录入：代码下拉回填当前持仓（datalist 自动补全，也允许键入新代码）
+      const dl = document.getElementById("heldCodes");
+      if (dl) dl.innerHTML = positions.map(p =>
+        `<option value="${p.code}">${p.name || p.code}</option>`).join("");
 
       renderPosTable(positions);
       renderAiAdvice(positions);
@@ -200,9 +197,6 @@
     } catch (e) {}
 
     bindEvents();
-    // 还原现金（持仓汇总条可编辑，localStorage 持久化）
-    const _cash = localStorage.getItem("wb_cash");
-    if (_cash != null) $("#cashInput").value = _cash;
     // 任何一步失败都不影响其余渲染（避免整页白屏）
     try { await loadWatchlist(); } catch (e) { console.warn("自选加载失败：", e); }
     try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
@@ -240,12 +234,6 @@
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
-    // 现金改了实时同步到拉取（避免刷新延迟）
-    const cashEl = document.getElementById("cashInput");
-    if (cashEl) cashEl.addEventListener("change", () => {
-      try { localStorage.setItem("wb_cash", cashEl.value); } catch (e) {}
-      renderAccount();
-    });
     // 调试：?demo=scan 同时跑一次候选扫描
     const _qp = new URLSearchParams(location.search);
     if (_qp.get("demo") === "scan") {
@@ -338,8 +326,8 @@
     });
     $("#rebuildBtn").addEventListener("click", rebuildUniverse);
 
-    // 持仓台账
-    $("#addPosBtn").addEventListener("click", addPosition);
+    // 当日交易录入（买卖驱动真实盈亏 / 成本 / 股数 / 现金）
+    bindTradeEntry();
     $("#saveWeights").addEventListener("click", saveWeights);
     $("#resetWeights").addEventListener("click", resetWeights);
     $("#saveApiBase").addEventListener("click", async () => {
@@ -375,16 +363,35 @@
         : (p ? "该路径不存在或不是 vipdoc 目录，请检查（应含 sh\\lday、sz\\lday）" : "已清空，使用在线行情");
       toast(r.tdx_available ? "通达信数据已启用" : (p ? "路径未生效" : "已切换为在线行情"));
     });
+  }
 
-    // 现金（持仓汇总条）：编辑即持久化 + 触发重新测算（防抖，避免每个字都打后端）
-    // 现金改动：直接重渲染账户 dashboard（已删除 loadPositionAdvice，与 renderAccount 取代）
-    $("#cashInput").addEventListener("input", () => {
-      try { localStorage.setItem("wb_cash", $("#cashInput").value); } catch (e) {}
-      renderAccount();
-    });
-    $("#cashInput").addEventListener("change", () => {
-      try { localStorage.setItem("wb_cash", $("#cashInput").value); } catch (e) {}
-      renderAccount();
+  // 当日交易录入：提交 → POST /api/trade → 重拉账户（现金/成本/股数/真实盈亏自动更新）
+  function bindTradeEntry() {
+    const btn = document.getElementById("tradeBtn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const code = ($("#tradeCode").value || "").trim();
+      const side = $("#tradeSide").value;
+      const qty = parseInt($("#tradeQty").value || "0", 10);
+      const price = parseFloat($("#tradePrice").value || "0");
+      if (!code) { toast("请输入代码/名称"); return; }
+      if (!qty || qty <= 0) { toast("请输入数量"); return; }
+      if (!price || price <= 0) { toast("请输入价格"); return; }
+      btn.disabled = true; const old = btn.textContent; btn.textContent = "记录中…";
+      try {
+        const r = await api("POST", "/api/trade", { code, side, qty, price });
+        if (r && r.ok) {
+          toast(`${side === "buy" ? "买入" : "卖出"} ${qty}股 @¥${price} 已记录（现金 ¥${fmt(r.cash, 0)}）`);
+          $("#tradeQty").value = ""; $("#tradePrice").value = "";
+          await renderAccount();
+        } else {
+          toast("记录失败：" + (r && r.error ? r.error : "未知错误"));
+        }
+      } catch (e) {
+        toast("记录失败：" + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = old;
+      }
     });
   }
 
@@ -1038,22 +1045,7 @@
       openStock(code, m.name || code);
     }));
   }
-  async function addPosition() {
-    const code = $("#posCode").value.trim();
-    const shares = parseInt($("#posShares").value || "0", 10);
-    if (!code) { toast("请输入代码"); return; }
-    if (!shares || shares <= 0) { toast("请输入股数"); return; }
-    const cost = parseFloat($("#posCost").value || "0") || 0;
-    let name = code;
-    const rt = await api("GET", "/api/quotes?codes=" + code).catch(() => ({}));
-    if (rt[code] && rt[code].name) name = rt[code].name;
-    await api("POST", "/api/positions", { code, name, shares, cost });
-    $("#posCode").value = ""; $("#posShares").value = ""; $("#posCost").value = "";
-    await loadPositions();
-    // 若当前正看这只，刷新建议里的持仓
-    if (state.current.code === code) { $("#holdInput").value = shares; await recomputeAdvice(); }
-    toast(`已新增：${name} ${shares}股×¥${cost}（已同步云端主源）`);
-  }
+
 
   // ---------- 评分权重 ----------
   function setupWeights(cfg) {

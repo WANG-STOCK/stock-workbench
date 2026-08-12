@@ -122,21 +122,29 @@ body {
 .scan-filters .sf-chip:has(input:checked) { border-color: var(--blue); color: var(--blue); }
 .scan-filters .sf-chip input { margin: 0; cursor: pointer; }
 
-/* ---------- 整体栅格：中间主区 65% + 右侧自选/扫描 35% ---------- */
+/* ---------- 整体栅格：左列(账户+策略) 34% + 中列(AI建议) 33% + 右列(自选/扫描) 33% ---------- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(560px, 1fr) minmax(360px, 33%);
+  grid-template-columns: minmax(430px, 34%) minmax(360px, 33%) minmax(360px, 33%);
   height: calc(100vh - 52px);
   gap: 10px;
   padding: 10px;
   background: var(--bg);
 }
 
+/* 左列：账户总览(上，固定高度内部滚动) + 每日/尾盘/复盘(下，占据剩余可滚动) */
+.col-left {
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0; min-height: 0; overflow: hidden;
+}
+.col-left > .panel-account { flex: 0 0 auto; max-height: 62%; overflow-y: auto; }
+.col-left > .bottom-fold { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
 .center {
   display: flex; flex-direction: column; gap: 10px;
   min-width: 0; min-height: 0; overflow: hidden;
 }
-.center > .panel { flex: 0 0 auto; }
+.center > .panel { flex: 1 1 auto; }
 
 /* ---------- 账户总览 + 持仓（dashboard） ---------- */
 .panel-account { background: linear-gradient(135deg, #fff7ed 0%, #ffe5d0 100%); border-color: #ffb070; }
@@ -151,7 +159,7 @@ body {
 .akpi-val.down { color: var(--dn); }
 .akpi-sub { color: var(--muted); font-size: 10px; }
 .akpi-today { background: rgba(255,236,209,0.85); border-color: #ff8b1a; }
-.pos-table-wrap { overflow-y: auto; max-height: 38vh; }
+.pos-table-wrap { overflow-y: auto; max-height: 30vh; }
 .pos-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .pos-table th, .pos-table td { padding: 6px 8px; text-align: left; border-bottom: 1px dashed rgba(255,176,112,0.3); }
 .pos-table th { background: rgba(255,236,209,0.7); color: #8b4b00; font-weight: 600; position: sticky; top: 0; z-index: 1; }
@@ -163,11 +171,26 @@ body {
 .pos-table .muted-mini { color: var(--muted); font-size: 10px; }
 .pos-table .muted-cell { text-align: center; color: var(--muted); padding: 16px; }
 
+/* ---------- 当日交易录入（持仓后，买卖驱动真实盈亏） ---------- */
+.trade-entry {
+  margin-top: 10px; padding: 8px 10px; border-top: 1px dashed rgba(255,176,112,0.5);
+  background: rgba(255,255,255,0.45); border-radius: 8px;
+}
+.trade-entry .te-title { font-size: 12px; font-weight: 700; color: #8b4b00; margin-bottom: 6px; }
+.trade-entry .te-row { align-items: center; }
+.trade-entry .te-row .input.small { min-width: 64px; }
+.trade-entry #tradeCode { flex: 1.4 1 0; }
+.trade-entry #tradeSide { flex: 0 0 auto; min-width: 64px; }
+.trade-entry #tradeQty { flex: 0 0 72px; }
+.trade-entry #tradePrice { flex: 0 0 72px; }
+.trade-entry #tradeBtn { flex: 0 0 auto; background: var(--orange); }
+.trade-entry #tradeBtn:hover { background: #d9480f; }
+
 /* ---------- AI 建议卡片 ---------- */
 .panel-aiadvice { background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%); border-color: #74c0fc; }
 .ai-cards {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px; overflow-y: auto; max-height: 56vh;
+  gap: 10px; overflow-y: auto; flex: 1 1 auto; min-height: 0; max-height: none;
 }
 .ai-empty { color: var(--muted); padding: 20px; text-align: center; font-size: 12px; }
 .ai-card {

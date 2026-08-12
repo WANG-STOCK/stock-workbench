@@ -35,6 +35,9 @@ REVIEW = os.path.join(DATA_DIR, "review.json")
 POSITIONS = os.path.join(DATA_DIR, "positions.json")
 # 云端/本地共用的持仓主源（git 跟踪，公开 URL 可达，部署/重启不丢）
 STATIC_POSITIONS = os.path.join(BASE, "static", "positions.json")
+# 账户数据（现金 + 当日基准快照，用于"真实当日盈亏"计算）：runtime 双写 static 主源
+ACCOUNT = os.path.join(DATA_DIR, "account.json")
+STATIC_ACCOUNT = os.path.join(BASE, "static", "account.json")
 CONFIG = os.path.join(DATA_DIR, "config.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -106,6 +109,31 @@ def _load_json(path, default):
 
 def _save_json(path, obj):
     json.dump(obj, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+
+# ---------- 账户数据：现金 + 当日基准快照（用来算"真实当日盈亏"） ----------
+def _load_account():
+    """返回标准化账户：{cash, baseline_date, baseline_cash, baseline_shares{code:shares}}。
+    读取优先级：data/account.json（runtime）> static/account.json（git 主源兜底）。"""
+    a = _load_json(ACCOUNT, None)
+    if not isinstance(a, dict):
+        a = _load_json(STATIC_ACCOUNT, None)
+    if not isinstance(a, dict):
+        a = {}
+    a.setdefault("cash", 0)
+    a.setdefault("baseline_date", "")
+    a.setdefault("baseline_cash", 0)
+    a.setdefault("baseline_shares", {})
+    return a
+
+
+def _sync_account(a):
+    """双写 runtime + 主源（云端只读时跳过主源）。"""
+    _save_json(ACCOUNT, a)
+    try:
+        _save_json(STATIC_ACCOUNT, a)
+    except Exception as e:
+        print("[WARN] static account write failed (cloud may be read-only):", e)
 
 
 # ---------- 选股：按范围取代码 ----------
@@ -846,9 +874,37 @@ class Handler(BaseHTTPRequestHandler):
                     pass
                 total_value += (price or 0) * shares
                 out.append(adv)
-            self._send(200, {"ok": True, "capital": capital,
+            # ---------- 账户现金 + 真实当日盈亏 ----------
+            # 当日盈亏 = (现价×股数 + 现金) − (昨收×开盘基准股数 + 开盘基准现金)
+            # 开盘基准快照在"新的一天首次访问"时自动记录，之后只随交易更新当前态，
+            # 因此盘中买卖后盈亏自动准确（无需对接券商，由用户录入交易驱动）。
+            acct = _load_account()
+            today = _today_str()
+            if acct.get("baseline_date") != today:
+                acct["baseline_date"] = today
+                acct["baseline_cash"] = acct.get("cash", 0)
+                acct["baseline_shares"] = {
+                    p.get("code"): int(p.get("shares", 0) or 0) for p in positions
+                }
+                _sync_account(acct)
+            cash = float(acct.get("cash", 0) or 0)
+            # 基准市值：以"昨收"给开盘股数估值
+            base_value = float(acct.get("baseline_cash", 0) or 0)
+            for code, sh in (acct.get("baseline_shares") or {}).items():
+                q = rt.get(code) or {}
+                pc = q.get("prev_close")
+                if pc is None:
+                    px = q.get("price")
+                    cp = q.get("change_pct")
+                    pc = (px / (1 + cp / 100)) if (px and cp is not None) else 0
+                base_value += (pc or 0) * sh
+            cur_value = cash + total_value
+            daily_pnl = round(cur_value - base_value, 2)
+            daily_pnl_pct = round(daily_pnl / base_value * 100, 2) if base_value else 0.0
+            self._send(200, {"ok": True, "capital": capital, "cash": cash,
                              "market_value": round(total_value, 2),
-                             "total_value": round(total_value + capital, 2),
+                             "total_value": round(cur_value, 2),
+                             "daily_pnl": daily_pnl, "daily_pnl_pct": daily_pnl_pct,
                              "count": len(out), "positions": out})
             return
         if route == "/api/search":
@@ -1233,6 +1289,109 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 print("[WARN] static positions write failed (cloud may be read-only):", e)
             self._send(200, {"ok": True, "positions": positions})
+            return
+        if route == "/api/trade":
+            # 当日交易录入：买入=加股数/重算成本/现金减；卖出=减股数/现金加。
+            # 买卖后前端重拉 /api/positions_advice，真实当日盈亏自动更新。
+            item = payload if isinstance(payload, dict) else {}
+            code = str(item.get("code", "")).strip().lower()
+            if not code:
+                self._send(400, {"error": "code required"})
+                return
+            side = item.get("side", "buy")
+            if side not in ("buy", "sell"):
+                self._send(400, {"error": "side must be buy/sell"})
+                return
+            try:
+                price = float(item.get("price", 0) or 0)
+                qty = int(item.get("qty", 0) or 0)
+            except (TypeError, ValueError):
+                self._send(400, {"error": "price/qty 非法"})
+                return
+            if qty <= 0 or price <= 0:
+                self._send(400, {"error": "数量与价格必须为正数"})
+                return
+            positions = _load_positions()
+            rec = next((p for p in positions if p.get("code") == code), None)
+            if side == "buy":
+                if rec is None:
+                    name = item.get("name", "") or ""
+                    if not name:
+                        try:
+                            name = (ds.fetch_realtime([code]).get(code) or {}).get("name", "") or code
+                        except Exception:
+                            name = code
+                    rec = {"code": code, "name": name, "shares": 0, "cost": 0.0}
+                    positions.append(rec)
+                old = int(rec.get("shares", 0) or 0)
+                oldcost = float(rec.get("cost", 0) or 0)
+                new = old + qty
+                rec["cost"] = round((oldcost * old + price * qty) / new, 4) if new > 0 else 0.0
+                rec["shares"] = new
+                rec["name"] = item.get("name") or rec.get("name") or code
+            else:
+                if rec is None:
+                    self._send(400, {"error": "未持有该股票，无法卖出"})
+                    return
+                old = int(rec.get("shares", 0) or 0)
+                if qty > old:
+                    self._send(400, {"error": f"卖出数量 {qty} 超过持仓 {old}"})
+                    return
+                rec["shares"] = old - qty
+                if rec["shares"] <= 0:
+                    positions = [p for p in positions if p.get("code") != code]
+            # 现金随交易变动（买入减、卖出加）
+            acct = _load_account()
+            if side == "buy":
+                acct["cash"] = round(float(acct.get("cash", 0) or 0) - price * qty, 2)
+            else:
+                acct["cash"] = round(float(acct.get("cash", 0) or 0) + price * qty, 2)
+            _sync_account(acct)
+            _save_json(POSITIONS, positions)
+            try:
+                _save_json(STATIC_POSITIONS, positions)
+            except Exception as e:
+                print("[WARN] static positions write failed (cloud may be read-only):", e)
+            self._send(200, {"ok": True, "cash": acct["cash"], "positions": positions})
+            return
+        if route == "/api/account":
+            # 持仓截图同步：由 AI 解析图片后调用，整体覆盖现金 + 持仓，
+            # 并把"当日基准"重置为当前快照（截图即当日初始真相）。
+            item = payload if isinstance(payload, dict) else {}
+            positions_in = item.get("positions")
+            if not isinstance(positions_in, list):
+                self._send(400, {"error": "positions 必填且为数组"})
+                return
+            norm = []
+            for p in positions_in:
+                if not isinstance(p, dict) or not p.get("code"):
+                    continue
+                try:
+                    norm.append({
+                        "code": str(p["code"]).strip().lower(),
+                        "name": p.get("name", ""),
+                        "shares": int(p.get("shares", 0) or 0),
+                        "cost": float(p.get("cost", 0) or 0),
+                    })
+                except (TypeError, ValueError):
+                    continue
+            _save_json(POSITIONS, norm)
+            try:
+                _save_json(STATIC_POSITIONS, norm)
+            except Exception as e:
+                print("[WARN] static positions write failed (cloud may be read-only):", e)
+            acct = _load_account()
+            if item.get("cash") is not None:
+                try:
+                    acct["cash"] = float(item["cash"])
+                except (TypeError, ValueError):
+                    pass
+            today = _today_str()
+            acct["baseline_date"] = today
+            acct["baseline_cash"] = acct["cash"]
+            acct["baseline_shares"] = {p["code"]: p["shares"] for p in norm}
+            _sync_account(acct)
+            self._send(200, {"ok": True, "cash": acct["cash"], "positions": norm})
             return
         if route == "/api/alerts":
             alerts = _load_json(ALERTS, [])
