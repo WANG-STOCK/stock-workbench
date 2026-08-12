@@ -67,6 +67,39 @@ def news_sentiment(headlines):
     return max(-100, min(100, score))
 
 
+def industry_news(sector, limit=6):
+    """行业新闻 best-effort：按 sector 关键词搜东财快讯，返回 {status, score, headlines}。
+
+    仅作扫描「行业新闻」因子的辅助参考；任何失败一律返回 status=unavailable，不抛异常。
+    云端 Render 通常可达，本地受限网络会静默降级（不影响主流程）。
+    """
+    kws = {
+        "科技": "半导体 芯片 AI 算力 科技",
+        "医药": "医药 创新药 医疗器械 医疗",
+        "电力": "电力 新能源 电网 储能 特高压",
+    }.get(sector, sector or "")
+    if not kws:
+        return {"status": "unavailable", "score": 0, "headlines": []}
+    import urllib.parse
+    url = ("https://np-anotice-stock.eastmoney.com/api/security/ann"
+           "?sr=-1&page_size=%d&ann_type=0&client_source=web&keyword=%s" % (limit, urllib.parse.quote(kws)))
+    raw = _http_get(url, timeout=6)
+    if not raw:
+        return {"status": "unavailable", "score": 0, "headlines": []}
+    try:
+        data = json.loads(raw)
+        items = (data.get("data") or {}).get("list") or []
+        heads = []
+        for it in items[:limit]:
+            t = it.get("title") or it.get("notice_title") or ""
+            if t:
+                heads.append(t)
+        score = news_sentiment(heads)
+        return {"status": "ok" if heads else "empty", "score": score, "headlines": heads}
+    except Exception:
+        return {"status": "unavailable", "score": 0, "headlines": []}
+
+
 def headlines_text(news_dict):
     """取前两条标题拼成展示文本（前端用）。"""
     if not news_dict or news_dict.get("status") != "ok":

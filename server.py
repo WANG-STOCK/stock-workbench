@@ -21,6 +21,7 @@ from core import industry_pool as ip
 from core import fundamentals as fm
 from core import sector_flow as sf
 from core import news as nw
+from core import screener as sc
 from core import intraday as intraday_mod
 from core import daily_strategy as dsmod
 from core.daily_strategy import run_daily, open_judgment, generate_snapshot, generate_review
@@ -1756,13 +1757,22 @@ class Handler(BaseHTTPRequestHandler):
         return results
 
     def _run_candidate_screener(self, codes, limit, capital, strategy="composite", progress_cb=None):
-        """候选股扫描（十五五成长池）：技术面 55% + 基本面 45% 综合打分。
+        """候选股扫描（十五五成长池）：多因子利益最大化模型。
 
-        基本面弱（估值/质量档）会门控买信号，避免夕阳/垃圾股被技术反弹误选。
+        因子（动态主导，合计 100%）：
+          技术面 30% + 行业轮动 28% + 估值(PE+质量档) 27% + 个股动量 15%
+        - 行业轮动 = 赛道实时强弱(腾讯实时涨跌幅均值) + 赛道20日动量(成分股)，每日动态 → 板块轮动即反映
+        - 估值 = 腾讯实时 PE 曲线 + 质量档微调（PE 本地可达，解决旧版拉不到导致静态的问题）
+        - 新闻/机构目标价 best-effort（云端 Render 通，本地降级为中性，不计入主权重）
         """
         results = []
         lot = _POS.get("lot", 100)
-        # 实时估值（best-effort）后台拉取，不阻塞扫描进度
+        # 1) 批量腾讯实时行情：PE / 涨跌幅 / 市值（本地可达，关键修复点）
+        try:
+            rt_all = ds.fetch_realtime(codes)
+        except Exception:
+            rt_all = {}
+        # 2) 东财实时估值（best-effort，云端通；本地降级，仅作 PB 补充）
         valuations = {}
         vt = threading.Thread(target=lambda: valuations.update((fm.batch_valuation(codes) or {})),
                               daemon=True)
@@ -1776,18 +1786,25 @@ class Handler(BaseHTTPRequestHandler):
                 a = sig.analyze(bars, _WEIGHTS)
                 if not a.get("ok"):
                     return None
-                pl = a.get("price_levels") or {}
-                tech = a["score"]  # -100..100
-                tech_norm = max(0.0, min(100.0, (tech + 100) / 2))
-                fp = ip.get_fund(code) or {}
-                fund = fm.fundamental_score(fp.get("grade", "B"), valuations.get(code))
-                sector = fp.get("sector")
-                track = fp.get("track")
-                ss = sf.sector_strength(track) if track else None
-                sector_score = (ss or {}).get("score", 50) if ss else 50
-                combined = round(tech_norm * 0.50 + fund * 0.40 + sector_score * 0.10, 1)
                 price = a.get("price")
-                # 候选股买卖价：用「当日实时价±2.5%」紧贴当前价（参考 MA20/MA5 + 当日分时）
+                rt = rt_all.get(code) or {}
+                pe = rt.get("pe") if rt else None
+                fp = ip.get_fund(code) or {}
+                track = fp.get("track")
+                sector = fp.get("sector")
+                grade = fp.get("grade", "B")
+                note = fp.get("note", "")
+                tech = max(0.0, min(100.0, (a["score"] + 100) / 2))   # 技术面 0-100
+                # 多因子
+                f = sc.compute_factors(code, bars, rt, fp,
+                                       (sf.sector_strength(track) if track else None))
+                val = f["val_score"]
+                mom = f["mom_score"]
+                sector_score = f["sector_score"]
+                mom_ret = f["_mom_ret"]
+                combined = round(tech * sc.W_TECH + sector_score * sc.W_SECTOR
+                                 + val * sc.W_VAL + mom * sc.W_MOM, 1)
+                # 买/卖价（沿用分位 + MA20/MA5）
                 try:
                     bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
                     _cache_set(code, "5m", 60, bars5m)
@@ -1796,15 +1813,7 @@ class Handler(BaseHTTPRequestHandler):
                 cl = sig.candidate_levels(bars5m, bars, a.get("prev_close"))
                 buy_price = cl["buy"] if cl else (round(price * 0.97, 2) if price else None)
                 sell_price = cl["sell"] if cl else (round(price * 1.06, 2) if price else None)
-                # 买信号门控：基本面弱或综合分低则降为「持有」
-                act = a["action"]
-                fund_ok = fund >= 60
-                if act in ("买入", "强烈买入"):
-                    if not fund_ok or combined < 55:
-                        act = "持有"
-                    elif combined >= 72 and act == "买入":
-                        act = "强烈买入"
-                # 买量（按可用资金 + 买价 + 手数）
+                act = sc.action_for(combined, mom_ret, tech)
                 qty = 0
                 if buy_price and buy_price > 0:
                     q = int(capital / buy_price // lot) * lot
@@ -1814,12 +1823,15 @@ class Handler(BaseHTTPRequestHandler):
                     "name": fp.get("name") or code,
                     "track": track or "",
                     "action": act,
-                    "tech_score": round(tech_norm, 1),
-                    "fund_score": round(fund, 1),
-                    "fund_grade": fp.get("grade", "B"),
-                    "sector_score": round(sector_score, 1),
-                    "pe": (valuations.get(code) or {}).get("pe"),
+                    "tech_score": round(tech, 1),
+                    "val_score": val,
+                    "mom_score": mom,
+                    "fund_grade": grade,
+                    "sector_score": sector_score,
+                    "pe": pe,
+                    "pb": (valuations.get(code) or {}).get("pb"),
                     "target": None, "target_upside": None, "expect_score": None,
+                    "news_score": 50,
                     "combined": combined,
                     "price": price,
                     "buy_price": buy_price,
@@ -1833,16 +1845,16 @@ class Handler(BaseHTTPRequestHandler):
                     "buy_qty": qty,
                     "capital": capital,
                     "sector": sector,
-                    "sector_trend": (ss or {}).get("trend_pct") if ss else None,
-                    "sector_fund": (ss or {}).get("fund_net") if ss else None,
-                    "up_ratio": (ss or {}).get("up_ratio") if ss else None,
-                    "note": fp.get("note", ""),
+                    "sector_trend": f["sector_trend"],
+                    "sector_fund": f["sector_fund"],
+                    "up_ratio": f["up_ratio"],
+                    "note": note,
                     "reasons": [r["text"] for r in a["reasons"][:2]],
+                    "_mom_ret": mom_ret,
                 }
             except Exception:
                 return None
 
-        results = []
         with ThreadPoolExecutor(max_workers=20) as ex:
             futs = [ex.submit(_worker, c) for c in codes]
             for fut in as_completed(futs):
@@ -1854,17 +1866,24 @@ class Handler(BaseHTTPRequestHandler):
                     results.append(r)
                 if progress_cb:
                     progress_cb()
-        vt.join(timeout=8)  # 尽量等估值回写，超时不影响（基本面按质量档兜底）
-        results.sort(key=lambda x: x["combined"], reverse=True)
-        # 预期发展因子（PE估值低位 + 机构目标价上行空间 + 新闻）：仅对头部 best-effort 抓取
+        vt.join(timeout=8)  # 尽量等估值回写，超时不影响（估值按 PE/质量档兜底）
+        # 行业轮动：叠加「赛道20日动量」，让板块轮动每日动态变化
+        sc.apply_sector_momentum(results)
+        # 预期发展（机构目标价/PE，best-effort，云端通）
         self._enrich_expect(results, topn=40)
+        # 新闻因子（个股 + 行业，best-effort，云端通）
         self._attach_news(results, "combined", 30)
+        self._attach_industry_news(results)
         # 最终排序：动作优先级(强买>买入>持有>减仓>卖出) 优先，同档按综合分降序
         results.sort(key=_action_sort_key)
         return results
 
     def _enrich_expect(self, results, topn=40):
-        """给头部候选补机构目标价/PE/新闻，重算「预期发展」分并合并进综合分。best-effort。"""
+        """给头部候选补机构目标价/PE，算「预期发展」分并小幅加成综合分。best-effort（云端通）。
+
+        注意：综合分主体由多因子模型（技术/行业/估值/动量）决定，这里只做「预期加成」，
+        不重写综合分，避免覆盖动态因子。
+        """
         top = results[:topn]
 
         def _tgt(r):
@@ -1891,11 +1910,47 @@ class Handler(BaseHTTPRequestHandler):
             grade = r.get("fund_grade", "B")
             exp = fm.expectation_score(pe=pe, target_upside=tup, news_score=ns, grade=grade)
             r["expect_score"] = round(exp, 1)
-            tech = r.get("tech_score", 0) or 0
-            fund = r.get("fund_score", 0) or 0
-            sector = r.get("sector_score", 50) or 50
-            # 综合分 = 技术45% + 基本面25% + 赛道10% + 预期25%（PE/目标价/新闻）
-            r["combined"] = round(tech * 0.45 + fund * 0.25 + sector * 0.10 + exp * 0.20, 1)
+            # 机构目标价上行空间 → 小幅加成（利益最大化：有上行空间更优）
+            bonus = 0.0
+            if tup is not None:
+                bonus = max(-4.0, min(4.0, tup * 100 * 0.25))
+            base = r.get("combined", 50.0) or 50.0
+            r["combined"] = round(base + bonus, 1)
+        return results
+
+    def _attach_industry_news(self, results, topn=60):
+        """行业新闻因子（best-effort）：按 sector 聚合东财快讯情绪，给同赛道候选小幅加成。
+
+        仅对头部 + 代表性赛道生效；任何失败静默降级（本地网络受限时不影响扫描）。
+        """
+        if not results:
+            return results
+        # 取结果中出现的 sector，逐个算行业新闻情绪（缓存避免重复拉取）
+        sectors = []
+        for r in results[:topn]:
+            s = r.get("sector")
+            if s and s not in sectors:
+                sectors.append(s)
+        sent = {}
+        for s in sectors:
+            try:
+                d = nw.industry_news(s)
+                sent[s] = d
+            except Exception:
+                sent[s] = {"status": "unavailable", "score": 0, "headlines": []}
+        for r in results[:topn]:
+            s = r.get("sector")
+            d = sent.get(s) or {"score": 0, "headlines": []}
+            sc_score = d.get("score", 0) or 0   # -100..100
+            r["industry_news"] = {"status": d.get("status", "unavailable"),
+                                  "score": sc_score,
+                                  "headlines": d.get("headlines", [])[:2]}
+            if sc_score:
+                base = r.get("combined", 50.0) or 50.0
+                # 行业新闻占综合分约 7%：combined = base*0.93 + (sc/100*50+50)*0.07
+                boost = (sc_score / 100.0 * 50.0 + 50.0)
+                r["combined"] = round(base * 0.93 + boost * 0.07, 1)
+        results.sort(key=lambda x: x.get("combined", 0), reverse=True)
         return results
 
     def _run_candidate_bg(self, codes, limit, cap, strategy):

@@ -806,13 +806,20 @@
         ? `<span style="color:#1971c2">机构目标 <b>${fmt(r.target)}</b>${r.target_upside != null ? ` <span style="color:${r.target_upside >= 0 ? '#2b8a3e' : '#c92a2a'}">${r.target_upside >= 0 ? '+' : ''}${(r.target_upside * 100).toFixed(0)}%</span>` : ""}</span>`
         : "";
       const expTxt = r.expect_score != null ? `<span style="color:#666">预期 <b>${r.expect_score}</b></span>` : "";
+      let indNewsTxt = "";
+      const inw = r.industry_news || {};
+      if (inw.status === "ok" && inw.headlines && inw.headlines.length) {
+        const sc2 = inw.score || 0;
+        const col = sc2 > 0 ? "#c92a2a" : sc2 < 0 ? "#2b8a3e" : "#868e96";
+        indNewsTxt = `<span style="color:${col}">行业新闻 ${sc2 > 0 ? "偏多+" : sc2 < 0 ? "偏空" : "中性"}${Math.abs(sc2)}</span>`;
+      }
       return `<div class="cand-row" data-code="${r.code}" data-name="${r.name}" style="padding:8px 4px;border-bottom:1px solid #eee;cursor:pointer">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span class="tag" style="background:${c}">${r.action}</span>
           <span style="font-weight:600">${r.name}</span><span style="color:#888;font-size:11px">${r.code}</span>
           <span style="color:#666;font-size:12px">· ${r.track}</span>
           <span style="color:#666;font-size:12px">· 赛道 ${r.sector_trend != null ? (r.sector_trend >= 0 ? "↑" : "↓") + fmt(r.sector_trend) + "%" : "—"}${r.sector_fund != null ? "　主力" + (r.sector_fund >= 0 ? "+" : "") + r.sector_fund.toFixed(1) + "亿" : ""}</span>
-          <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/基${r.fund_score}${r.expect_score != null ? "/预期" + r.expect_score : ""}）</span></span>
+          <span style="margin-left:auto;font-size:12px">综合 <b style="font-size:14px">${r.combined}</b> <span style="color:#999">（技${r.tech_score}/行${r.sector_score}/估${r.val_score}/动${r.mom_score}）</span></span>
           ${_watchBtn(r)}
         </div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;flex-wrap:wrap">
@@ -824,7 +831,7 @@
           <span style="color:${gradeColor}">基本面 ${r.fund_grade}</span>
         </div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:3px;font-size:12px;flex-wrap:wrap">
-          ${peTxt} ${tgtTxt} ${expTxt}
+          ${peTxt} ${tgtTxt} ${expTxt} ${indNewsTxt}
         </div>
         ${r.trend_hint && r.trend_hint !== "中性" ? `<div style="margin-top:3px;font-size:11px;color:#1971c2">📈 ${r.trend_hint}</div>` : ""}
         ${r.note ? `<div style="margin-top:4px;font-size:12px;color:#555">💡 ${r.note}</div>` : ""}
