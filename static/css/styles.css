@@ -125,7 +125,8 @@ body {
 /* ---------- 整体栅格：左列(账户+策略) 34% + 中列(AI建议) 33% + 右列(自选/扫描) 33% ---------- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(430px, 34%) minmax(360px, 33%) minmax(360px, 33%);
+  /* 左:账户+持仓 30% / 中:AI建议 加宽到 44% / 右:自选+扫描 收窄到 26% */
+  grid-template-columns: minmax(380px, 30%) minmax(440px, 44%) minmax(300px, 26%);
   height: calc(100vh - 52px);
   gap: 10px;
   padding: 10px;

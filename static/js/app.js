@@ -227,7 +227,7 @@
     const el = document.getElementById("aiAdviceBody");
     if (!el) return;
     if (!positions || !positions.length) {
-      el.innerHTML = '<tr><td colspan="7" class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</td></tr>';
+      el.innerHTML = '<tr><td colspan="6" class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</td></tr>';
       return;
     }
     // 按评分绝对值降序：最强信号（最值得操作）在最上面
@@ -264,26 +264,7 @@
     const secFundTxt = secFund == null ? '' : ('<span class="sec-fund-val ' + secFundCls + '">' + (secFund >= 0 ? '主力流入 +' : '主力流出 ') + Math.abs(secFund).toFixed(1) + '亿</span>');
     const upRatioTxt = sec.up_ratio != null ? '<span class="sec-fund-mini">上涨占比 <b>' + (sec.up_ratio * 100).toFixed(0) + '%</b></span>' : '';
 
-    // 列 6：技术面（MA + MACD/KDJ/BOLL + 关键支撑压力位）
-    const tech = p.technical || {};
-    const ma5 = tech.ma5, ma10 = tech.ma10, ma20 = tech.ma20;
-    let maHtml = '';
-    if (ma5 && ma10 && ma20) {
-      const trendCls = (p.price != null && p.price > ma5 && ma5 > ma10 && ma10 > ma20) ? 'gold' :
-                       (p.price != null && p.price < ma5 && ma5 < ma10 && ma10 < ma20) ? 'dead' : 'mid';
-      maHtml = '<div class="tech-ma"><span class="tech-state ' + trendCls + '">MA' + (trendCls === 'gold' ? '多头' : trendCls === 'dead' ? '空头' : '纠缠') + '</span></div>';
-    }
-    const macdState = tech.macd_state || '—';
-    const kdjState = tech.kdj_state || '—';
-    const bollPos = tech.boll_pos || '中轨';
-    const macdCls = macdState.includes('金叉') ? 'gold' : macdState.includes('死叉') ? 'dead' :
-                    macdState.includes('0轴上') ? 'zero-up' : macdState.includes('0轴下') ? 'zero-down' : 'mid';
-    const kdjCls = kdjState.includes('超买') ? 'ob' : kdjState.includes('超卖') ? 'os' : 'mid';
-    const bollCls = bollPos === '上轨' ? 'boll-up' : bollPos === '下轨' ? 'boll-down' : 'boll-mid';
-    const srHtml = (tech.support || tech.resist) ?
-      ('<div class="tech-levels">支撑 <b style="color:#1971c2">' + (tech.support != null ? fmt(tech.support, 2) : '—') + '</b> · 压力 <b style="color:#e8590c">' + (tech.resist != null ? fmt(tech.resist, 2) : '—') + '</b></div>') : '';
-
-    // 列 7：做T方案（按 forecast.trend 严格分三态）
+    // 列 6：做T方案（按 forecast.trend 严格分三态）
     const plan = _tpPlan(p, fcTrend);
     const tpHtml = _tpHtml(plan);
 
@@ -293,7 +274,6 @@
       '<td class="ai-c-action"><span class="ai-action-pill">' + label + '</span></td>' +
       '<td class="ai-c-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul></td>' +
       '<td class="ai-c-sec"><span class="sec-name">' + secName + '</span><div class="sec-row1"><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span> ' + secFundTxt + '</div>' + upRatioTxt + '</td>' +
-      '<td class="ai-c-tech">' + maHtml + '<div><span class="tech-state ' + macdCls + '">MACD ' + macdState + '</span><span class="tech-state ' + kdjCls + '">' + kdjState + '</span><span class="tech-state ' + bollCls + '">BOLL ' + bollPos + '</span></div>' + srHtml + '</td>' +
       '<td class="ai-c-tp">' + tpHtml + '</td>' +
     '</tr>';
   }

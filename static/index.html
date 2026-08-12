@@ -165,7 +165,7 @@
       <section class="panel panel-aiadvice">
         <div class="panel-title">
           <span class="dot dot-blue"></span>
-          <span>🤖 AI 建议 · 每只持仓一行（今日预估 + 板块 + 技术面 + 做T方案）</span>
+          <span>🤖 AI 建议 · 每只持仓一行（今日预估 + 板块 + 做T方案）</span>
           <span class="sub">满 +100 必加仓 · -100 必减仓 · 每 10 秒刷新</span>
         </div>
         <!-- AI 建议：真 <table>，table-layout:fixed 保证列宽对齐，单元格 vertical-align:top 保证行内多行内容上下对齐 -->
@@ -177,7 +177,6 @@
               <col style="width:64px">    <!-- 操作 -->
               <col>                       <!-- 今日预估 -->
               <col>                       <!-- 板块 -->
-              <col>                       <!-- 技术面 -->
               <col>                       <!-- 做T方案 -->
             </colgroup>
             <thead>
@@ -187,12 +186,11 @@
                 <th>操作</th>
                 <th>今日预估</th>
                 <th>板块</th>
-                <th>技术面</th>
                 <th>做T方案</th>
               </tr>
             </thead>
             <tbody id="aiAdviceBody">
-              <tr><td colspan="7" class="ai-empty">加载 AI 建议中…</td></tr>
+              <tr><td colspan="6" class="ai-empty">加载 AI 建议中…</td></tr>
             </tbody>
           </table>
         </div>
