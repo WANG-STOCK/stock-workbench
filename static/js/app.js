@@ -216,12 +216,13 @@
 
   // ---------- 自选（带元数据：添加时间/添加价/推荐买价） ----------
   async function loadWatchlist() {
-    state.watchlist = await api("GET", "/api/watchlist");
-    if (!state.watchlist.length) {
-      // 默认放几只龙头示范
-      state.watchlist = ["sh600519", "sz000858", "sh601318", "sz300750"].map(c => ({
-        code: c, name: "", add_time: null, add_price: null, scan_buy: null }));
-      await api("POST", "/api/watchlist", { items: state.watchlist });
+    // 按服务端返回为准（服务端已双写 data/ + static/ 主源，刷新/重启不丢）
+    // 不再用硬编码种子覆盖用户自己加的自选
+    try {
+      const list = await api("GET", "/api/watchlist");
+      state.watchlist = Array.isArray(list) ? list : [];
+    } catch (e) {
+      state.watchlist = state.watchlist || [];
     }
     renderWatchlist();
     await pollQuotes();

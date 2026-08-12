@@ -25,6 +25,8 @@ from core import news as nw
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
 WATCHLIST = os.path.join(DATA_DIR, "watchlist.json")
+# 云端/本地共用的自选主源（git 跟踪，部署/重启不丢，作为 data 兜底）
+STATIC_WATCHLIST = os.path.join(BASE, "static", "watchlist.json")
 ALERTS = os.path.join(DATA_DIR, "alerts.json")
 REVIEW = os.path.join(DATA_DIR, "review.json")
 POSITIONS = os.path.join(DATA_DIR, "positions.json")
@@ -144,10 +146,15 @@ def _scope_codes(scope):
 # ---------- 自选股：支持带元数据的对象（添加时间/价格/推荐买价） ----------
 def _load_watchlist():
     """返回标准化自选列表：[{code, name, add_time, add_price, scan_buy}, ...]。
-    兼容旧版纯字符串列表。"""
-    raw = _load_json(WATCHLIST, [])
+    兼容旧版纯字符串列表。
+    读取优先级：data/watchlist.json（runtime）> static/watchlist.json（git 主源兜底）。
+    注意：data 文件若已存在（即使是空数组）也优先用 data —— 空数组代表用户主动清空，
+    不能回退到主源覆盖用户的"已清空"意图。"""
+    raw = _load_json(WATCHLIST, None)
+    if raw is None:
+        raw = _load_json(STATIC_WATCHLIST, [])
     out = []
-    for e in raw:
+    for e in (raw or []):
         if isinstance(e, str):
             out.append({"code": e, "name": "", "add_time": None,
                         "add_price": None, "scan_buy": None})
@@ -156,6 +163,16 @@ def _load_watchlist():
                         "add_time": e.get("add_time"), "add_price": e.get("add_price"),
                         "scan_buy": e.get("scan_buy")})
     return out
+
+
+def _sync_watchlist(items):
+    """双写：runtime（data/）+ 主源（static/，git 跟踪，云端部署同步）。
+    云端只读时跳过主源写入，本地写依然成功。"""
+    _save_json(WATCHLIST, items)
+    try:
+        _save_json(STATIC_WATCHLIST, items)
+    except Exception as e:
+        print("[WARN] static watchlist write failed (cloud may be read-only):", e)
 
 
 # ---------- 个股基本面/预期事实缓存（PE + 机构目标价 + 新闻，best-effort） ----------
@@ -756,7 +773,7 @@ class Handler(BaseHTTPRequestHandler):
                     if it.get("scan_buy") is not None:
                         rec["scan_buy"] = it["scan_buy"]
                     existing[c] = rec
-                _save_json(WATCHLIST, list(existing.values()))
+                _sync_watchlist(list(existing.values()))
                 self._send(200, {"ok": True, "items": list(existing.values())})
                 return
             # 全量替换（兼容旧接口 / 前端保存列表）
@@ -768,7 +785,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif c:
                     norm.append({"code": str(c), "name": "", "add_time": None,
                                  "add_price": None, "scan_buy": None})
-            _save_json(WATCHLIST, norm)
+            _sync_watchlist(norm)
             self._send(200, {"ok": True, "codes": [n["code"] for n in norm]})
             return
         if route == "/api/config":
