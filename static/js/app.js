@@ -813,7 +813,9 @@
     }).join("");
     ul.querySelectorAll(".pos-btn[data-act='del']").forEach(el => el.addEventListener("click", async (e) => {
       e.stopPropagation();
-      await api("DELETE", "/api/positions?code=" + el.dataset.code);
+      const code = el.dataset.code;
+      await api("DELETE", "/api/positions?code=" + code);
+      toast("已移除：" + code + "（云端主源已同步，下次推送后 Render 生效）");
       await loadPositions();
     }));
     ul.querySelectorAll(".pos-btn[data-act='save']").forEach(el => el.addEventListener("click", async (e) => {
@@ -824,7 +826,7 @@
       const code = el.dataset.code;
       const name = (state.posAdvice.find(x => x.code === code) || {}).name || code;
       await api("POST", "/api/positions", { code, name, shares, cost });
-      toast("已更新持仓：" + name);
+      toast(`已存：${name} ${shares}股×¥${cost}（已同步云端主源）`);
       await loadPositions();
     }));
     ul.querySelectorAll(".pos-item").forEach(el => el.addEventListener("click", (e) => {
@@ -848,7 +850,7 @@
     await loadPositions();
     // 若当前正看这只，刷新建议里的持仓
     if (state.current.code === code) { $("#holdInput").value = shares; await recomputeAdvice(); }
-    toast("已记录持仓：" + name);
+    toast(`已新增：${name} ${shares}股×¥${cost}（已同步云端主源）`);
   }
 
   // ---------- 评分权重 ----------

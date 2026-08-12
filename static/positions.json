@@ -1,32 +1,26 @@
 [
   {
-    "code": "sh600105",
-    "name": "永鼎股份",
-    "shares": 100,
-    "cost": 229.81
+    "code": "sh600183",
+    "name": "生益科技",
+    "shares": 400,
+    "cost": 137.4091
   },
   {
     "code": "sz002475",
     "name": "立讯精密",
     "shares": 200,
-    "cost": 55.63
+    "cost": 56.8715
   },
   {
-    "code": "sh588160",
-    "name": "科创新材料ETF南方",
-    "shares": 29100,
-    "cost": 1.118
-  },
-  {
-    "code": "sh600183",
-    "name": "生益科技",
+    "code": "sh600667",
+    "name": "太极实业",
     "shares": 200,
-    "cost": 135.3
+    "cost": 21.6157
   },
   {
-    "code": "sh588940",
-    "name": "科创50ETF富国",
+    "code": "sh600105",
+    "name": "永鼎股份",
     "shares": 100,
-    "cost": 0.185
+    "cost": 229.8062
   }
 ]

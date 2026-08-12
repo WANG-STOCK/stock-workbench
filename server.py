@@ -824,7 +824,12 @@ class Handler(BaseHTTPRequestHandler):
                     break
             if not found:
                 positions.append(rec)
+            # 双写：runtime（data/，本地/沙箱持久生效）+ 主源（static/，云端部署后自动同步）
             _save_json(POSITIONS, positions)
+            try:
+                _save_json(STATIC_POSITIONS, positions)
+            except Exception as e:
+                print("[WARN] static positions write failed (cloud may be read-only):", e)
             self._send(200, {"ok": True, "positions": positions})
             return
         if route == "/api/alerts":
@@ -867,7 +872,12 @@ class Handler(BaseHTTPRequestHandler):
             code = qs.get("code", [""])[0]
             positions = _load_positions()
             positions = [p for p in positions if p.get("code") != code]
+            # 双写：runtime + 主源（云端 read-only 时自动跳过主源）
             _save_json(POSITIONS, positions)
+            try:
+                _save_json(STATIC_POSITIONS, positions)
+            except Exception as e:
+                print("[WARN] static positions delete sync failed:", e)
             self._send(200, {"ok": True, "remaining": len(positions)})
             return
         self._send(404, {"error": "unknown route"})
