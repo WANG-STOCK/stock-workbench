@@ -122,36 +122,124 @@ body {
 .scan-filters .sf-chip:has(input:checked) { border-color: var(--blue); color: var(--blue); }
 .scan-filters .sf-chip input { margin: 0; cursor: pointer; }
 
-/* ---------- 整体栅格：左主区 35% + 右侧栏 65%（3 个等高板块） ---------- */
+/* ---------- 整体栅格：中间主区 65% + 右侧自选/扫描 35% ---------- */
 .layout {
   display: grid;
-  /* 左侧固定 35%，右侧占满剩余（RWD 留 540 min 上限） */
-  grid-template-columns: minmax(360px, 35%) minmax(540px, 1fr);
+  grid-template-columns: minmax(560px, 1fr) minmax(360px, 33%);
   height: calc(100vh - 52px);
   gap: 10px;
   padding: 10px;
   background: var(--bg);
 }
 
-.left {
-  display: grid;
-  /* 头部 + K线占大头（让 K 线还有 260px 高） + 信号建议 */
-  grid-template-rows: auto minmax(260px, 1.5fr) minmax(0, 1fr);
-  gap: 10px;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
+.center {
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0; min-height: 0; overflow: hidden;
 }
+.center > .panel { flex: 0 0 auto; }
 
-/* 右侧改为双列：左列「持仓·做T」/ 右列「自选盯盘·扫描候选」合并单元 */
-.right {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 10px;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
+/* ---------- 账户总览 + 持仓（dashboard） ---------- */
+.panel-account { background: linear-gradient(135deg, #fff7ed 0%, #ffe5d0 100%); border-color: #ffb070; }
+.acct-kpis {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin-bottom: 12px;
 }
+.akpi { background: rgba(255,255,255,0.6); border-radius: 8px; padding: 10px 12px; border: 1px solid rgba(255,176,112,0.4); }
+.akpi-label { color: var(--muted); font-size: 11px; }
+.akpi-val { font-size: 22px; font-weight: 700; color: var(--ink); margin: 4px 0; font-variant-numeric: tabular-nums; }
+.akpi-val.up { color: var(--up); }
+.akpi-val.down { color: var(--dn); }
+.akpi-sub { color: var(--muted); font-size: 10px; }
+.akpi-today { background: rgba(255,236,209,0.85); border-color: #ff8b1a; }
+.pos-table-wrap { overflow-y: auto; max-height: 38vh; }
+.pos-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pos-table th, .pos-table td { padding: 6px 8px; text-align: left; border-bottom: 1px dashed rgba(255,176,112,0.3); }
+.pos-table th { background: rgba(255,236,209,0.7); color: #8b4b00; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+.pos-table td.r, .pos-table th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.pos-table .up { color: var(--up); }
+.pos-table .down { color: var(--dn); }
+.pos-table .code-mini { color: var(--muted); font-size: 10px; }
+.pos-table .chg-mini { font-size: 10px; }
+.pos-table .muted-mini { color: var(--muted); font-size: 10px; }
+.pos-table .muted-cell { text-align: center; color: var(--muted); padding: 16px; }
+
+/* ---------- AI 建议卡片 ---------- */
+.panel-aiadvice { background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%); border-color: #74c0fc; }
+.ai-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px; overflow-y: auto; max-height: 56vh;
+}
+.ai-empty { color: var(--muted); padding: 20px; text-align: center; font-size: 12px; }
+.ai-card {
+  border-radius: 10px; padding: 10px 12px;
+  border: 1px solid;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.ai-card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.ai-card-buy { background: linear-gradient(135deg, #d3f9d8 0%, #ebfbee 100%); border-color: #69db7c; }
+.ai-card-hold { background: linear-gradient(135deg, #f1f3f5 0%, #e9ecef 100%); border-color: #adb5bd; }
+.ai-card-sell { background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%); border-color: #ff8787; }
+
+.ai-row1 { display: flex; align-items: center; gap: 8px; }
+.ai-name { flex: 1; }
+.ai-name b { font-size: 14px; color: #212529; }
+.ai-action {
+  font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px;
+  background: rgba(255,255,255,0.85);
+}
+.ai-card-buy .ai-action { color: #2b8a3e; }
+.ai-card-sell .ai-action { color: #c92a2a; }
+.ai-card-hold .ai-action { color: #495057; }
+.ai-score { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+.ai-card-buy .ai-score { color: #2b8a3e; }
+.ai-card-sell .ai-score { color: #c92a2a; }
+.ai-card-hold .ai-score { color: #495057; }
+
+.ai-bar {
+  height: 6px; background: rgba(0,0,0,0.08); border-radius: 3px; margin: 6px 0;
+  position: relative; overflow: hidden;
+}
+.ai-bar-center { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(0,0,0,0.3); }
+.ai-bar-fill { position: absolute; top: 0; bottom: 0; width: 4px; background: #495057; border-radius: 2px; }
+.ai-card-buy .ai-bar-fill { background: #2b8a3e; left: 50% !important; right: auto; width: calc(100% - 50% - 0px) !important; max-width: 50%; }
+.ai-card-sell .ai-bar-fill { background: #c92a2a; left: auto !important; right: 50%; width: calc(100% - 50% - 0px) !important; max-width: 50%; }
+.ai-row2 { font-size: 12.5px; color: #212529; line-height: 1.5; margin-top: 4px; }
+.ai-row2 .ai-reason { color: #495057; }
+.ai-row3 { font-size: 11px; color: #666; margin-top: 4px; line-height: 1.5; }
+.ai-row3 .up { color: var(--up); }
+.ai-row3 .down { color: var(--dn); }
+.ai-row3 .ai-op { margin-left: 8px; color: #1971c2; font-weight: 600; }
+
+/* ---------- 折叠区（左下角：每日/尾盘） ---------- */
+.bottom-fold { display: flex; flex-direction: column; gap: 8px; }
+.fold-box {
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; box-shadow: var(--shadow-l);
+}
+.fold-box > summary {
+  cursor: pointer; font-weight: 700; font-size: 13px;
+  list-style: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.fold-box > summary::-webkit-details-marker { display: none; }
+.fold-box > summary::before {
+  content: "▶"; font-size: 10px; color: var(--muted); transition: transform 0.2s;
+}
+.fold-box[open] > summary::before { transform: rotate(90deg); }
+.fold-body { padding-top: 10px; border-top: 1px dashed var(--line); margin-top: 8px; }
+.fold-box[id="foldDaily"][open] { background: linear-gradient(135deg, #e7f5ff 0%, #f0f9ff 100%); border-color: #74c0fc; }
+.fold-box[id="foldTail"][open] { background: linear-gradient(135deg, #f3f0ff 0%, #faf5ff 100%); border-color: #b197fc; }
+
+/* 把折叠区里的旧子面板样式继承 */
+.fold-box .daily-sub { margin-bottom: 10px; }
+.fold-box .daily-sub-title { font-weight: 700; color: var(--ink); margin-bottom: 6px; font-size: 12px; }
+.fold-box .tail-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.fold-box .tail-col-title { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+
+/* 右侧：只放自选+扫描 */
+.right { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+.right .panel { flex: 1 1 auto; }
 .right-col {
   display: flex; flex-direction: column; gap: 10px;
   min-width: 0; min-height: 0; overflow: hidden;
@@ -487,10 +575,9 @@ button.mini:hover { background: #dde7f0; }
 /* ---------- 响应式：窄屏堆叠 ---------- */
 @media (max-width: 1100px) {
   .layout { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .left { grid-template-rows: auto auto auto; }
-  .right { grid-template-columns: minmax(0, 1fr); }
-  .right-col { overflow: visible; }
-  .right-col > .panel { min-height: 260px; }
+  .center { overflow: visible; }
+  .acct-kpis { grid-template-columns: repeat(2, 1fr); }
+  .right { flex-direction: column; }
 }
 
 /* ---------- 自选股新表头（添加时间/价/增长/荐买） ---------- */

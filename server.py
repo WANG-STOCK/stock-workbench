@@ -427,12 +427,44 @@ def _advise_position(code, capital):
         action, op_qty = "不动", 0
     # 盘中实时建议（5min 分时级别，看一眼该买/卖/等的瞬时判断）
     intraday = _intraday_for(code, price, prev_close)
+    # ===== 加减分评估：技术面 + 板块资金净流 + 当日赛道涨跌 → 输出 -100~+100 =====
+    #    +100 必加仓、-100 必减仓、0 持平持有
+    if action == "买入":
+        base = 70
+    elif action == "卖出":
+        base = -70
+    else:
+        base = 0
+    tech_adj = (a["score"] - 50) * 0.5                # 技术评分（0-100）→ -25..+25
+    fund_adj = 0
+    if regime:
+        tpct = regime.get("trend_pct")
+        if tpct is not None:
+            fund_adj += max(-18, min(18, tpct * 3))    # 当日赛道涨跌% × 3 → -18..+18
+        fn = regime.get("fund_net")
+        if fn is not None:
+            fund_adj += max(-12, min(12, fn * 8))      # 大类行业净流入亿 × 8 → -12..+12
+    advice_score = int(max(-100, min(100, base + tech_adj + fund_adj)))
+    # 中文动作标签
+    action_label = "加仓" if action == "买入" else ("减仓" if action == "卖出" else "持有")
+    # 所属行业今日信息（赛道涨跌/资金净流/上涨占比）
+    industry_today = None
+    if regime:
+        industry_today = {
+            "sector": regime.get("sector"),
+            "track": regime.get("track"),
+            "trend_pct": regime.get("trend_pct"),       # 当日细分赛道平均涨跌%（正值涨/负值跌）
+            "fund_net": regime.get("fund_net"),         # 行业大类（科技/医药/电力）当日资金净流入（亿元）
+            "up_ratio": regime.get("up_ratio"),         # 赛道成分股上涨占比（0~1）
+        }
     return {
         "code": code, "ok": True,
         "name": _fp.get("name") or code,
         "shares": held,
         "price": price,
         "action": action,
+        "action_label": action_label,
+        "advice_score": advice_score,
         "action5": a["action"],
         "score": a["score"],
         "op_price": round(op_price, 2) if op_price else None,
@@ -440,6 +472,7 @@ def _advise_position(code, capital):
         "op_basis": (tl or {}).get("basis") or "",
         "reason": (outlook or {}).get("reason") or (a.get("reasons")[0]["text"] if a.get("reasons") else ""),
         "regime": regime,
+        "industry_today": industry_today,
         "indicators": a.get("indicators"),
         "intraday": intraday,
     }

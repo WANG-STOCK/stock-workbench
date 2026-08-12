@@ -41,53 +41,152 @@
     timers: [],
   };
 
-  let chart;
+  let chart;  // 保留空引用，旧函数检测不到 chart 元素就安全跳过
 
   function toast(msg, sec = 3) {
     const t = $("#toast"); t.textContent = msg; t.classList.add("show");
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), sec * 1000);
   }
 
-  // 账户中心 KPI（P1）：从 /api/positions_advice 拿带实时价的数据计算
-  async function refreshKpi() {
+  // 账户 + AI 建议（账户总览+持仓 dashboard）取一次 /api/positions_advice，
+  // 同时算出 4 个大字 KPI、渲染持仓表、渲染 AI 建议卡片。
+  async function renderAccount() {
     try {
+      const cashInput = document.getElementById("cashInput");
+      let cash = +(cashInput && cashInput.value) || 100000;
       const d = await api("GET", "/api/positions_advice");
       if (!d || !d.ok) return;
+      d.capital = cash;
       const positions = d.positions || [];
-      const cash = +(d.capital || 0);
+      state.posAdvice = positions;
+
+      // 大字 KPI
       let mv = 0, cost = 0, today = 0;
       for (const p of positions) {
-        const price = +(p.price || p.now || 0);
+        const price = +(p.price || 0);
         const c = +(p.cost || 0);
         const qty = +(p.shares || 0);
-        const prev = +p.prev_close || (c && p.change_pct != null ? price / (1 + p.change_pct / 100) : 0);
         mv += price * qty;
         cost += c * qty;
+        const prev = p.prev_close != null ? +p.prev_close
+                   : (c && p.change_pct != null ? price / (1 + p.change_pct / 100) : 0);
         if (prev) today += (price - prev) * qty;
       }
-      const asset = (d.total_value != null ? +d.total_value : mv + cash);
+      const asset = mv + cash;
       const total = mv - cost;
-      const set = (id, val, cls) => {
-        const el = $(id); if (!el) return;
-        el.textContent = val;
+      const todayPct = mv > 0 ? (today / mv * 100) : 0;
+
+      const setv = (id, v, cls) => {
+        const el = document.getElementById(id); if (!el) return;
+        el.textContent = v;
         el.classList.remove("up", "down"); if (cls) el.classList.add(cls);
       };
-      set("#kpiAsset", fmt(asset, 0));
-      set("#kpiCash", fmt(cash, 0));
-      set("#kpiToday", (today >= 0 ? "+" : "") + fmt(today, 0), today > 0 ? "up" : today < 0 ? "down" : "");
-      set("#kpiTotal", (total >= 0 ? "+" : "") + fmt(total, 0), total > 0 ? "up" : total < 0 ? "down" : "");
+      const signed = (n, p = 0) => (n >= 0 ? "+" : "") + fmt(n, p);
+      setv("akAsset",  fmt(asset, 0));
+      setv("akPosition", fmt(mv, 0));
+      setv("akCash",   fmt(cash, 0));
+      setv("akToday",  signed(today, 0), today > 0 ? "up" : today < 0 ? "down" : "");
+      document.getElementById("akAssetSub").textContent = `现金占 ${(cash / Math.max(asset, 1) * 100).toFixed(0)}%`;
+      document.getElementById("akPositionSub").textContent = `${positions.length} 只持仓`;
+      document.getElementById("akTodaySub").textContent = signed(todayPct, 2) + "% (vs 昨收)";
+
+      // 兼容顶部折叠账户中心
+      setv("kpiAsset", fmt(asset, 0));
+      setv("kpiCash",  fmt(cash, 0));
+      setv("kpiToday", signed(today, 0), today > 0 ? "up" : today < 0 ? "down" : "");
+      setv("kpiTotal", signed(total, 0), total > 0 ? "up" : total < 0 ? "down" : "");
+
+      renderPosTable(positions);
+      renderAiAdvice(positions);
+      computeSignalsForWatchlist();   // 自选股也注入当日行业资金流
     } catch (e) { /* ignore */ }
+  }
+
+  // 持仓表（按用户要求：成本、股数、现价、盈亏金额、盈亏%、所属行业今日）
+  function renderPosTable(positions) {
+    const tb = document.getElementById("posTableBody");
+    if (!tb) return;
+    if (!positions || !positions.length) {
+      tb.innerHTML = `<tr><td colspan="8" class="muted-cell">暂无持仓。录入一行，或在右上⚙ 设置通达信 vipdoc 路径后自动读取。</td></tr>`;
+      return;
+    }
+    tb.innerHTML = positions.map(p => {
+      const price = +(p.price || 0);
+      const cost = +(p.cost || 0);
+      const qty = +(p.shares || 0);
+      const mkt = price * qty;
+      const profit = (price - cost) * qty;
+      const pct = cost > 0 ? ((price - cost) / cost * 100) : 0;
+      const cls = profit > 0 ? "up" : profit < 0 ? "down" : "";
+      const it = p.industry_today || {};
+      const tpct = it.trend_pct;
+      const fn = it.fund_net;
+      return `<tr>
+        <td><b>${p.name || p.code}</b><span class="code-mini"> ${p.code}</span></td>
+        <td class="r">${fmt(cost, 2)}</td>
+        <td class="r">${qty}</td>
+        <td class="r ${p.change_pct > 0 ? "up" : p.change_pct < 0 ? "down" : ""}">${fmt(price, 2)}<br><span class="chg-mini ${p.change_pct > 0 ? "up" : p.change_pct < 0 ? "down" : ""}">${p.change_pct != null ? (p.change_pct >= 0 ? "+" : "") + p.change_pct.toFixed(2) + "%" : "--"}</span></td>
+        <td class="r">${fmt(mkt, 0)}</td>
+        <td class="r ${cls}">${signed(profit.toFixed(0))}</td>
+        <td class="r ${cls}">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</td>
+        <td class="r">${it.track ? it.track + '<br>' : ''}<span class="${tpct != null && tpct > 0 ? "up" : tpct != null && tpct < 0 ? "down" : ""}">${tpct != null ? (tpct >= 0 ? "+" : "") + tpct.toFixed(2) + "%" : "--"}</span>${fn != null ? '　<span class="muted-mini">' + (fn >= 0 ? "净流入+" : "净流出") + Math.abs(fn).toFixed(2) + '亿</span>' : ''}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  // AI 建议卡片（每个持仓一张，按 action 决定底色）
+  function renderAiAdvice(positions) {
+    const el = document.getElementById("aiAdviceBody");
+    if (!el) return;
+    if (!positions || !positions.length) {
+      el.innerHTML = `<div class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</div>`;
+      return;
+    }
+    el.innerHTML = positions.map(p => {
+      const action = p.action || "不动";
+      const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
+      const score = p.advice_score != null ? p.advice_score : 0;
+      const cls = action === "买入" ? "ai-card-buy" : action === "卖出" ? "ai-card-sell" : "ai-card-hold";
+      // 评分条形（-100..+100 → 0..100% 偏移）
+      const offset = 50 + score / 2;     // -100 → 0, 0 → 50, 100 → 100
+      const fillLeft = Math.max(0, Math.min(100, offset));
+      const it = p.industry_today || {};
+      const opHtml = p.op_price != null ? `<span class="ai-op">建议${label} @ ${fmt(p.op_price, 2)} × ${p.op_qty || 0}股</span>` : "";
+      const reason = p.reason || p.op_basis || "技术面/板块资金综合研判";
+      const track = it.track ? `<span class="muted-mini">${it.track}</span> · ` : "";
+      return `<div class="ai-card ${cls}">
+        <div class="ai-row1">
+          <div class="ai-name"><b>${p.name || p.code}</b><span class="code-mini"> ${p.code}</span></div>
+          <div class="ai-action">${label}</div>
+          <div class="ai-score">${score > 0 ? "+" : ""}${score}</div>
+        </div>
+        <div class="ai-bar"><div class="ai-bar-fill" style="left:${fillLeft}%"></div><div class="ai-bar-center"></div></div>
+        <div class="ai-row2">
+          <div class="ai-reason">${reason}</div>
+        </div>
+        <div class="ai-row3">
+          ${track}
+          <span class="${it.trend_pct > 0 ? "up" : it.trend_pct < 0 ? "down" : ""}">${it.trend_pct != null ? "今日赛道 " + (it.trend_pct >= 0 ? "+" : "") + it.trend_pct.toFixed(2) + "%" : "今日赛道 --"}</span>
+          ${it.fund_net != null ? ' · <span class="' + (it.fund_net > 0 ? "up" : "down") + '">' + (it.fund_net >= 0 ? "资金净流入 +" : "资金净流出 ") + Math.abs(it.fund_net).toFixed(2) + ' 亿</span>' : ""}
+          ${opHtml}
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // 给自选股注入今日赛道（板块资金流走的是同个数据源，后端 positions_advice 已含，自选侧复用同 cache）
+  function computeSignalsForWatchlist() {
+    // 直接复用现有自选刷新逻辑；为简单就不再加重，watchMeta 里有 change_pct 即可
+    if (state.watchlist && state.watchlist.length) computeSignals();
   }
 
   function fmt(n, d = 2) { return n == null ? "--" : Number(n).toFixed(d); }
   function chgClass(v) { return v > 0 ? "up" : v < 0 ? "down" : ""; }
+  function signed(n, p = 0) { return (n >= 0 ? "+" : "") + fmt(n, p); }
 
   // ---------- 初始化 ----------
   async function init() {
-    // 图表初始化失败不应拖垮整个页面
-    try { chart = new StockChart($("#chart"), $("#tooltip")); }
-    catch (e) { console.warn("图表初始化失败：", e); chart = null; }
-
+    // 图表已被移除（用户不要了），旧函数对 chart 的引用会安全跳过
     let cfg = {};
     try { cfg = (await api("GET", "/api/config")) || {}; }
     catch (e) {
@@ -117,27 +216,12 @@
         : "填好后，选股下拉选「通达信全市场」即可扫描全部 A 股日线（需先在通达信下载日线数据）。";
     } catch (e) {}
     startClock();
-    startMonitor();
-    startLiveView();
-    state.timers.push(setInterval(loadPositionAdvice, 10000));
-    // 盘中实时建议：5 秒高频刷新（解决"拉升到6个点跌到4个点该不该卖"的分时判断）
-    pollIntraday();
-    state.timers.push(setInterval(pollIntraday, 8000));
+    // 账户 + 持仓 + AI 建议（每 8 秒刷一次）
+    try { await renderAccount(); } catch (e) { console.warn("账户刷新失败：", e); }
+    state.timers.push(setInterval(renderAccount, 8000));
     // 尾盘策略：30 秒刷新（低频，尾盘汇总减仓/埋伏结论）
     try { loadTailStrategy(); } catch (e) {}
     state.timers.push(setInterval(loadTailStrategy, 30000));
-    // 盘中分时周期切换（1分钟 / 5分钟）
-    const periodBox = document.getElementById("intradayPeriods");
-    if (periodBox) {
-      periodBox.addEventListener("click", e => {
-        const btn = e.target.closest(".ip-btn");
-        if (!btn) return;
-        intradayPeriod = btn.dataset.period || "1m";
-        periodBox.querySelectorAll(".ip-btn").forEach(b => b.classList.toggle("active", b === btn));
-        _intradayBusy = false;  // 允许立即按新周期刷新
-        pollIntraday();
-      });
-    }
     // 每日策略：开盘判断 / 四时点快照 / 收盘复盘（30 秒刷新，后端自动补齐缺失记录）
     state.dailySnapTab = "09:30";
     try { pollDailyStrategy(); } catch (e) {}
@@ -156,14 +240,16 @@
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
-    // 调试与共享链接：?code=sh600105 自动打开该股；?demo=1 同时跑一次候选扫描
+    // 现金改了实时同步到拉取（避免刷新延迟）
+    const cashEl = document.getElementById("cashInput");
+    if (cashEl) cashEl.addEventListener("change", () => {
+      try { localStorage.setItem("wb_cash", cashEl.value); } catch (e) {}
+      renderAccount();
+    });
+    // 调试：?demo=scan 同时跑一次候选扫描
     const _qp = new URLSearchParams(location.search);
-    const _demoCode = _qp.get("code");
-    if (_demoCode) {
-      setTimeout(() => openStock(_demoCode, _qp.get("name") || ""), 700);
-    }
     if (_qp.get("demo") === "scan") {
-      setTimeout(() => { const s = $("#scopeSelect"); s.value = "candidate"; runScreener(); }, 1200);
+      setTimeout(() => { const s = $("#scopeSelect"); if (s) { s.value = "candidate"; runScreener(); } }, 1200);
     }
   }
 
@@ -186,22 +272,13 @@
              <span>${it.name}</span><span class="code">${it.code}</span></div>`).join("");
         $("#searchResults").querySelectorAll(".search-item").forEach(el =>
           el.addEventListener("click", () => {
-            openStock(el.dataset.code, el.dataset.name);
+            addToWatchFromSearch(el.dataset.code, el.dataset.name);
             $("#searchInput").value = ""; $("#searchResults").innerHTML = "";
           }));
       }, 250);
     });
 
-    // 周期
-    $("#periodBtns").querySelectorAll("button").forEach(b =>
-      b.addEventListener("click", () => {
-        $("#periodBtns").querySelectorAll("button").forEach(x => x.classList.remove("active"));
-        b.classList.add("active");
-        state.current.period = b.dataset.period;
-        if (state.current.code) loadKline();
-      }));
-
-    // 全局搜索（P1）：跨面板股票查找
+    // 全局搜索：点击结果直接加入自选
     const gs = $("#globalSearch");
     const gsResults = $("#globalSearchResults");
     let gsTimer;
@@ -218,7 +295,7 @@
         gsResults.classList.add("open");
         gsResults.querySelectorAll(".gsr-row[data-code]").forEach(el =>
           el.addEventListener("click", () => {
-            openStock(el.dataset.code, el.dataset.name);
+            addToWatchFromSearch(el.dataset.code, el.dataset.name);
             gs.value = ""; gsResults.classList.remove("open"); gsResults.innerHTML = "";
           }));
       }, 220);
@@ -228,20 +305,6 @@
         gsResults.classList.remove("open");
       }
     });
-
-    // 顶部周期菜单（P1）：联动主周期切换
-    document.querySelectorAll(".top-period .period-opt").forEach(b =>
-      b.addEventListener("click", () => {
-        const p = b.dataset.period;
-        document.querySelectorAll(".top-period .period-opt").forEach(x => x.classList.remove("active"));
-        b.classList.add("active");
-        document.querySelectorAll("#periodBtns button").forEach(x =>
-          x.classList.toggle("active", x.dataset.period === p));
-        state.current.period = p;
-        if (state.current.code) loadKline();
-        // 关掉 dropdown
-        const menu = b.closest(".top-menu"); if (menu) menu.removeAttribute("open");
-      }));
 
     // 全局判案（P1）：触发每日策略的"open_judgment"并弹窗综述
     const gj = $("#globalJudge");
@@ -265,16 +328,6 @@
       finally { gj.disabled = false; gj.textContent = old; }
     });
 
-    // 账户中心 KPI（P1）：10 秒拉一次
-    refreshKpi(); state.timers.push(setInterval(refreshKpi, 10000));
-
-    // 指标开关（HTML 已精简为 BOLL/MACD/KDJ 三项，无 RSI）
-    ["tgBoll", "tgMacd", "tgKdj"].forEach(id =>
-      $("#" + id).addEventListener("change", () => {
-        if (state.lastKline) chart.setData(state.lastKline.bars, state.lastKline.indicators, toggleOpts());
-      }));
-
-    $("#refreshBtn").addEventListener("click", () => { if (state.current.code) loadKline(); });
     $("#addCurrent").addEventListener("click", addCurrentToWatch);
     $("#refreshSignals").addEventListener("click", computeSignals);
     $("#scanBtn").addEventListener("click", runScreener);
@@ -284,7 +337,6 @@
       toast("可用资金已设为 ¥" + v.toLocaleString("zh-CN"));
     });
     $("#rebuildBtn").addEventListener("click", rebuildUniverse);
-    $("#advBtn").addEventListener("click", recomputeAdvice);
 
     // 持仓台账
     $("#addPosBtn").addEventListener("click", addPosition);
@@ -325,15 +377,15 @@
     });
 
     // 现金（持仓汇总条）：编辑即持久化 + 触发重新测算（防抖，避免每个字都打后端）
-    let _cashT;
-    const onCash = () => {
-      const v = $("#cashInput").value;
-      localStorage.setItem("wb_cash", v);
-      clearTimeout(_cashT);
-      _cashT = setTimeout(() => loadPositionAdvice(), 500);
-    };
-    $("#cashInput").addEventListener("input", onCash);
-    $("#cashInput").addEventListener("change", onCash);
+    // 现金改动：直接重渲染账户 dashboard（已删除 loadPositionAdvice，与 renderAccount 取代）
+    $("#cashInput").addEventListener("input", () => {
+      try { localStorage.setItem("wb_cash", $("#cashInput").value); } catch (e) {}
+      renderAccount();
+    });
+    $("#cashInput").addEventListener("change", () => {
+      try { localStorage.setItem("wb_cash", $("#cashInput").value); } catch (e) {}
+      renderAccount();
+    });
   }
 
   function toggleOpts() {
@@ -469,23 +521,14 @@
 
   // ---------- 打开股票 ----------
   async function openStock(code, name) {
+    // K线视图已移除，转为加入自选（避免 console error 让用户茫然）
     state.current = { code, name: name || code, period: state.current.period || "daily" };
-    $("#curName").textContent = name || code;
-    $("#curCode").textContent = code;
-    // 自动用持仓台账填「持仓(股)」
-    const held = (state.positions.find(p => p.code === code) || {}).shares || 0;
-    $("#holdInput").value = held;
-    state.watchlist.forEach(c => document.querySelectorAll(`.watch-item[data-code="${c}"]`).forEach(e => e.classList.remove("active")));
-    document.querySelectorAll(`.watch-item[data-code="${code}"]`).forEach(e => e.classList.add("active"));
-    await loadKline();
+    addToWatchFromSearch(code, name || code);
   }
 
   async function loadKline() {
-    const { code, period } = state.current;
-    const lim = period === "daily" ? 300 : period === "weekly" ? 200 : 240;
-    const data = await api("GET", `/api/kline?code=${code}&period=${period}&limit=${lim}`);
-    state.lastKline = data;
-    chart.setData(data.bars, data.indicators, toggleOpts());
+    // K线图已被用户移除，所有调用安全跳过（保留函数名兼容旧引用）
+    return;
     // 实时 + 信号
     const rt = await api("GET", "/api/quotes?codes=" + code);
     if (rt[code]) {
@@ -687,6 +730,11 @@
         addToWatch(btn.dataset.code, btn.dataset.name,
                    btn.dataset.price || null, btn.dataset.buy || null);
       }));
+  }
+
+  // 全局搜索 / 局部搜索点击：加入自选
+  async function addToWatchFromSearch(code, name) {
+    await addToWatch(code, name, null, null);
   }
 
   // 扫描结果「加自选」：记录添加时间/添加时价格/推荐买价
@@ -1035,106 +1083,13 @@
   // ---------- 定时器 ----------
   function startMonitor() { state.timers.push(setInterval(pollQuotes, 5000)); }
   function startAlertCheck() { state.timers.push(setInterval(checkAlerts, 6000)); loadAlerts(); }
-  // 持仓批量建议：一次拉全持仓的 买/卖/不动 + 操作价 + 操作量 + 行业强弱 + 实时价
-  // 每 10 秒自动刷新（页面自动跳动，无需手动刷新）
-  async function loadPositionAdvice() {
-    const cash = parseFloat($("#cashInput").value || "100000") || 0;
-    try {
-      const data = await api("GET", "/api/positions_advice?capital=" + cash);
-      if (!data || !data.ok) return;
-      state.posAdvice = data.positions || [];
-      $("#posMarketValue").textContent = "¥" + (data.market_value != null
-        ? data.market_value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }) : "--");
-      $("#posTotalValue").textContent = "¥" + (data.total_value != null
-        ? data.total_value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }) : "--");
-      renderPositions();
-      renderInlineIntraday();
-      renderIntradayList();
-    } catch (e) { /* 网络抖动忽略 */ }
-  }
-  // 在每只持仓卡片下方内联一份分时建议（仅复用已缓存 state.intraday，不发请求）
-  function renderInlineIntraday() {
-    const adv = state.posAdvice || [];
-    adv.forEach(p => {
-      const slot = document.querySelector(`#posList .pa-intraday[data-code="${p.code}"]`);
-      if (!slot) return;
-      const it = state.intraday && state.intraday[p.code];
-      if (!it) {
-        // 首屏骨架：已有实时价时先显示"分析中 + 现价/涨跌"，避免一直空白"加载中"
-        const pa = (state.posAdvice || []).find(x => x.code === p.code) || {};
-        const priceTxt = pa.price != null ? `现价 ${pa.price}` : "";
-        const pctTxt = pa.change_pct != null
-          ? ` <b style="color:${pa.change_pct >= 0 ? '#c92a2a' : '#2b8a3e'}">${pa.change_pct >= 0 ? '+' : ''}${pa.change_pct}%</b>` : "";
-        slot.innerHTML = `<span style="color:var(--muted)">⏳ 分时分析中…</span>`
-          + (priceTxt ? `<span style="margin-left:6px;color:var(--muted);font-size:11px">${priceTxt}${pctTxt}</span>` : "");
-        return;
-      }
-      const m = it.metrics || {};
-      const color = it.action_color || "#1971c2";
-      const urgent = it.urgency === "立即" ? "animation:it-blink 1s infinite;" : "";
-      const metTxt = [
-        m.now_pct != null ? `<b style="color:${m.now_pct >= 0 ? '#c92a2a' : '#2b8a3e'}">${m.now_pct >= 0 ? '+' : ''}${m.now_pct}%</b>` : "",
-        m.kdj_j != null ? `KDJ ${m.kdj_j} ${m.kdj_turn && m.kdj_turn !== '平稳' ? '·' + m.kdj_turn : ''}` : "",
-        m.macd_status ? `MACD ${m.macd_status}` : "",
-        m.vol_ratio != null ? `量比 ${m.vol_ratio}` : "",
-      ].filter(Boolean).join("　");
-      const tgt = it.target_price ? `${it.target_type || "操作"} ${it.target_price}` : "";
-      slot.innerHTML = `<span style="display:inline-block;padding:2px 8px;border-radius:6px;background:${color}1a;color:${color};font-weight:600;${urgent}">⚡${it.action}</span>
-        <span style="margin-left:6px;color:var(--muted)">${it.urgency}</span>
-        ${metTxt ? `<span style="margin-left:8px;font-size:12px">${metTxt}</span>` : ""}
-        ${tgt ? `<span style="margin-left:8px;color:#2b8a3e">${tgt}</span>` : ""}`;
-    });
-  }
-
-  // 盘中实时建议：每只持仓 + 当前查看股票，按 1min/5min K 线的分时判断"该不该买/卖"
-  // 一次批量请求并发算所有持仓（后端线程池），解决"逐只请求叠加 1m 现拉 → 一直加载"
-  let _intradaySeq = 0;
-  let _intradayBusy = false;  // 在途锁：上一轮未完成不发起新一轮，避免请求风暴
-  let intradayPeriod = "1m";  // 分时周期：1m / 5m，前端可切换
-  async function pollIntraday() {
-    if (_intradayBusy) return;
-    const codes = new Set();
-    (state.posAdvice || []).forEach(p => codes.add(p.code));
-    if (state.current && state.current.code) codes.add(state.current.code);
-    if (!codes.size) return;
-    _intradayBusy = true;
-    try {
-      const url = "/api/intraday_advice_batch?period=" + intradayPeriod +
-                  "&codes=" + encodeURIComponent(Array.from(codes).join(","));
-      const data = await api("GET", url);
-      // 15:00 后停止更新：后端返回 closed，前端显示"已收盘"并停更
-      if (data && data.closed) {
-        const ul = document.getElementById("intradayList");
-        if (ul) ul.innerHTML = `<li class="sub" style="padding:10px 0;color:var(--muted)">🌙 ${data.message || "已收盘，分时建议已停止更新"}</li>`;
-        return;
-      }
-      if (!data || !data.results) return;
-      const seq = ++_intradaySeq;
-      if (seq !== _intradaySeq) return;  // 被更新的轮询抢占
-      state.intraday = data.results;
-      renderIntradayList();
-      renderInlineIntraday();
-    } catch (e) { /* 网络抖动忽略，下次轮询重试 */ }
-    finally { _intradayBusy = false; }
-  }
-  function renderIntradayList() {
-    const ul = $("#intradayList");
-    if (!ul) return;
-    const codes = new Set();
-    (state.posAdvice || []).forEach(p => codes.add(p.code));
-    if (state.current && state.current.code) codes.add(state.current.code);
-    if (!codes.size) {
-      ul.innerHTML = '<li class="sub" style="padding:8px 0;color:var(--muted);font-size:12px">无持仓或未选股时，分时建议自动停止。</li>';
-      return;
-    }
-    const arr = Array.from(codes).map(code => {
-      const pa = (state.posAdvice || []).find(p => p.code === code);
-      const it = state.intraday && state.intraday[code];
-      const name = (pa && pa.name) || (state.current && state.current.code === code ? state.current.name : "") || code;
-      return { code, name, pa, it };
-    });
-    ul.innerHTML = arr.map(row => _intradayRowHtml(row)).join("");
-  }
+  // 旧 loadPositionAdvice / renderPositions 已被 renderAccount/renderPosTable 取代，保留空函数避免旧调用报错
+  async function loadPositionAdvice() { return renderAccount(); }
+  // 旧函数已被 renderAccount / renderPosTable / renderAiAdvice 取代，保留空壳避免旧调用报错
+  function renderPositions() { /* 已迁移到 renderPosTable */ }
+  function renderInlineIntraday() { /* 盘中即时建议面板已合并到 AI 建议卡 */ }
+  async function pollIntraday() { /* 盘中面板已折叠到 AI 建议卡 */ }
+  function renderIntradayList() { /* 同上 */ }
   // 尾盘策略汇总：每天 14:30-15:00 给出"减仓哪几只 / 埋伏哪 1 只"结论
   async function loadTailStrategy() {
     try {
