@@ -171,6 +171,16 @@ body {
 .pos-table .muted-mini { color: var(--muted); font-size: 10px; }
 .pos-table .muted-cell { text-align: center; color: var(--muted); padding: 16px; }
 
+/* 持仓行底色（按盈亏）：赚钱浅红 / 亏钱浅绿 / 持平白，整行直观 */
+.pos-table tbody tr.pos-row-up   { background: linear-gradient(90deg, rgba(224,49,49,0.16) 0%, rgba(224,49,49,0.06) 100%); }
+.pos-table tbody tr.pos-row-down { background: linear-gradient(90deg, rgba(47,158,68,0.18) 0%, rgba(47,158,68,0.06) 100%); }
+.pos-table tbody tr.pos-row-flat { background: #fff; }
+.pos-table tbody tr.pos-row-up:hover   { background: linear-gradient(90deg, rgba(224,49,49,0.28) 0%, rgba(224,49,49,0.10) 100%); }
+.pos-table tbody tr.pos-row-down:hover { background: linear-gradient(90deg, rgba(47,158,68,0.28) 0%, rgba(47,158,68,0.10) 100%); }
+.pos-table tbody tr.pos-row-up   td:first-child { border-left: 4px solid #e03131; }
+.pos-table tbody tr.pos-row-down td:first-child { border-left: 4px solid #2f9e44; }
+.pos-table tbody tr.pos-row-flat td:first-child { border-left: 4px solid #adb5bd; }
+
 /* ---------- 当日交易录入（持仓后，买卖驱动真实盈亏） ---------- */
 .trade-entry {
   margin-top: 10px; padding: 8px 10px; border-top: 1px dashed rgba(255,176,112,0.5);
@@ -186,88 +196,120 @@ body {
 .trade-entry #tradeBtn { flex: 0 0 auto; background: var(--orange); }
 .trade-entry #tradeBtn:hover { background: #d9480f; }
 
-/* ---------- AI 建议（每只持仓一行，列表式） ---------- */
+/* ---------- AI 建议（真 <table>，table-layout:fixed 保证列宽严格对齐，整行底色更醒目） ---------- */
 .panel-aiadvice { background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%); border-color: #74c0fc; }
-.ai-list-header {
-  display: grid;
-  grid-template-columns: 120px 56px 60px 1fr 1fr 1.1fr 1.2fr;
-  gap: 8px; padding: 6px 10px;
-  background: rgba(255,255,255,0.6); border-radius: 6px;
-  font-size: 11.5px; font-weight: 700; color: #495057;
-  border: 1px solid #c5e3fa;
-}
-.ai-list-header > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ai-list {
-  display: flex; flex-direction: column; gap: 6px;
-  overflow-y: auto; flex: 1 1 auto; min-height: 0; max-height: none;
+.ai-table-wrap {
+  overflow-y: auto; overflow-x: hidden;
+  flex: 1 1 auto; min-height: 0; max-height: none;
   padding-right: 2px;
 }
-.ai-empty { color: var(--muted); padding: 20px; text-align: center; font-size: 12px; }
-.ai-row {
-  display: grid;
-  grid-template-columns: 120px 56px 60px 1fr 1fr 1.1fr 1.2fr;
-  gap: 8px; padding: 8px 10px; align-items: center;
-  border-radius: 8px; border: 1px solid;
-  background: #fff; font-size: 12px; line-height: 1.5;
-  transition: transform 0.12s;
+.ai-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 6px 4px;   /* 列间距 0，行间距 4px */
+  font-size: 12px; line-height: 1.5;
 }
-.ai-row:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.06); }
-.ai-row-buy { background: linear-gradient(135deg, #ebfbee 0%, #d3f9d8 100%); border-color: #69db7c; }
-.ai-row-hold { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-color: #adb5bd; }
-.ai-row-sell { background: linear-gradient(135deg, #fff5f5 0%, #ffe3e3 100%); border-color: #ff8787; }
+.ai-table thead th {
+  background: rgba(255,255,255,0.85); color: #495057; font-weight: 700; font-size: 11.5px;
+  padding: 6px 8px; text-align: left; border: 1px solid #bdd3e7;
+  position: sticky; top: 0; z-index: 2; border-radius: 4px;
+}
+.ai-table thead th.r { text-align: center; }
+.ai-table tbody td {
+  padding: 8px 10px; vertical-align: top; border: 1px solid transparent;
+  font-size: 12px; background: rgba(255,255,255,0.6);
+}
+.ai-table tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
+.ai-table .ai-c-score { text-align: center; font-variant-numeric: tabular-nums; }
 
-/* 列：股票 */
+/* 行底色（<tr> class 直接吃）：买入=绿、卖出=红、持有=黄灰，整个单元格都被染色 */
+.ai-table tbody tr.ai-row-buy td   { background: linear-gradient(135deg, #d3f9d8 0%, #b2f2bb 100%); border-color: #2b8a3e; }
+.ai-table tbody tr.ai-row-sell td  { background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%); border-color: #c92a2a; }
+.ai-table tbody tr.ai-row-hold td  { background: linear-gradient(135deg, #fff9db 0%, #fff3bf 100%); border-color: #f59f00; }
+.ai-table tbody tr:hover td { filter: brightness(0.97); }
+
+.ai-table .ai-empty { text-align: center; color: var(--muted); padding: 20px; font-size: 12px; }
+
+/* 列内子元素样式（保留所有原来 cell 内的视觉） */
 .ai-c-name b { font-size: 13px; color: #212529; display: block; }
 .ai-c-name .code-mini { font-size: 10.5px; color: #6c757d; }
 .ai-c-name .ai-c-price { font-size: 11px; color: #495057; margin-top: 2px; }
 
-/* 列：评分 */
-.ai-c-score {
-  font-size: 18px; font-weight: 800; text-align: center;
-  font-variant-numeric: tabular-nums;
+.ai-c-score { font-size: 18px; font-weight: 800; }
+.ai-table tbody tr.ai-row-buy td.ai-c-score  { color: #1b5e20; }
+.ai-table tbody tr.ai-row-sell td.ai-c-score { color: #b71c1c; }
+.ai-table tbody tr.ai-row-hold td.ai-c-score { color: #6d4c00; }
+
+.ai-c-action { text-align: center; }
+.ai-c-action .ai-action-pill {
+  display: inline-block; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 12px;
+  background: rgba(255,255,255,0.6); border: 1.5px solid;
 }
-.ai-row-buy .ai-c-score { color: #2b8a3e; }
-.ai-row-sell .ai-c-score { color: #c92a2a; }
-.ai-row-hold .ai-c-score { color: #495057; }
+.ai-table tbody tr.ai-row-buy  td.ai-c-action .ai-action-pill { color: #1b5e20; border-color: #2b8a3e; background: #fff; }
+.ai-table tbody tr.ai-row-sell td.ai-c-action .ai-action-pill { color: #b71c1c; border-color: #c92a2a; background: #fff; }
+.ai-table tbody tr.ai-row-hold td.ai-c-action .ai-action-pill { color: #6d4c00; border-color: #f59f00; background: #fff; }
 
+/* 列：今日预估 */
+.ai-c-fc .fc-trend { font-weight: 800; font-size: 12px; display: block; margin-bottom: 2px; }
+.ai-c-fc .fc-trend.up   { color: #1b5e20; }
+.ai-c-fc .fc-trend.down { color: #b71c1c; }
+.ai-c-fc .fc-trend.flat { color: #6d4c00; }
+.ai-c-fc .fc-pct { font-variant-numeric: tabular-nums; margin-left: 4px; font-weight: 700; }
+.ai-c-fc .fc-basis { font-size: 10.5px; color: #495057; margin: 3px 0 0; padding: 0; list-style: none; }
+.ai-c-fc .fc-basis li { margin: 1px 0; padding-left: 10px; position: relative; }
+.ai-c-fc .fc-basis li::before { content: "•"; position: absolute; left: 0; color: #868e96; }
 
-/* 列：板块（强化对齐 + 颜色显眼） */
-.ai-c-sec { font-size: 11.5px; line-height: 1.7; text-align: left; }
+/* 列：板块 */
+.ai-c-sec { font-size: 11.5px; line-height: 1.65; }
 .ai-c-sec .sec-name { font-weight: 700; color: #1971c2; display: block; margin-bottom: 2px; }
-.ai-c-sec .sec-row1 { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.ai-c-sec .sec-pct { font-weight: 700; font-variant-numeric: tabular-nums; padding: 0 4px; border-radius: 3px; }
+.ai-c-sec .sec-row1 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ai-c-sec .sec-pct { font-weight: 800; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 3px; font-size: 11.5px; }
 .ai-c-sec .sec-pct.sec-up { color: #fff; background: #e03131; }
 .ai-c-sec .sec-pct.sec-dn { color: #fff; background: #2f9e44; }
 .ai-c-sec .sec-fund-val { font-weight: 700; font-size: 11px; padding: 1px 6px; border-radius: 3px; }
-.ai-c-sec .sec-fund-val.sec-fund-in { color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; }
-.ai-c-sec .sec-fund-val.sec-fund-out { color: #2b8a3e; background: #ebfbee; border: 1px solid #b2f2bb; }
+.ai-c-sec .sec-fund-val.sec-fund-in  { color: #c92a2a; background: #fff; border: 1px solid #ffc9c9; }
+.ai-c-sec .sec-fund-val.sec-fund-out { color: #2b8a3e; background: #fff; border: 1px solid #b2f2bb; }
 .ai-c-sec .sec-fund-mini { color: var(--muted); font-size: 10.5px; display: block; margin-top: 2px; }
 .ai-c-sec .sec-fund-mini b { color: #212529; }
 
-/* 做T方案：三态不同底色，更显眼 */
-.ai-c-tp { font-size: 11px; line-height: 1.6; }
-.ai-c-tp .tp-line { display: flex; gap: 4px; align-items: center; margin-bottom: 2px; flex-wrap: wrap; }
-.ai-c-tp .tp-tag { font-size: 10.5px; padding: 2px 7px; border-radius: 4px; font-weight: 700; min-width: 32px; text-align: center; }
-.ai-c-tp .tp-tag.buy { background: #2b8a3e; color: #fff; }
-.ai-c-tp .tp-tag.sell { background: #c92a2a; color: #fff; }
-.ai-c-tp .tp-tag.tp { background: #1971c2; color: #fff; }
-.ai-c-tp .tp-tag.sl { background: #495057; color: #fff; }
-.ai-c-tp .tp-tag.hold { background: #e9ecef; color: #495057; }
-.ai-c-tp .tp-price { font-weight: 800; font-variant-numeric: tabular-nums; padding: 0 3px; }
-.ai-c-tp .tp-price.buy { color: #2b8a3e; }
-.ai-c-tp .tp-price.sell { color: #c92a2a; }
-.ai-c-tp .tp-price.tp { color: #1971c2; }
-.ai-c-tp .tp-price.sl { color: #495057; }
-.ai-c-tp .tp-qty { color: #6c757d; font-size: 10.5px; }
-.ai-c-tp .tp-when { color: #495057; font-size: 10.5px; flex: 1 1 auto; min-width: 100px; }
-.ai-c-tp .tp-basis { color: #876200; font-size: 10.5px; margin-top: 3px; padding: 2px 5px; background: #fff8e1; border-radius: 3px; border-left: 2px solid #f59f00; }
+/* 列：技术面 */
+.ai-c-tech { font-size: 11px; line-height: 1.65; }
+.ai-c-tech .tech-state { display: inline-block; padding: 2px 6px; border-radius: 4px; margin: 0 3px 3px 0; font-size: 10.5px; font-weight: 700; }
+.tech-state.gold      { background: #fff3bf; color: #876200; }
+.tech-state.dead      { background: #e9ecef; color: #495057; }
+.tech-state.mid       { background: #f1f3f5; color: #495057; }
+.tech-state.zero-up   { background: #d3f9d8; color: #2b8a3e; }
+.tech-state.zero-down { background: #ffe3e3; color: #c92a2a; }
+.tech-state.ob        { background: #ffe3e3; color: #c92a2a; }
+.tech-state.os        { background: #d3f9d8; color: #2b8a3e; }
+.tech-state.boll-up   { background: #ffe3e3; color: #c92a2a; }
+.tech-state.boll-mid  { background: #f1f3f5; color: #495057; }
+.tech-state.boll-down { background: #d3f9d8; color: #2b8a3e; }
+.ai-c-tech .tech-levels { color: #495057; font-size: 10.5px; margin-top: 3px; }
 
-/* 行底色按动作更显眼（粗边框 + 阴影） */
-.ai-row-buy { background: linear-gradient(135deg, #d3f9d8 0%, #b2f2bb 100%); border-color: #2b8a3e; border-width: 2px; box-shadow: 0 0 0 1px #b2f2bb inset; }
-.ai-row-hold { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-color: #868e96; border-width: 1.5px; }
-.ai-row-sell { background: linear-gradient(135deg, #fff5f5 0%, #ffc9c9 100%); border-color: #c92a2a; border-width: 2px; box-shadow: 0 0 0 1px #ffc9c9 inset; }
+/* 列：做T方案 */
+.ai-c-tp { font-size: 11px; line-height: 1.7; }
+.ai-c-tp .tp-line { display: flex; gap: 5px; align-items: center; margin-bottom: 3px; flex-wrap: wrap; }
+.ai-c-tp .tp-tag { font-size: 10.5px; padding: 2px 7px; border-radius: 4px; font-weight: 800; min-width: 36px; text-align: center; color: #fff; }
+.ai-c-tp .tp-tag.buy  { background: #2b8a3e; }
+.ai-c-tp .tp-tag.sell { background: #c92a2a; }
+.ai-c-tp .tp-tag.tp   { background: #1971c2; }
+.ai-c-tp .tp-tag.sl   { background: #495057; }
+.ai-c-tp .tp-tag.hold { background: #868e96; }
+.ai-c-tp .tp-price { font-weight: 800; font-variant-numeric: tabular-nums; padding: 0 4px; font-size: 12px; }
+.ai-c-tp .tp-price.buy  { color: #1b5e20; }
+.ai-c-tp .tp-price.sell { color: #b71c1c; }
+.ai-c-tp .tp-price.tp   { color: #1971c2; }
+.ai-c-tp .tp-price.sl   { color: #495057; }
+.ai-c-tp .tp-qty { color: #495057; font-size: 10.5px; font-weight: 700; }
+.ai-c-tp .tp-when { color: #212529; font-size: 10.5px; flex: 1 1 auto; min-width: 100px; }
+.ai-c-tp .tp-basis { color: #6d4c00; font-size: 10.5px; margin-top: 4px; padding: 3px 6px; background: #fff8e1; border-radius: 3px; border-left: 3px solid #f59f00; }
 
-/* 复盘今日无数据的友好提示 */
+/* ---------- 旧版本残留（不再用，但保留兜底防止 JS 报 undefined） ---------- */
+.ai-list, .ai-list-header, .ai-row { /* deprecated — AI 已迁到 .ai-table，不影响样式 */ }
+.ai-list-header > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- 复盘今日无数据的友好提示 ---------- */
 .rev-collecting {
   padding: 10px 12px;
   background: linear-gradient(135deg, #f8f9fa 0%, #fff8e1 100%);
@@ -278,62 +320,6 @@ body {
   line-height: 1.7;
 }
 .rev-collecting b { color: #c92a2a; }
-
-/* 列：操作 */
-.ai-c-action {
-  font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 12px;
-  text-align: center; background: rgba(255,255,255,0.85);
-}
-.ai-row-buy .ai-c-action { color: #2b8a3e; border: 1px solid #69db7c; }
-.ai-row-sell .ai-c-action { color: #c92a2a; border: 1px solid #ff8787; }
-.ai-row-hold .ai-c-action { color: #495057; border: 1px solid #adb5bd; }
-
-/* 列：今日预估 */
-.ai-c-fc { font-size: 11.5px; line-height: 1.6; }
-.ai-c-fc .fc-trend { font-weight: 700; font-size: 12px; display: block; margin-bottom: 2px; }
-.ai-c-fc .fc-trend.up { color: #2b8a3e; }
-.ai-c-fc .fc-trend.down { color: #c92a2a; }
-.ai-c-fc .fc-trend.flat { color: #495057; }
-.ai-c-fc .fc-pct { font-variant-numeric: tabular-nums; margin-left: 4px; font-weight: 600; }
-.ai-c-fc .fc-basis { font-size: 10.5px; color: #6c757d; }
-.ai-c-fc .fc-basis li { margin-left: 14px; list-style: disc inside; }
-
-/* 列：板块 */
-.ai-c-sec { font-size: 11.5px; line-height: 1.6; }
-.ai-c-sec .sec-name { font-weight: 700; color: #1971c2; display: block; }
-.ai-c-sec .sec-pct { font-weight: 600; font-variant-numeric: tabular-nums; }
-.ai-c-sec .sec-pct.up { color: #2b8a3e; }
-.ai-c-sec .sec-pct.down { color: #c92a2a; }
-.ai-c-sec .sec-fund { color: #495057; }
-
-/* 列：技术面 */
-.ai-c-tech { font-size: 11px; line-height: 1.6; }
-.ai-c-tech .tech-ma { font-weight: 600; color: #495057; }
-.ai-c-tech .tech-state { display: inline-block; padding: 1px 5px; border-radius: 4px; margin-right: 3px; font-size: 10px; font-weight: 600; }
-.tech-state.gold { background: #fff3bf; color: #876200; }
-.tech-state.dead { background: #e9ecef; color: #495057; }
-.tech-state.zero-up { background: #d3f9d8; color: #2b8a3e; }
-.tech-state.zero-down { background: #ffe3e3; color: #c92a2a; }
-.tech-state.ob { background: #ffe3e3; color: #c92a2a; }
-.tech-state.os { background: #d3f9d8; color: #2b8a3e; }
-.tech-state.mid { background: #f1f3f5; color: #495057; }
-.tech-state.boll-up { background: #ffe3e3; color: #c92a2a; }
-.tech-state.boll-mid { background: #f1f3f5; color: #495057; }
-.tech-state.boll-down { background: #d3f9d8; color: #2b8a3e; }
-.ai-c-tech .tech-levels { color: #6c757d; font-size: 10.5px; margin-top: 2px; }
-
-/* 列：做T方案 */
-.ai-c-tp { font-size: 11px; line-height: 1.6; }
-.ai-c-tp .tp-line { display: flex; gap: 6px; align-items: center; margin-bottom: 2px; }
-.ai-c-tp .tp-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 700; }
-.ai-c-tp .tp-tag.buy { background: #d3f9d8; color: #2b8a3e; }
-.ai-c-tp .tp-tag.sell { background: #ffe3e3; color: #c92a2a; }
-.ai-c-tp .tp-tag.hold { background: #f1f3f5; color: #495057; }
-.ai-c-tp .tp-price { font-weight: 700; font-variant-numeric: tabular-nums; }
-.ai-c-tp .tp-price.buy { color: #2b8a3e; }
-.ai-c-tp .tp-price.sell { color: #c92a2a; }
-.ai-c-tp .tp-qty { color: #6c757d; font-size: 10.5px; }
-.ai-c-tp .tp-basis { color: #868e96; font-size: 10.5px; margin-top: 2px; }
 
 /* ---------- 折叠区（左下角：每日/尾盘） ---------- */
 .bottom-fold { display: flex; flex-direction: column; gap: 8px; }

@@ -30,6 +30,7 @@
       <span class="status">
         <span class="badge" id="marketBadge">A股 · 沪深</span>
         <span class="badge" id="tdxStatus">数据源：检测中…</span>
+        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-12-r5</span>
         <span class="badge clock" id="clock">--:--:--</span>
       </span>
     </div>
@@ -167,17 +168,33 @@
           <span>🤖 AI 建议 · 每只持仓一行（今日预估 + 板块 + 技术面 + 做T方案）</span>
           <span class="sub">满 +100 必加仓 · -100 必减仓 · 每 10 秒刷新</span>
         </div>
-        <div class="ai-list-header">
-          <span class="alh-name">股票</span>
-          <span class="alh-score">评分</span>
-          <span class="alh-act">操作</span>
-          <span class="alh-fc">今日预估</span>
-          <span class="alh-sec">板块</span>
-          <span class="alh-tech">技术面</span>
-          <span class="alh-tp">做T方案</span>
-        </div>
-        <div id="aiAdviceBody" class="ai-list">
-          <div class="ai-empty">加载 AI 建议中…</div>
+        <!-- AI 建议：真 <table>，table-layout:fixed 保证列宽对齐，单元格 vertical-align:top 保证行内多行内容上下对齐 -->
+        <div class="ai-table-wrap">
+          <table class="ai-table">
+            <colgroup>
+              <col style="width:130px">   <!-- 股票 -->
+              <col style="width:54px">    <!-- 评分 -->
+              <col style="width:64px">    <!-- 操作 -->
+              <col>                       <!-- 今日预估 -->
+              <col>                       <!-- 板块 -->
+              <col>                       <!-- 技术面 -->
+              <col>                       <!-- 做T方案 -->
+            </colgroup>
+            <thead>
+              <tr>
+                <th>股票</th>
+                <th class="r">评分</th>
+                <th>操作</th>
+                <th>今日预估</th>
+                <th>板块</th>
+                <th>技术面</th>
+                <th>做T方案</th>
+              </tr>
+            </thead>
+            <tbody id="aiAdviceBody">
+              <tr><td colspan="7" class="ai-empty">加载 AI 建议中…</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </main>

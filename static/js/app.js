@@ -99,7 +99,7 @@
     } catch (e) { /* ignore */ }
   }
 
-  // 持仓表（按用户要求：成本、股数、现价、盈亏金额、盈亏%、所属行业今日）
+  // 持仓表：行底色按盈亏（赚钱浅红 / 亏钱浅绿 / 持平白），效果显眼且不刺眼
   function renderPosTable(positions) {
     const tb = document.getElementById("posTableBody");
     if (!tb) return;
@@ -114,18 +114,19 @@
       const mkt = price * qty;
       const profit = (price - cost) * qty;
       const pct = cost > 0 ? ((price - cost) / cost * 100) : 0;
-      const cls = profit > 0 ? "up" : profit < 0 ? "down" : "";
+      const rowCls = profit > 0 ? "pos-row-up" : profit < 0 ? "pos-row-down" : "pos-row-flat";
+      const txtCls = profit > 0 ? "up" : profit < 0 ? "down" : "";
       const it = p.industry_today || {};
       const tpct = it.trend_pct;
       const fn = it.fund_net;
-      return `<tr>
+      return `<tr class="${rowCls}">
         <td><b>${p.name || p.code}</b><span class="code-mini"> ${p.code}</span></td>
         <td class="r">${fmt(cost, 2)}</td>
         <td class="r">${qty}</td>
         <td class="r ${p.change_pct > 0 ? "up" : p.change_pct < 0 ? "down" : ""}">${fmt(price, 2)}<br><span class="chg-mini ${p.change_pct > 0 ? "up" : p.change_pct < 0 ? "down" : ""}">${p.change_pct != null ? (p.change_pct >= 0 ? "+" : "") + p.change_pct.toFixed(2) + "%" : "--"}</span></td>
         <td class="r">${fmt(mkt, 0)}</td>
-        <td class="r ${cls}">${signed(profit.toFixed(0))}</td>
-        <td class="r ${cls}">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</td>
+        <td class="r ${txtCls}"><b>${signed(profit.toFixed(0))}</b></td>
+        <td class="r ${txtCls}"><b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b></td>
         <td class="r">${it.track ? it.track + '<br>' : ''}<span class="${tpct != null && tpct > 0 ? "up" : tpct != null && tpct < 0 ? "down" : ""}">${tpct != null ? (tpct >= 0 ? "+" : "") + tpct.toFixed(2) + "%" : "--"}</span>${fn != null ? '　<span class="muted-mini">' + (fn >= 0 ? "净流入+" : "净流出") + Math.abs(fn).toFixed(2) + '亿</span>' : ''}</td>
       </tr>`;
     }).join("");
@@ -220,13 +221,13 @@
   }
 
   // -------------------------------------------
-  // AI 建议列表（每只持仓一行，七列）
+  // AI 建议列表（每只持仓一行，七列；用 <table> 严格列对齐）
   // -------------------------------------------
   function renderAiAdvice(positions) {
     const el = document.getElementById("aiAdviceBody");
     if (!el) return;
     if (!positions || !positions.length) {
-      el.innerHTML = '<div class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</div>';
+      el.innerHTML = '<tr><td colspan="7" class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</td></tr>';
       return;
     }
     // 按评分绝对值降序：最强信号（最值得操作）在最上面
@@ -234,6 +235,7 @@
     el.innerHTML = sorted.map(function (p) { return _aiRowHtml(p); }).join("");
   }
 
+  // 单只股票 → 一行 7 个 <td>。底色由 <tr class="ai-row-buy/sell/hold"> 控制（table-mode 下 CSS 直接吃 tr）。
   function _aiRowHtml(p) {
     const action = p.action || "不动";
     const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
@@ -285,15 +287,15 @@
     const plan = _tpPlan(p, fcTrend);
     const tpHtml = _tpHtml(plan);
 
-    return '<div class="ai-row ' + rowCls + '">' +
-      '<div class="ai-c-name"><b>' + (p.name || p.code) + '</b><span class="code-mini">' + p.code + '</span>' + priceHtml + '</div>' +
-      '<div class="ai-c-score">' + (score > 0 ? '+' : '') + score + '</div>' +
-      '<div class="ai-c-action">' + label + '</div>' +
-      '<div class="ai-c-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul></div>' +
-      '<div class="ai-c-sec"><span class="sec-name">' + secName + '</span><div class="sec-row1"><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span> ' + secFundTxt + '</div>' + upRatioTxt + '</div>' +
-      '<div class="ai-c-tech">' + maHtml + '<div><span class="tech-state ' + macdCls + '">MACD ' + macdState + '</span><span class="tech-state ' + kdjCls + '">' + kdjState + '</span><span class="tech-state ' + bollCls + '">BOLL ' + bollPos + '</span></div>' + srHtml + '</div>' +
-      '<div class="ai-c-tp">' + tpHtml + '</div>' +
-    '</div>';
+    return '<tr class="ai-row ' + rowCls + '">' +
+      '<td class="ai-c-name"><b>' + (p.name || p.code) + '</b><span class="code-mini">' + p.code + '</span>' + priceHtml + '</td>' +
+      '<td class="ai-c-score">' + (score > 0 ? '+' : '') + score + '</td>' +
+      '<td class="ai-c-action"><span class="ai-action-pill">' + label + '</span></td>' +
+      '<td class="ai-c-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul></td>' +
+      '<td class="ai-c-sec"><span class="sec-name">' + secName + '</span><div class="sec-row1"><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span> ' + secFundTxt + '</div>' + upRatioTxt + '</td>' +
+      '<td class="ai-c-tech">' + maHtml + '<div><span class="tech-state ' + macdCls + '">MACD ' + macdState + '</span><span class="tech-state ' + kdjCls + '">' + kdjState + '</span><span class="tech-state ' + bollCls + '">BOLL ' + bollPos + '</span></div>' + srHtml + '</td>' +
+      '<td class="ai-c-tp">' + tpHtml + '</td>' +
+    '</tr>';
   }
 
   // 给自选股注入今日赛道（板块资金流走的是同个数据源，后端 positions_advice 已含，自选侧复用同 cache）
