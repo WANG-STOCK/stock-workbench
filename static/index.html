@@ -37,19 +37,6 @@
           <button data-period="daily" class="active">日</button>
           <button data-period="weekly">周</button>
         </div>
-        <div class="sh-actions">
-          <select id="brokerSelect" class="input xs" title="券商跳转">
-            <option value="">去券商看…</option>
-            <option value="zsxq">腾讯自选股</option>
-            <option value="eastmoney">东方财富</option>
-            <option value="10jqka">同花顺</option>
-            <option value="xueqiu">雪球</option>
-            <option value="ths">通达信</option>
-            <option value="citic">中信证券</option>
-            <option value="huatai">华泰证券</option>
-            <option value="futu">富途</option>
-          </select>
-        </div>
       </div>
 
       <div class="chart-wrap">
@@ -102,6 +89,11 @@
             <input id="posCost" class="input small" type="number" placeholder="成本(可选)">
             <button id="addPosBtn" class="btn">记录</button>
           </div>
+          <div class="pos-summary">
+            <div class="ps-cell"><span>持仓市值</span><b id="posMarketValue">--</b></div>
+            <div class="ps-cell"><span>现金</span><input id="cashInput" class="input xs" type="number" value="100000"></div>
+            <div class="ps-cell"><span>总资产</span><b id="posTotalValue">--</b></div>
+          </div>
           <ul id="posList" class="pos-list"></ul>
         </section>
       </div>
@@ -132,12 +124,6 @@
                     <button id="saveTdx" class="btn tiny">保存</button>
                   </div>
                   <div id="tdxPathTip" class="sub" style="font-size:11px;margin-top:4px"></div>
-                  <div class="sub-title">关于券商对接</div>
-                  <p class="sub" style="line-height:1.5">
-                    个人普通账户（中信华泰等）<b>没有 API 下单接口</b>，程序化下单需换 PTrade / QMT 量化平台（资产 50W+）。<br>
-                    当前方案：在持仓行点 <b>「去券商看」</b> → 浏览器新标签跳到你券商 APP/Web 的对应股票页 → 在那手工买/卖。<br>
-                    想全自动化请告诉我，可考虑接入券商合作渠道。
-                  </p>
                 </div>
               </details>
             </span>

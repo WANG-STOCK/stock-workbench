@@ -178,6 +178,8 @@ button.mini:hover { background: #dde7f0; }
 .scan-row:hover { background: #f6f9fc; }
 .scan-row .sc-name { flex: 1; min-width: 0; }
 .scan-row .sc-score { font-variant-numeric: tabular-nums; font-weight: 700; width: 42px; text-align: right; }
+.scan-row .sc-extra { flex-basis: 100%; padding: 2px 0 0 52px; font-size: 11px; color: var(--muted); }
+.scan-row .sc-extra span { margin-right: 10px; }
 .tag { padding: 2px 8px; border-radius: 10px; font-size: 11px; color: #fff; font-weight: 500; }
 
 /* ---------- 扫描进度条 ---------- */
@@ -296,6 +298,29 @@ button.mini:hover { background: #dde7f0; }
 .pos-list .pos-btn.del { color: #c92a2a; background: #fff5f5; }
 .pl.up { color: var(--up); }
 .pl.down { color: var(--down); }
+
+/* ---------- 持仓汇总条（市值/现金/总资产） ---------- */
+.pos-summary {
+  display: flex; gap: 8px; margin: 6px 0 4px; padding: 8px 10px;
+  background: #f8f9fa; border: 1px solid var(--line); border-radius: 8px;
+}
+.ps-cell { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); min-width: 0; }
+.ps-cell b { font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ps-cell input { width: 100%; padding: 4px 6px; font-size: 13px; }
+
+/* ---------- 持仓每行操作建议（买/卖/不动 + 价 + 量） ---------- */
+.pos-advice { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: #f8f9fa; border-left: 3px solid var(--gray); }
+.pos-advice.act-买入 { border-left-color: var(--up); background: #fff5f5; }
+.pos-advice.act-卖出 { border-left-color: var(--down); background: #ebfbee; }
+.pa-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pa-badge { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 8px; color: #fff; }
+.pa-badge.act-买入 { background: var(--up); }
+.pa-badge.act-卖出 { background: var(--down); }
+.pa-badge.act-不动 { background: var(--gray); }
+.pa-line { font-size: 12px; }
+.pa-line b { font-variant-numeric: tabular-nums; }
+.pa-regime { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.pa-reason { font-size: 11px; color: #495057; margin-top: 2px; line-height: 1.5; }
 
 /* ---------- 评分权重 ---------- */
 .weight-sliders { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }

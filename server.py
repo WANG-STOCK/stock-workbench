@@ -20,6 +20,7 @@ from core.indicators import compute_all
 from core import industry_pool as ip
 from core import fundamentals as fm
 from core import sector_flow as sf
+from core import news as nw
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -193,6 +194,88 @@ def _build_position(analysis, qs, code=None):
     return pos
 
 
+def _advise_position(code, capital):
+    """为单只持仓计算完整操作建议：买/卖/不动 + 操作价 + 操作量 + 行业强弱。
+
+    综合：当天 KDJ/量/资金/MACD 等技术面 + 行业资金流入流出与龙头走势
+    （sector_strength）+ 用户可用资金/持仓（position_advice 算量）。
+    返回 dict；K线不足时返回 {ok:False}。
+    """
+    period, limit = "daily", 120
+    bars = _cache_get(code, period, limit) or ds.get_kline(code, period, limit, _tdx_path or None)
+    _cache_set(code, period, limit, bars)
+    a = sig.analyze(bars, _WEIGHTS)
+    if not a.get("ok"):
+        return {"code": code, "ok": False, "reason": a.get("msg", "K线不足，无法研判")}
+    # 行业强弱（资金流+龙头涨跌）
+    try:
+        _fp = ip.get_fund(code) or {}
+        _ss = sf.sector_strength(_fp.get("track")) if _fp.get("track") else None
+    except Exception:
+        _fp, _ss = {}, None
+    # 当日实时买卖价带宽
+    try:
+        bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
+        _cache_set(code, "5m", 60, bars5m)
+        tl = sig.today_levels(bars5m, pct=0.03)
+    except Exception:
+        tl = None
+    price = a.get("price")
+    prev_close = a.get("prev_close")
+    regime = None
+    if _ss:
+        regime = {"track": _ss.get("track"), "sector": _ss.get("sector"),
+                  "trend_pct": _ss.get("trend_pct"), "fund_net": _ss.get("fund_net"),
+                  "up_ratio": _ss.get("up_ratio")}
+    adp = sig.adaptive_trade(tl, regime, price, prev_close, pct=0.03)
+    outlook = sig.day_outlook(a, regime, tl, adp, price, prev_close)
+    held = _held_shares(code)
+    pos = sig.position_advice(a["score"], a["action"], price,
+                              capital=capital, max_single=_POS.get("max_single", 0.25),
+                              current_shares=held, lot=_POS.get("lot", 100))
+    # 收敛为 买/卖/不动
+    if adp.get("bias") == "defensive":
+        action = "卖出"
+    elif outlook and outlook.get("action") == "买":
+        action = "买入"
+    elif outlook and outlook.get("action") == "卖":
+        action = "卖出"
+    else:
+        action = "不动"
+    # 操作价：买用当日买点/支撑，卖用当日卖点/阻力
+    pl = a.get("price_levels") or {}
+    if action == "买入":
+        op_price = (tl or {}).get("buy") or pl.get("buy")
+    elif action == "卖出":
+        op_price = (tl or {}).get("sell") or pl.get("sell")
+    else:
+        op_price = None
+    # 操作量：买=加仓股数，卖=减仓股数（不超持仓），不动=0
+    delta = int(pos.get("delta_shares") or 0)
+    if action == "买入":
+        op_qty = max(0, delta)
+    elif action == "卖出":
+        op_qty = min(max(0, -delta), held)
+    else:
+        op_qty = 0
+    if action in ("买入", "卖出") and op_qty <= 0:
+        action, op_qty = "不动", 0
+    return {
+        "code": code, "ok": True,
+        "name": _fp.get("name") or code,
+        "shares": held,
+        "price": price,
+        "action": action,
+        "action5": a["action"],
+        "score": a["score"],
+        "op_price": round(op_price, 2) if op_price else None,
+        "op_qty": op_qty,
+        "reason": (outlook or {}).get("reason") or (a.get("reasons")[0]["text"] if a.get("reasons") else ""),
+        "regime": regime,
+        "indicators": a.get("indicators"),
+    }
+
+
 # ---------- 请求处理 ----------
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -248,6 +331,44 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/positions":
             self._send(200, _load_positions())
+            return
+        if route == "/api/positions_advice":
+            # 批量持仓建议：一次返回所有持仓的 买/卖/不动 + 操作价 + 操作量 + 行业强弱 + 实时价
+            try:
+                capital = float(qs.get("capital", [None])[0] or _config.get("available_capital", 100000))
+            except (TypeError, ValueError):
+                capital = _config.get("available_capital", 100000)
+            positions = _load_positions()
+            codes = [p.get("code") for p in positions if p.get("code")]
+            rt = {}
+            if codes:
+                try:
+                    rt = ds.fetch_realtime(codes) or {}
+                except Exception:
+                    rt = {}
+            out = []
+            total_value = 0.0
+            for p in positions:
+                code = p.get("code")
+                adv = _advise_position(code, capital)
+                price = (rt.get(code) or {}).get("price")
+                change_pct = (rt.get(code) or {}).get("change_pct")
+                shares = int(p.get("shares", 0) or 0)
+                cost = float(p.get("cost", 0) or 0)
+                if price is None:
+                    price = adv.get("price")
+                if price is not None:
+                    adv["price"] = price
+                    adv["change_pct"] = change_pct
+                adv["name"] = p.get("name") or adv.get("name") or code
+                adv["shares"] = shares
+                adv["cost"] = cost
+                total_value += (price or 0) * shares
+                out.append(adv)
+            self._send(200, {"ok": True, "capital": capital,
+                             "market_value": round(total_value, 2),
+                             "total_value": round(total_value + capital, 2),
+                             "count": len(out), "positions": out})
             return
         if route == "/api/search":
             q = qs.get("q", [""])[0]
@@ -556,7 +677,7 @@ class Handler(BaseHTTPRequestHandler):
             "image/svg+xml" if rel.endswith(".svg") else "application/octet-stream"
         self._send_file(full, ctype)
 
-    def _analyze_one(self, code, limit, pred, names):
+    def _analyze_one(self, code, limit, pred, names, capital=None):
         """对单只股票打分并判断是否命中策略；异常或不足则返回 None。"""
         try:
             bars = ds.get_kline(code, "daily", limit, _tdx_path or None)
@@ -570,22 +691,66 @@ class Handler(BaseHTTPRequestHandler):
             a = sig.analyze(bars, _WEIGHTS)
             if not a.get("ok"):
                 return None
+            price = a.get("price")
+            pl = a.get("price_levels") or {}
+            try:
+                bars5m = _cache_get(code, "5m", 60) or ds.get_kline(code, "5m", 60, _tdx_path or None)
+                _cache_set(code, "5m", 60, bars5m)
+            except Exception:
+                bars5m = None
+            cl = sig.candidate_levels(bars5m, bars, a.get("prev_close"))
+            buy_price = cl["buy"] if cl else (round(price * 0.97, 2) if price else None)
+            sell_price = cl["sell"] if cl else (round(price * 1.06, 2) if price else None)
+            cap = capital if capital else _config.get("available_capital", 100000)
+            lot = _POS.get("lot", 100)
+            qty = max(int(cap / buy_price // lot) * lot, 0) if (buy_price and buy_price > 0) else 0
             return {
                 "code": code,
                 "name": names.get(code, ""),
                 "action": a["action"],
                 "score": a["score"],
-                "price": a["price"],
+                "price": price,
+                "buy_price": buy_price,
+                "sell_price": sell_price,
+                "buy_qty": qty,
                 "flags": {k: v for k, v in flags.items() if k not in ("score", "action")},
                 "reasons": [r["text"] for r in a["reasons"][:3]],
             }
         except Exception:
             return None
 
+    def _attach_news(self, results, score_key="combined", topn=30):
+        """best-effort 给前 topn 只补新闻因子（情绪分微调综合/评分），失败不报错。"""
+        if not results:
+            return results
+        top = results[:topn]
+
+        def _fetch(r):
+            try:
+                nw_d = nw.stock_news(r.get("code"))
+                if nw_d.get("status") == "ok" and nw_d.get("headlines"):
+                    s = nw.news_sentiment(nw_d["headlines"])
+                    r["news"] = {"status": "ok", "score": s, "headlines": nw_d["headlines"][:3]}
+                    base = r.get(score_key, 0) or 0
+                    r[score_key] = round(base * 0.9 + (s + 100) / 2 * 0.1, 1)
+                else:
+                    r["news"] = {"status": nw_d.get("status", "unavailable"), "headlines": []}
+            except Exception:
+                r["news"] = {"status": "unavailable", "headlines": []}
+
+        try:
+            with ThreadPoolExecutor(max_workers=10) as ex:
+                list(ex.map(_fetch, top))
+        except Exception:
+            pass
+        results.sort(key=lambda x: x.get(score_key, 0) or 0, reverse=True)
+        return results
+
     def _run_screener(self, codes, limit, strategy="composite"):
         """同步选股（用于自选/小池）。"""
         results = []
         names = {}
+        cap = _config.get("available_capital", 100000)
         for chunk in _chunk(codes, 80):
             try:
                 rt = ds.fetch_realtime(chunk)
@@ -595,10 +760,11 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         pred = sig.STRATEGY_PREDICATES.get(strategy, sig.STRATEGY_PREDICATES["composite"])
         for code in codes:
-            r = self._analyze_one(code, limit, pred, names)
+            r = self._analyze_one(code, limit, pred, names, capital=cap)
             if r:
                 results.append(r)
         results.sort(key=lambda x: x["score"], reverse=True)
+        self._attach_news(results, "score", 20)
         return results
 
     def _run_candidate_screener(self, codes, limit, capital, strategy="composite", progress_cb=None):
@@ -699,6 +865,7 @@ class Handler(BaseHTTPRequestHandler):
                     progress_cb()
         vt.join(timeout=8)  # 尽量等估值回写，超时不影响（基本面按质量档兜底）
         results.sort(key=lambda x: x["combined"], reverse=True)
+        self._attach_news(results, "combined", 30)
         return results
 
     def _run_candidate_bg(self, codes, limit, cap, strategy):
