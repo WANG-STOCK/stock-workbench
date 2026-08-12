@@ -73,7 +73,7 @@
 
     <!-- 右侧：双列布局 —— 左列「持仓·做T」/ 右列「自选盯盘·扫描候选」（合并成一个单元） -->
     <aside class="right">
-      <!-- 左列：持仓·做T -->
+      <!-- 左列：持仓·做T + 盘中实时建议（盘中建议紧跟持仓下面） -->
       <div class="right-col">
         <section class="panel panel-pos">
           <div class="panel-title">
@@ -95,6 +95,23 @@
             <div class="ps-cell"><span>总资产</span><b id="posTotalValue">--</b></div>
           </div>
           <ul id="posList" class="pos-list"></ul>
+        </section>
+
+        <!-- 盘中实时建议：放在持仓·做T下面，紧跟持仓 -->
+        <section class="panel panel-intraday" id="intradayPanel" style="border:2px solid #ff6b35;background:linear-gradient(135deg,#fff7ed 0%,#ffe5d0 100%);">
+          <div class="panel-title">
+            <span class="dot" style="background:#ff6b35;animation:pulse 1.2s infinite;"></span>
+            <span style="font-weight:700">⚡ 盘中实时建议</span>
+            <span class="intraday-periods" id="intradayPeriods">
+              <button type="button" class="ip-btn active" data-period="1m">1分钟</button>
+              <button type="button" class="ip-btn" data-period="5m">5分钟</button>
+            </span>
+            <span class="sub">每 5 秒刷新</span>
+          </div>
+          <div class="sub" style="font-size:11px;color:var(--muted);margin:4px 0 8px;line-height:1.5">
+            解决"拉升到 6 个点跌到 4 个点该不该卖"这类<strong>分时转折</strong>判断，不是日 K 综合评分。
+          </div>
+          <ul id="intradayList" class="intraday-list"></ul>
         </section>
       </div>
 
@@ -128,23 +145,6 @@
               </details>
             </span>
           </div>
-
-          <!-- 盘中实时建议（内嵌最顶部，进右栏就看到） -->
-          <section class="panel panel-intraday" id="intradayPanel" style="margin-top:8px;border:2px solid #ff6b35;background:linear-gradient(135deg,#fff7ed 0%,#ffe5d0 100%);">
-            <div class="panel-title">
-              <span class="dot" style="background:#ff6b35;animation:pulse 1.2s infinite;"></span>
-              <span style="font-weight:700">⚡ 盘中实时建议</span>
-              <span class="intraday-periods" id="intradayPeriods">
-                <button type="button" class="ip-btn active" data-period="1m">1分钟</button>
-                <button type="button" class="ip-btn" data-period="5m">5分钟</button>
-              </span>
-              <span class="sub">每 5 秒刷新</span>
-            </div>
-            <div class="sub" style="font-size:11px;color:var(--muted);margin:4px 0 8px;line-height:1.5">
-              解决"拉升到 6 个点跌到 4 个点该不该卖"这类<strong>分时转折</strong>判断，不是日 K 综合评分。
-            </div>
-            <ul id="intradayList" class="intraday-list"></ul>
-          </section>
 
           <input id="searchInput" class="input" placeholder="代码/名称/拼音">
           <div id="searchResults" class="search-results"></div>

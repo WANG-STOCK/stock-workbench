@@ -345,6 +345,9 @@ button.mini:hover { background: #dde7f0; }
 .ip-btn.active { background: #ff6b35; color: #fff; }
 .ip-btn:hover { background: #ffe5d0; }
 .ip-btn.active:hover { background: #e8590c; }
+/* 左列：盘中建议紧跟持仓，按内容撑开、不挤压持仓；列表过长内部滚动 */
+.panel-intraday { flex: 0 0 auto; }
+.panel-intraday .intraday-list { max-height: 42vh; overflow-y: auto; }
 
 /* ---------- 评分权重 ---------- */
 .weight-sliders { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
