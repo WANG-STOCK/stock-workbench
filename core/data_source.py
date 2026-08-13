@@ -14,6 +14,7 @@ import datetime
 import urllib.request
 import urllib.parse
 import json
+import time
 
 SINA_KLINE = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
 SCALE_MAP = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "daily": 240, "weekly": 1200}
@@ -290,12 +291,40 @@ def refresh_universe(path):
     return valid
 
 
-# ---------------- 实时行情（腾讯） ----------------
-def fetch_realtime(codes):
-    if not codes:
+# ---------------- 实时行情（多源 fallback：腾讯→东方财富→新浪→缓存） ----------------
+# 说明：国内环境腾讯最快；海外（如 Render 美国节点）腾讯/新浪常被墙，
+# 故加东方财富 push2 作为海外可达备用源，最终用磁盘缓存兜底，保证不空白。
+QUOTE_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "data", "quote_cache.json")
+
+
+def _load_quote_cache():
+    try:
+        with open(QUOTE_CACHE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
         return {}
-    url = "https://qt.gtimg.cn/q=" + ",".join(codes)
-    raw = _http_get(url, referer="https://gu.qq.com", decode="gbk")
+
+
+def _save_quote_cache(results):
+    if not results:
+        return
+    try:
+        cache = _load_quote_cache()
+        cache.update({k: v for k, v in results.items() if v})
+        os.makedirs(os.path.dirname(QUOTE_CACHE), exist_ok=True)
+        with open(QUOTE_CACHE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _fetch_tencent(codes):
+    try:
+        url = "https://qt.gtimg.cn/q=" + ",".join(codes)
+        raw = _http_get(url, referer="https://gu.qq.com", decode="gbk", timeout=6)
+    except Exception:
+        return {}
     results = {}
     for line in raw.split(";"):
         line = line.strip()
@@ -323,11 +352,118 @@ def fetch_realtime(codes):
                 "amplitude": _to_float(p[43]),
                 "turnover": _to_float(p[38]),
                 "pe": _to_float(p[39]),
-                "total_mv": _to_float(p[44]) if len(p) > 44 else None,   # 总市值（单位可能 元/万元/亿，sector_flow 内统一换算成 亿）
-                "circ_mv": _to_float(p[45]) if len(p) > 45 else None,    # 流通市值
+                "total_mv": _to_float(p[44]) if len(p) > 44 else None,
+                "circ_mv": _to_float(p[45]) if len(p) > 45 else None,
             }
         except (ValueError, IndexError):
             continue
+    return results
+
+
+def _fetch_eastmoney(codes):
+    """东方财富 push2 实时行情（海外通常可达）。fltt=2 时价格已为元单位。"""
+    results = {}
+    for code in codes:
+        market = "1" if code.startswith("sh") else "0"
+        num = code[2:]
+        secid = f"{market}.{num}"
+        url = ("https://push2.eastmoney.com/api/qt/stock/get"
+               f"?secid={secid}&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f116,f117,"
+               f"f169,f170,f171&fltt=2&invt=2&_={int(time.time()*1000)}")
+        try:
+            raw = _http_get(url, referer="https://quote.eastmoney.com/", timeout=5)
+            d = (json.loads(raw) or {}).get("data") or {}
+            if not d or d.get("f43") in (None, "-", ""):
+                continue
+            results[code] = {
+                "code": code,
+                "name": d.get("f58") or code,
+                "price": float(d["f43"]),
+                "prev_close": _to_float(d.get("f60")),
+                "open": _to_float(d.get("f46")),
+                "volume": int(float(d.get("f47") or 0)),
+                "high": _to_float(d.get("f44")),
+                "low": _to_float(d.get("f45")),
+                "time": "",
+                "change": _to_float(d.get("f169")),
+                "change_pct": _to_float(d.get("f170")),
+                "amplitude": _to_float(d.get("f171")),
+                "turnover": None,
+                "pe": _to_float(d.get("f116")),
+                "total_mv": None,
+                "circ_mv": None,
+            }
+        except Exception:
+            continue
+    return results
+
+
+def _fetch_sina(codes):
+    """新浪实时行情（需带 Referer 否则 403）。"""
+    try:
+        url = "https://hq.sinajs.cn/list=" + ",".join(codes)
+        raw = _http_get(url, referer="https://finance.sina.com.cn/", timeout=5)
+    except Exception:
+        return {}
+    results = {}
+    for line in raw.split(";"):
+        line = line.strip()
+        if not line.startswith("var hq_str_"):
+            continue
+        name, _, val = line.partition("=")
+        code = name[len("var hq_str_"):].strip().strip('"')
+        val = val.strip().strip('"')
+        p = val.split(",")
+        if len(p) < 32:
+            continue
+        try:
+            results[code] = {
+                "code": code,
+                "name": p[0],
+                "price": float(p[3]),
+                "prev_close": float(p[2]),
+                "open": float(p[1]),
+                "volume": int(float(p[6])),
+                "high": float(p[33]) if len(p) > 33 else float(p[3]),
+                "low": float(p[34]) if len(p) > 34 else float(p[3]),
+                "time": p[30] if len(p) > 30 else "",
+                "change": float(p[31]) if len(p) > 31 else 0.0,
+                "change_pct": float(p[32]) if len(p) > 32 else 0.0,
+                "amplitude": None,
+                "turnover": None,
+                "pe": None,
+                "total_mv": None,
+                "circ_mv": None,
+            }
+        except (ValueError, IndexError):
+            continue
+    return results
+
+
+def fetch_realtime(codes):
+    """多源实时行情：腾讯优先，依次 fallback 东方财富/新浪，最后磁盘缓存兜底。"""
+    if not codes:
+        return {}
+    codes = list(dict.fromkeys(codes))
+    results = {}
+    # 1) 腾讯（国内最快）
+    results.update(_fetch_tencent(codes))
+    # 2) 缺失的走东方财富（海外可达性好）
+    missing = [c for c in codes if c not in results]
+    if missing:
+        results.update(_fetch_eastmoney(missing))
+    # 3) 仍缺失的走新浪
+    missing = [c for c in codes if c not in results]
+    if missing:
+        results.update(_fetch_sina(missing))
+    # 4) 全失败的用本地缓存兜底（保证不空白）
+    if len(results) < len(codes):
+        cache = _load_quote_cache()
+        for c in codes:
+            if c not in results and c in cache:
+                results[c] = cache[c]
+    # 写回缓存，供下次/海外兜底
+    _save_quote_cache(results)
     return results
 
 
