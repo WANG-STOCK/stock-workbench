@@ -1176,9 +1176,144 @@ function renderAiAdvice(positions) {
 
   // ---------- 打开股票 ----------
   async function openStock(code, name) {
-    // K线视图已移除，转为加入自选（避免 console error 让用户茫然）
+    // K线视图已移除，转为：加入自选 + 渲染右侧个股详情（v3.1 行情看板）
     state.current = { code, name: name || code, period: state.current.period || "daily" };
-    addToWatchFromSearch(code, name || code);
+    try { addToWatchFromSearch(code, name || code); } catch (e) {}
+    renderStockDetail(code, name || code);
+  }
+
+  // ---------- 行情看板·个股详情（v3.1 右侧面板） ----------
+  // 点击自选/搜索/持仓股时，拉实时行情 + 技术面分析，渲染评分圆环 + 2×2 技术进度条 + 三档价位
+  async function renderStockDetail(code, name) {
+    const body = document.getElementById("stockDetailBody");
+    const title = document.getElementById("stockDetailTitle");
+    const meta = document.getElementById("stockDetailMeta");
+    if (!body) return;
+    if (title) title.textContent = `🔍 ${name || code} · ${code}`;
+    if (meta) meta.textContent = "分析中…";
+    body.innerHTML = `<div class="sd-loading">正在拉取实时行情与技术面分析…</div>`;
+    try {
+      const [q, sig] = await Promise.all([
+        api("GET", "/api/quotes?codes=" + encodeURIComponent(code)).catch(() => null),
+        api("GET", "/api/signal?code=" + encodeURIComponent(code) + "&period=daily&limit=120").catch(() => null),
+      ]);
+      const rt = (q && q[code]) ? q[code] : null;
+      if (meta) meta.textContent = rt && rt.price != null
+        ? `${fmt(rt.price)}　${rt.change_pct != null ? (rt.change_pct >= 0 ? "+" : "") + fmt(rt.change_pct) + "%" : ""}`
+        : "点自选查看";
+      if (!sig || !sig.ok) {
+        body.innerHTML = `<div class="empty-v3">${sig ? (sig.msg || "暂无分析数据") : "行情/分析接口暂不可用"}<br><span style="font-size:11px">（A股代码需带交易所前缀，如 sh600000 / sz000001）</span></div>`;
+        return;
+      }
+      body.innerHTML = stockDetailHtml(sig, rt, name, code);
+    } catch (e) {
+      body.innerHTML = `<div class="empty-v3">分析加载失败：${(e && e.message) || e}</div>`;
+    }
+  }
+
+  // 评分圆环（90×90 SVG）+ 2×2 技术进度条 + 三档价位，严格匹配 styles.css 的 .sd-* 结构
+  function stockDetailHtml(sig, rt, name, code) {
+    const action = sig.action || "持有";
+    const isBuy = action.includes("买入") || action.includes("加仓");
+    const isSell = action.includes("卖出") || action.includes("减仓");
+    const color = isBuy ? "#e74c3c" : isSell ? "#2ecc71" : "#f59f00";
+    const score = sig.score != null ? sig.score : 0;
+    const scorePct = Math.max(0, Math.min(100, (score + 100) / 2));
+    const price = rt && rt.price != null ? rt.price : sig.price;
+    const chg = rt && rt.change_pct != null ? rt.change_pct : null;
+    const chgCls = chg == null ? "" : (chg >= 0 ? "up" : "down");
+    const chgTxt = chg != null ? (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%" : "";
+
+    // —— 技术进度条（v3.1 标志：KDJ / MACD / 量能 / RSI）——
+    const ts = sig.tech_short || {};
+    const ind = sig.indicators || {};
+    const rsiObj = ind.rsi || {};
+    const kdjJ = ts.kdj_j != null ? +ts.kdj_j : null;
+    const kdjPct = kdjJ != null ? (kdjJ + 100) / 2 : 50;
+    const kdjTxt = kdjJ != null ? ("J " + kdjJ + (ts.kdj_status ? "·" + ts.kdj_status : "")) : "J —";
+    const kdjFill = kdjJ != null && kdjJ > 80 ? "red" : (kdjJ != null && kdjJ < 20 ? "green" : "green");
+    const macdMap = { "红柱": 88, "红柱放": 95, "红柱缩": 72, "金叉": 88, "绿柱": 12, "绿柱放": 5, "绿柱缩": 28, "死叉": 12 };
+    const macdPct = macdMap[ts.macd_status] != null ? macdMap[ts.macd_status] : 50;
+    const macdTxt = ts.macd_status ? ("MACD " + ts.macd_status) : "MACD —";
+    const macdFill = ts.macd_status ? (ts.macd_status.indexOf("绿") >= 0 ? "red" : "green") : "gray";
+    const vol = ts.vol_ratio != null ? +ts.vol_ratio : null;
+    const volPct = vol != null ? Math.max(4, Math.min(100, vol * 25)) : 50;
+    const volTxt = vol != null ? ("量比 " + vol) : "量比 —";
+    const volFill = vol != null ? (vol >= 1.2 ? "green" : vol <= 0.8 ? "red" : "gray") : "gray";
+    const rsi = rsiObj.rsi12 != null ? +rsiObj.rsi12 : null;
+    const rsiPct = rsi != null ? rsi : 50;
+    const rsiTxt = rsi != null ? ("RSI " + rsi) : "RSI —";
+    const rsiFill = rsi != null ? (rsi > 70 || rsi < 30 ? "red" : "green") : "gray";
+
+    // —— 三档价位（v3.1 标志：建仓 / 止损 / 目标）——
+    const tl = sig.tight || {};
+    const buy = tl.buy != null ? fmt(tl.buy, 2) : "--";
+    const sl = tl.stop_loss != null ? fmt(tl.stop_loss, 2) : "--";
+    const tp = tl.take_profit != null ? fmt(tl.take_profit, 2) : "--";
+
+    // 评分圆环 SVG（r=40, 周长≈251.3）
+    const C = 251.327, off = C * (1 - scorePct / 100);
+    const ring = `<svg viewBox="0 0 90 90" width="90" height="90">
+      <circle cx="45" cy="45" r="40" fill="none" stroke="#2a2a2a" stroke-width="8"/>
+      <circle cx="45" cy="45" r="40" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"
+        stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 45 45)"/>
+    </svg>`;
+
+    // 今日做T参考
+    const today = sig.today || {};
+    const todayHtml = (today.buy != null && today.sell != null)
+      ? `<div class="sd-today">📅 今日做T：涨到 <b class="up">${fmt(today.sell, 2)}</b> 卖 / 跌到 <b class="down">${fmt(today.buy, 2)}</b> 买（开盘 ${fmt(today.open, 2)}）</div>`
+      : "";
+
+    // 技术研判要点
+    const reasons = (sig.reasons || []).slice(0, 6).map(r => {
+      const pc = r.pts > 0 ? "pos" : r.pts < 0 ? "neg" : "";
+      return `<li><span class="pts ${pc}">${r.pts > 0 ? "+" : ""}${r.pts}</span>${r.text}</li>`;
+    }).join("");
+
+    const bar = (name, pct, txt, fill) =>
+      `<div class="sd-bar"><span class="sd-bar-name">${name}</span>` +
+      `<div class="sd-bar-track"><i class="sd-bar-fill ${fill}" style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>` +
+      `<span class="sd-bar-val">${txt}</span></div>`;
+
+    return `
+    <div class="sd-detail">
+      <div class="sd-head">
+        <div>
+          <div class="sd-name">${name || code}<span class="sd-code">${code}</span></div>
+          <div class="sd-price">${price != null ? fmt(price) : "--"}<span class="sd-chg ${chgCls}">${chgTxt}</span></div>
+        </div>
+        <span class="sd-action-badge" style="background:${color}">${action}</span>
+      </div>
+
+      <div class="sd-signal-row">
+        <div class="sd-ring">${ring}<div class="sd-ring-text"><div class="sd-ring-num" style="color:${color}">${score > 0 ? "+" : ""}${score}</div><div class="sd-ring-label">综合评分</div></div></div>
+        <div class="sd-signal-info">
+          <div class="sd-signal-act" style="color:${color}">${action}</div>
+          <div class="sd-signal-desc">综合评分 ${score > 0 ? "+" : ""}${score}　·　偏向 ${score > 0 ? "多头" : score < 0 ? "空头" : "震荡"}</div>
+        </div>
+      </div>
+
+      <div class="sd-section-title">技术面 · 短线动能</div>
+      <div class="sd-bars">
+        ${bar("KDJ", kdjPct, kdjTxt, kdjFill)}
+        ${bar("MACD", macdPct, macdTxt, macdFill)}
+        ${bar("量能", volPct, volTxt, volFill)}
+        ${bar("RSI", rsiPct, rsiTxt, rsiFill)}
+      </div>
+
+      <div class="sd-section-title">三档价位</div>
+      <div class="sd-levels">
+        <div class="sd-lev"><div class="sd-lev-name">建仓</div><div class="sd-lev-val green">${buy}</div></div>
+        <div class="sd-lev"><div class="sd-lev-name">止损</div><div class="sd-lev-val">${sl}</div></div>
+        <div class="sd-lev"><div class="sd-lev-name">目标</div><div class="sd-lev-val green">${tp}</div></div>
+      </div>
+
+      ${todayHtml}
+
+      <div class="sd-section-title">技术研判</div>
+      <ul class="sd-reasons">${reasons || "<li>暂无研判要点</li>"}</ul>
+    </div>`;
   }
 
   async function loadKline() {

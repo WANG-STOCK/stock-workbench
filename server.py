@@ -1503,6 +1503,34 @@ class Handler(BaseHTTPRequestHandler):
                     a["t_plan"] = {"t_action": "持有不动", "t_buy_price": None,
                                    "t_sell_price": None, "t_qty": 0,
                                    "t_note": "做T计算暂不可用"}
+            # v3.1 行情看板个股详情：补齐技术进度条(tech_short)与三档价位(tight)，
+            # 使详情面板与持仓卡片(hbCardHtml)用同一套字段渲染。
+            if a.get("ok"):
+                _ind = a.get("indicators") or {}
+                _kdj = _ind.get("kdj") or {}
+                _macd = _ind.get("macd") or {}
+                _j = _kdj.get("j")
+                _hist = _macd.get("hist")
+                _vol_ratio = None
+                try:
+                    _vols = [b.get("volume") for b in bars if b.get("volume") is not None]
+                    if len(_vols) >= 5 and sum(_vols[-5:]) > 0:
+                        _vol_ratio = _vols[-1] / (sum(_vols[-5:]) / 5)
+                except Exception:
+                    _vol_ratio = None
+                a["tech_short"] = {
+                    "kdj_j": _j,
+                    "kdj_status": "超买" if (_j is not None and _j > 80) else "超卖" if (_j is not None and _j < 20) else None,
+                    "macd_status": "红柱" if (_hist is not None and _hist > 0) else "绿柱" if (_hist is not None and _hist < 0) else None,
+                    "vol_ratio": round(_vol_ratio, 2) if _vol_ratio else None,
+                }
+                _pl = a.get("price_levels") or {}
+                _price = a.get("price") or 0
+                a["tight"] = {
+                    "buy": _pl.get("buy") or (round(_price * 0.97, 2) if _price else None),
+                    "stop_loss": round(_price * 0.95, 2) if _price else None,
+                    "take_profit": _pl.get("sell") or (round(_price * 1.05, 2) if _price else None),
+                }
             self._send(200, a)
             return
         if route == "/api/advice":

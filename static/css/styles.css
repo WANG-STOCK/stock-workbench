@@ -1337,6 +1337,17 @@ body.theme-dark { background: var(--bg); }
 .stock-detail-v3 .sd-lev-name { font-size: 11px; color: var(--muted); }
 .stock-detail-v3 .sd-lev-val { font-size: 16px; font-weight: 700; color: #e74c3c; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .stock-detail-v3 .sd-lev-val.green { color: #2ecc71; }
+.stock-detail-v3 .sd-detail { padding-top: 4px; }
+.stock-detail-v3 .sd-action-badge { align-self: flex-start; padding: 5px 12px; border-radius: 14px; font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; }
+.stock-detail-v3 .sd-loading { padding: 44px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+.stock-detail-v3 .sd-today { margin: 12px 0 2px; padding: 9px 11px; background: #161616; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; color: var(--muted); }
+.stock-detail-v3 .sd-today b.up { color: #e74c3c; font-variant-numeric: tabular-nums; }
+.stock-detail-v3 .sd-today b.down { color: #2ecc71; font-variant-numeric: tabular-nums; }
+.stock-detail-v3 .sd-reasons { margin: 6px 0 2px; padding-left: 18px; font-size: 12px; color: var(--ink); line-height: 1.75; }
+.stock-detail-v3 .sd-reasons li { margin-bottom: 3px; }
+.stock-detail-v3 .sd-reasons .pts { display: inline-block; min-width: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stock-detail-v3 .sd-reasons .pts.pos { color: #2ecc71; }
+.stock-detail-v3 .sd-reasons .pts.neg { color: #e74c3c; }
 
 /* 信号扫描 双列 */
 .scan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
