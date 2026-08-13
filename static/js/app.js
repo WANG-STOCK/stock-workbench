@@ -2,7 +2,9 @@
 (function () {
   const $ = (s) => document.querySelector(s);
   let API_BASE = localStorage.getItem("wb_api_base") || "";
-  const api = async (method, url, body) => {
+  /* 用函数声明(而非 const=箭头函数)避免 TDZ：函数声明+初始化同步完成，任何调用点都不会触发
+     "Can't access lexical declaration 'api' before initialization" */
+  async function api(method, url, body) {
     const build = (base) => {
       const u = base ? (base.replace(/\/$/, "") + url) : url;
       const opt = { method, headers: { "Content-Type": "application/json" } };
@@ -13,18 +15,16 @@
     try {
       r = await build(API_BASE);
     } catch (e) {
-      // API_BASE 失效（地址改过/服务迁移）→ 自动回退到同源相对路径
       if (API_BASE) { r = await build(""); usedBase = ""; }
       else throw e;
     }
-    // 设了 API_BASE 但返回非 2xx（如 404/500，多半是地址不对），再试一次同源
     if (API_BASE && !r.ok) {
       const r2 = await build("");
       if (r2.ok) { r = r2; usedBase = ""; }
     }
     if (!r.ok) throw new Error("HTTP " + r.status + " @ " + (usedBase || "同源") + url);
     return r.json();
-  };
+  }
   const ACT_COLOR = {
     "强烈买入": "#c92a2a", "买入": "#e03131", "持有": "#868e96",
     "减仓": "#2f9e44", "卖出": "#2b8a3e",
@@ -2297,6 +2297,18 @@ function renderAiAdvice(positions) {
     }).catch(e => paint('信号扫描失败：' + (e.message || e)));
   }
 
+  // 全局错误兜底：任何未捕获的报错都只在控制台警告，不阻塞后续流程（出现红屏空白就糟了）
+  window.addEventListener('error', (ev) => {
+    if (ev && ev.error) {
+      console.warn('[wb] uncaught:', ev.error && ev.error.message ? ev.error.message : ev.error);
+    }
+  });
+  window.addEventListener('unhandledrejection', (ev) => {
+    console.warn('[wb] unhandled rejection:', ev.reason);
+  });
+
   // 绑定导航（IIFE 内部直接调用确保仅一次）
-  bindNav();
+  try { bindNav(); } catch (e) { console.warn('[wb] bindNav fail:', e && e.message); }
+  // 首屏默认进入「行情看板」，让左侧自选表立刻拉一次数据
+  try { switchView('dashboard'); } catch (e) { console.warn('[wb] switchView fail:', e && e.message); }
 })();
