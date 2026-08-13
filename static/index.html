@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>婷婷量化AI</title>
-  <link rel="stylesheet" href="/static/css/styles.css?v=r17">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r18">
 </head>
 <body>
   <header class="topbar">
@@ -30,7 +30,7 @@
       <span class="status">
         <span class="badge" id="marketBadge">A股 · 沪深</span>
         <span class="badge" id="tdxStatus">数据源：检测中…</span>
-        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r17</span>
+        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r18</span>
         <span class="badge clock" id="clock">--:--:--</span>
       </span>
     </div>
@@ -50,6 +50,14 @@
         <!-- 调试锚点：renderAccount 会把"接口实际返回"实时写到这里，王总刷新立刻看到真实数据 -->
         <div id="__posDebug" style="font-size:11px;color:#1971c2;background:#e7f5ff;padding:4px 8px;border-radius:4px;margin-top:6px;border:1px dashed #74c0fc">
           ⏳ 等 renderAccount 把接口真实返回写到这行…
+        </div>
+        <!-- v3.1 风格 KPI 5 卡（总资产/当日涨跌/持仓/浮盈/信号） -->
+        <div class="kpi5" id="kpi5">
+          <div class="kpi5-card"><div class="k5-label">总资产</div><div class="k5-val" id="k5Asset">--</div></div>
+          <div class="kpi5-card"><div class="k5-label">当日涨跌</div><div class="k5-val" id="k5Chg">--</div></div>
+          <div class="kpi5-card"><div class="k5-label">持仓</div><div class="k5-val" id="k5Pos">--</div></div>
+          <div class="kpi5-card"><div class="k5-label">浮盈</div><div class="k5-val" id="k5Total">--</div></div>
+          <div class="kpi5-card"><div class="k5-label">信号</div><div class="k5-val" id="k5Signal">--</div></div>
         </div>
         <!-- 大字 KPI -->
         <div class="acct-kpis">
@@ -276,6 +284,6 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="/static/js/app.js?v=r17"></script>
+  <script src="/static/js/app.js?v=r18"></script>
 </body>
 </html>

@@ -118,6 +118,15 @@
       renderPosTable(positions);
       renderAiAdvice(positions);
       renderHoldingsBoard(positions);  // 右侧持仓看板（r17：行情看板→持仓看板）
+      // 顶部 v3.1 风格 KPI 5 卡（总资产/当日涨跌/持仓/浮盈/信号）
+      try {
+        const set5 = (id, v, cls) => { const e = document.getElementById(id); if (e) { e.textContent = v; e.classList.remove("up", "down"); if (cls) e.classList.add(cls); } };
+        set5("k5Asset", fmt(asset, 0));
+        set5("k5Chg", signed(todayPct, 2) + "%", todayPct > 0 ? "up" : todayPct < 0 ? "down" : "");
+        set5("k5Pos", positions.length + " 只");
+        set5("k5Total", signed(total, 0), total > 0 ? "up" : total < 0 ? "down" : "");
+        set5("k5Signal", (state.candidates && state.candidates.length ? state.candidates.length : (window.__scanCount || 0)) + " 个");
+      } catch (_) {}
       computeSignalsForWatchlist();   // 自选股也注入当日行业资金流
       // 同时刷新今日已成交明细（不让"刚录入的记录"看起来消失）
       loadTradeLog();
@@ -953,6 +962,15 @@ function renderAiAdvice(positions) {
     const sorted = positions.slice().sort((a, b) => Math.abs(+(b.advice_score || 0)) - Math.abs(+(a.advice_score || 0)));
     el.innerHTML = sorted.map(hbCardHtml).join("");
   }
+  // v3.1 风格技术进度条（0~100 填充 + 右侧数值）
+  function _hbBar(name, pct, txt) {
+    const w = Math.max(0, Math.min(100, pct));
+    return `<div class="hb-bar">
+      <span class="hb-bar-name">${name}</span>
+      <span class="hb-bar-track"><i style="width:${w}%"></i></span>
+      <span class="hb-bar-val">${txt}</span>
+    </div>`;
+  }
   function hbCardHtml(p) {
     const action = p.action || "不动";
     const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
@@ -963,34 +981,60 @@ function renderAiAdvice(positions) {
     const chg = p.change_pct != null ? (p.change_pct >= 0 ? "+" : "") + p.change_pct.toFixed(2) + "%" : "";
     const chgCls = p.change_pct == null ? "" : (p.change_pct >= 0 ? "up" : "down");
     const ts = p.tech_short || {};
-    const kdj = ts.kdj_j != null
-      ? `KDJ J=${ts.kdj_j}${ts.kdj_status ? "·" + ts.kdj_status : ""}${ts.kdj_turn && ts.kdj_turn !== "平稳" ? "·" + ts.kdj_turn : ""}`
-      : "";
-    const macd = ts.macd_status ? `MACD ${ts.macd_status}` : "";
-    const vol = ts.vol_ratio != null ? `量比 ${ts.vol_ratio}` : "";
-    const rsi = ts.rsi != null ? `RSI ${ts.rsi}` : "";
-    const techLine = [kdj, macd, vol, rsi].filter(Boolean).join("　") || "—";
-    const tl = p.tight || {};
-    const buy = tl.buy != null ? fmt(tl.buy, 2) : "--";
-    const sell = tl.sell != null ? fmt(tl.sell, 2) : "--";
-    const sl = tl.stop_loss != null ? fmt(tl.stop_loss, 2) : "--";
-    const tp = tl.take_profit != null ? fmt(tl.take_profit, 2) : "--";
     const score = p.advice_score != null ? p.advice_score : 0;
+    const scorePct = Math.max(0, Math.min(100, (score + 100) / 2));
     const scoreColor = score > 0 ? "#2b8a3e" : score < 0 ? "#c92a2a" : "#868e96";
     const shares = p.shares != null ? p.shares + "股" : "";
+
+    // —— 技术进度条映射（v3.1 标志：KDJ / MACD / 量能 / RSI）——
+    const kdjJ = ts.kdj_j != null ? +ts.kdj_j : null;
+    const kdjPct = kdjJ != null ? (kdjJ + 100) / 2 : 50;
+    const kdjTxt = kdjJ != null ? ("J " + kdjJ + (ts.kdj_status ? "·" + ts.kdj_status : "")) : "J —";
+    const macdMap = { "红柱": 88, "红柱放": 95, "红柱缩": 72, "金叉": 88, "绿柱": 12, "绿柱放": 5, "绿柱缩": 28, "死叉": 12 };
+    const macdPct = macdMap[ts.macd_status] != null ? macdMap[ts.macd_status] : 50;
+    const macdTxt = ts.macd_status ? ("MACD " + ts.macd_status) : "MACD —";
+    const vol = ts.vol_ratio != null ? +ts.vol_ratio : null;
+    const volPct = vol != null ? vol * 25 : 50;
+    const volTxt = vol != null ? ("量比 " + vol) : "量比 —";
+    const rsi = ts.rsi != null ? +ts.rsi : null;
+    const rsiPct = rsi != null ? rsi : 50;
+    const rsiTxt = rsi != null ? ("RSI " + rsi) : "RSI —";
+
+    // —— 三档价位（v3.1 标志：建仓 / 止损 / 目标）——
+    const tl = p.tight || {};
+    const buy = tl.buy != null ? fmt(tl.buy, 2) : "--";
+    const sl = tl.stop_loss != null ? fmt(tl.stop_loss, 2) : "--";
+    const tp = tl.take_profit != null ? fmt(tl.take_profit, 2) : "--";
+
     return `<div class="hb-card ${cls}" style="border-left-color:${color}">
-      <div class="hb-head">
-        <span class="hb-name"><b>${p.name || p.code}</b><i>${p.code}</i><em class="hb-shares">${shares}</em></span>
-        <span class="hb-px"><b>${px}</b> <span class="${chgCls}">${chg}</span></span>
+      <div class="hb-top">
+        <div class="hb-id">
+          <b class="hb-name">${p.name || p.code}</b>
+          <span class="hb-code">${p.code} · ${shares}</span>
+        </div>
+        <div class="hb-ring" style="--p:${scorePct};--rc:${color}">
+          <svg viewBox="0 0 44 44" class="ring-svg">
+            <circle cx="22" cy="22" r="18" class="ring-bg"/>
+            <circle cx="22" cy="22" r="18" class="ring-fg"/>
+          </svg>
+          <span class="ring-num" style="color:${scoreColor}">${score > 0 ? "+" : ""}${score}</span>
+        </div>
       </div>
-      <div class="hb-tech">${techLine}</div>
-      <div class="hb-advice">
+      <div class="hb-px-row">
+        <span class="hb-px"><b>${px}</b></span>
+        <span class="hb-chg ${chgCls}">${chg}</span>
         <span class="hb-act" style="color:${color}">${label}</span>
-        <span class="hb-bp">买 ${buy}</span>
-        <span class="hb-sp">卖 ${sell}</span>
-        <span class="hb-sl">止损 ${sl}</span>
-        <span class="hb-tp">止盈 ${tp}</span>
-        <span class="hb-score" style="color:${scoreColor}">评分 ${score > 0 ? "+" : ""}${score}</span>
+      </div>
+      <div class="hb-bars">
+        ${_hbBar("KDJ", kdjPct, kdjTxt)}
+        ${_hbBar("MACD", macdPct, macdTxt)}
+        ${_hbBar("量能", volPct, volTxt)}
+        ${_hbBar("RSI", rsiPct, rsiTxt)}
+      </div>
+      <div class="hb-levels">
+        <div class="hb-lv lv-buy"><span>建仓</span><b>${buy}</b></div>
+        <div class="hb-lv lv-sl"><span>止损</span><b>${sl}</b></div>
+        <div class="hb-lv lv-tp"><span>目标</span><b>${tp}</b></div>
       </div>
     </div>`;
   }
