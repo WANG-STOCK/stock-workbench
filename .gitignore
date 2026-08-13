@@ -3,10 +3,8 @@ cloudflared.exe
 __pycache__/
 data/cache/
 data/universe.txt
-data/positions.json
 data/watchlist.json
 data/review.json
-data/account.json
 static/positions.json
 static/account.json
 .vscode/

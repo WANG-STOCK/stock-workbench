@@ -62,9 +62,23 @@
       const t0 = Date.now();
       const d = await api("GET", "/api/positions_advice");
       const took = Date.now() - t0;
-      if (!d || !d.ok) return;
+      // 如果接口本身报错（d.error）或没 ok，弹出来给用户看，避免页面"看着没了持仓"误判
+      if (!d) {
+        showAccountErr("无响应", "接口没返回，请点 🔄 重试");
+        return;
+      }
+      if (!d.ok) {
+        showAccountErr("加载失败", (d.error || "接口 ok=false"));
+        return;
+      }
       const positions = d.positions || [];
       state.posAdvice = positions;
+      // 调试锚点：把后端实际返回塞到 window.__lastD 和页面调试栏，王总 F12 一眼能看到接口真实数据
+      window.__lastD = d;
+      try {
+        const dbg = document.getElementById("__posDebug");
+        if (dbg) dbg.textContent = `接口返回 ok=${d.ok} count=${(d.positions||[]).length} cash=${d.cash} mv=${d.market_value} tv=${d.total_value} 取自 ${(d._served_at||'')}`;
+      } catch (_) {}
 
       const cash = +(d.cash || 0);
       const mv = +(d.market_value || 0);
@@ -111,7 +125,29 @@
         state._slowNoticeShown = true;
         toast("首次加载 " + took + "ms（板块+指标冷启），后续 5s 缓存秒回", true);
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      // 关键：渲染抛错时给用户看到具体异常 + 重试按钮，避免"持仓没了"误判
+      console.error("[renderAccount] error:", e);
+      showAccountErr((e && e.name) || "Error", (e && e.message) || String(e));
+    }
+  }
+
+  // 账户区异常显示：渲染失败时直接把异常显式写在 KPI 上 + 提供重试按钮
+  function showAccountErr(ename, emsg) {
+    try {
+      const tip = "⚠️ 加载异常 [" + ename + "]: " + emsg + "　<a href=\"javascript:renderAccount()\" style=\"color:#1971c2\">🔄 重试</a>　<a href=\"javascript:location.reload(true)\" style=\"color:#c92a2a\">强制刷新</a>";
+      const setv = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      setv("akAsset", "异常");
+      setv("akPosition", "—");
+      setv("akCash", "—");
+      setv("akToday", "—");
+      const sub = document.getElementById("akAssetSub");
+      if (sub) sub.innerHTML = tip;
+      const body = document.getElementById("posTableBody");
+      if (body) body.innerHTML = '<tr><td colspan="8" class="muted-cell">加载异常，详见上方提示</td></tr>';
+      const aiBody = document.getElementById("aiAdviceBody");
+      if (aiBody) aiBody.innerHTML = '<div class="ai-empty">账户加载异常，请点 🔄 重试或 ⇧⌘R 强制刷新</div>';
+    } catch (_) {}
   }
 
   // 加载今日已成交明细（刷新生效不丢）

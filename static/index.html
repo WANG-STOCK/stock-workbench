@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>婷婷量化AI</title>
-  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r14">
 </head>
 <body>
   <header class="topbar">
@@ -30,7 +30,7 @@
       <span class="status">
         <span class="badge" id="marketBadge">A股 · 沪深</span>
         <span class="badge" id="tdxStatus">数据源：检测中…</span>
-        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r12</span>
+        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r14</span>
         <span class="badge clock" id="clock">--:--:--</span>
       </span>
     </div>
@@ -47,6 +47,10 @@
           <span class="sub">实时 · 8 秒刷新</span>
         </div>
 
+        <!-- 调试锚点：renderAccount 会把"接口实际返回"实时写到这里，王总刷新立刻看到真实数据 -->
+        <div id="__posDebug" style="font-size:11px;color:#1971c2;background:#e7f5ff;padding:4px 8px;border-radius:4px;margin-top:6px;border:1px dashed #74c0fc">
+          ⏳ 等 renderAccount 把接口真实返回写到这行…
+        </div>
         <!-- 大字 KPI -->
         <div class="acct-kpis">
           <div class="akpi">
@@ -264,6 +268,6 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=r14"></script>
 </body>
 </html>
