@@ -256,12 +256,12 @@ body {
 /* 股票列也居中；名字/代码/现价竖向堆叠并居中 */
 .ai-table td.ai-c-name { text-align: center; }
 
-/* 行底色（r15：白底 + 左侧 4px 色条：买入=绿、卖出=红、持有=黄灰，不再整行染色，看着不刺眼） */
-.ai-table tbody tr.ai-row-buy td   { background: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #2b8a3e; }
-.ai-table tbody tr.ai-row-sell td  { background: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #c92a2a; }
-.ai-table tbody tr.ai-row-hold td  { background: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #f59f00; }
-.ai-table tbody tr.ai-strong td    { font-weight: 700; }   /* 强烈买入行：白底 + 加粗（不另染深色） */
-.ai-table tbody tr:hover td { filter: brightness(0.97); }
+/* r16: 行底色——白底 + 左侧 4px 色条（不再整片染色）。买入=绿、卖出=红、持有=琥珀 */
+.ai-table tbody tr.ai-row-flat td { background: #ffffff; border: 1px solid #e9ecef; }
+.ai-table tbody tr.ai-row-buy  td { background: #ffffff; border: 1px solid #d3f9d8; border-left: 5px solid #2b8a3e; }
+.ai-table tbody tr.ai-row-sell td { background: #ffffff; border: 1px solid #ffe3e3; border-left: 5px solid #c92a2a; }
+.ai-table tbody tr.ai-row-hold td { background: #ffffff; border: 1px solid #fff3bf; border-left: 5px solid #f59f00; }
+.ai-table tbody tr:hover td { filter: brightness(0.99); }
 
 .ai-table .ai-empty { text-align: center; color: var(--muted); padding: 20px; font-size: 12px; }
 
@@ -970,3 +970,108 @@ button.mini:hover { background: #dde7f0; }
 .rev-table th, .rev-table td { padding: 4px 6px; border-bottom: 1px solid #e9ecef; text-align: right; font-variant-numeric: tabular-nums; }
 .rev-table th { background: #e9ecef; font-weight: 700; color: #495057; }
 .rev-table th:nth-child(2), .rev-table td:nth-child(2) { text-align: left; }
+
+/* ============== r16 AI 卡片极简布局（仿参考截图1：4列紧凑横向 + 白底 + 技术细节行） ============== */
+
+/* 股票列：评级圆点 + 加仓/减仓/持有 + 股票名 + 代码 */
+.ai-c-name .ai-grade-row { display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 1.4; justify-content: center; }
+.ai-c-name .ai-grade-dot { font-size: 12px; line-height: 1; }
+.ai-c-name .ai-grade-dot.ai-buy  { color: #2b8a3e; }
+.ai-c-name .ai-grade-dot.ai-sell { color: #c92a2a; }
+.ai-c-name .ai-grade-dot.ai-hold { color: #f59f00; }
+.ai-c-name .ai-grade-text { font-weight: 800; font-size: 11.5px; padding: 1px 6px; border-radius: 10px; }
+.ai-c-name .ai-grade-text.ai-buy  { color: #1b5e20; background: #d3f9d8; }
+.ai-c-name .ai-grade-text.ai-sell { color: #b71c1c; background: #ffe3e3; }
+.ai-c-name .ai-grade-text.ai-hold { color: #6d4c00; background: #fff3bf; }
+.ai-c-name .ai-name-main { font-size: 13px; color: #212529; font-weight: 700; }
+.ai-c-name .ai-name-main b { font-weight: 800; }
+.ai-c-name .ai-code-mini { font-style: normal; color: #868e96; font-size: 10.5px; font-weight: 500; margin-left: 3px; }
+.ai-c-name .ai-price-row { margin-top: 4px; font-size: 12px; line-height: 1.3; text-align: center; }
+.ai-c-name .ai-price-row .ai-px b { font-size: 14.5px; color: #212529; font-weight: 900; font-variant-numeric: tabular-nums; }
+.ai-c-name .ai-price-row .ai-px-chg { margin-left: 4px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ai-c-name .ai-price-row .ai-px-chg.up { color: #c92a2a; }
+.ai-c-name .ai-price-row .ai-px-chg.down { color: #2b8a3e; }
+
+/* 评分列：更大字号，配色和 ai-row-* 一致 */
+.ai-c-score { padding: 4px 6px; }
+.ai-c-score .ai-score-num { font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
+.ai-c-score .ai-score-num.ai-buy { color: #1b5e20; }
+.ai-c-score .ai-score-num.ai-sell { color: #b71c1c; }
+.ai-c-score .ai-score-num.ai-hold { color: #6d4c00; }
+.ai-c-score .ai-score-cap { font-size: 10px; color: #868e96; margin-top: 2px; letter-spacing: 1px; }
+
+/* 今日预估列：紧凑行 + 板块块单行版（r16: 去掉 MA basis；保留 MACD+KDJ+量能） */
+.ai-c-fc { line-height: 1.45; }
+.ai-c-fc .fc-head { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; justify-content: center; margin-bottom: 4px; }
+.ai-c-fc .fc-trend { font-weight: 800; font-size: 12.5px; padding: 1px 7px; border-radius: 4px; }
+.ai-c-fc .fc-trend.up   { color: #1b5e20; background: #d3f9d8; }
+.ai-c-fc .fc-trend.down { color: #b71c1c; background: #ffe3e3; }
+.ai-c-fc .fc-trend.flat { color: #6d4c00; background: #fff3bf; }
+.ai-c-fc .fc-pct { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12.5px; }
+.ai-c-fc .fc-pct.up   { color: #c92a2a; }
+.ai-c-fc .fc-pct.down { color: #2b8a3e; }
+.ai-c-fc .fc-pct.flat { color: #6d4c00; }
+.ai-c-fc .fc-band-mini { font-size: 10.5px; color: #495057; }
+.ai-c-fc .fc-band-mini b { color: #212529; font-weight: 800; font-variant-numeric: tabular-nums; margin: 0 1px; }
+
+/* 板块块（r16 单行版：名称·涨跌幅·资金流入·上涨占比 一行全显） */
+.ai-c-fc .ai-sec-block { margin-top: 5px; padding-top: 5px; border-top: 1px dashed rgba(73,80,87,0.25); font-size: 11px; line-height: 1.5; text-align: center; }
+.ai-c-fc .ai-sec-block .sec-name { color: #1971c2; font-weight: 800; font-size: 11.5px; }
+.ai-c-fc .ai-sec-block .sec-pct { font-weight: 800; font-variant-numeric: tabular-nums; padding: 0 5px; border-radius: 3px; font-size: 11px; }
+.ai-c-fc .ai-sec-block .sec-pct.sec-up { color: #fff; background: #e03131; }
+.ai-c-fc .ai-sec-block .sec-pct.sec-dn { color: #fff; background: #2f9e44; }
+.ai-c-fc .ai-sec-block .sec-fund-val { font-weight: 700; font-size: 11px; padding: 1px 6px; border-radius: 3px; }
+.ai-c-fc .ai-sec-block .sec-fund-val.sec-fund-in  { color: #c92a2a; border: 1px solid #ffc9c9; }
+.ai-c-fc .ai-sec-block .sec-fund-val.sec-fund-out { color: #2b8a3e; border: 1px solid #b2f2bb; }
+.ai-c-fc .ai-sec-block .sec-fund-mini { color: #495057; font-size: 10.5px; }
+.ai-c-fc .ai-sec-block .sec-fund-mini b { color: #212529; font-weight: 800; }
+.ai-c-fc .ai-sec-block .sec-est { font-size: 9px; font-weight: 800; color: #868e96; background: #f1f3f5; border: 1px solid #dee2e6; border-radius: 3px; padding: 0 3px; margin-left: 2px; vertical-align: middle; }
+
+/* 实时建议（r16 紧凑 3 行版） */
+.ai-c-tp { text-align: left; padding: 6px 8px; }
+.ai-c-tp .tp-compact { display: flex; flex-direction: column; gap: 3px; line-height: 1.5; }
+.ai-c-tp .tp-l1 { font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-c-tp .tp-l2 { font-size: 11.5px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.ai-c-tp .tp-l3 { font-size: 11px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; color: #495057; }
+.ai-c-tp .tp-act { font-weight: 800; font-size: 12px; padding: 2px 8px; border-radius: 10px; }
+.ai-c-tp .tp-act.tp-buy  { color: #1b5e20; background: #d3f9d8; border: 1px solid #69db7c; }
+.ai-c-tp .tp-act.tp-sell { color: #b71c1c; background: #ffe3e3; border: 1px solid #ff8787; }
+.ai-c-tp .tp-act.tp-hold { color: #6d4c00; background: #fff3bf; border: 1px solid #f59f00; }
+.ai-c-tp .tp-qty b { color: #212529; font-weight: 900; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ai-c-tp .tp-op { color: #495057; font-size: 10.5px; }
+.ai-c-tp .tp-op b { color: #212529; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ai-c-tp .tp-buy-tag, .ai-c-tp .tp-sell-tag, .ai-c-tp .tp-sl-tag, .ai-c-tp .tp-tp-tag { font-weight: 800; font-size: 10px; padding: 0 4px; border-radius: 3px; }
+.ai-c-tp .tp-buy-tag { color: #1b5e20; background: #d3f9d8; }
+.ai-c-tp .tp-buy-px { font-weight: 900; color: #1b5e20; font-variant-numeric: tabular-nums; font-size: 12px; }
+.ai-c-tp .tp-sell-tag { color: #b71c1c; background: #ffe3e3; }
+.ai-c-tp .tp-sell-px { font-weight: 900; color: #b71c1c; font-variant-numeric: tabular-nums; font-size: 12px; }
+.ai-c-tp .tp-sl-tag { color: #fff; background: #495057; }
+.ai-c-tp .tp-sl-px { font-weight: 800; color: #495057; font-variant-numeric: tabular-nums; font-size: 11px; }
+.ai-c-tp .tp-tp-tag { color: #fff; background: #1971c2; }
+.ai-c-tp .tp-tp-px { font-weight: 800; color: #1971c2; font-variant-numeric: tabular-nums; font-size: 11px; }
+.ai-c-tp .tp-buy-dist, .ai-c-tp .tp-sell-dist { font-size: 10px; color: #868e96; font-variant-numeric: tabular-nums; }
+.ai-c-tp .tp-mute { color: var(--muted); font-size: 11px; }
+
+/* 技术细节行（r16: 持仓专属 KDJ+MACD+量能——王总"最及时技术面"） */
+.ai-table tbody tr.ai-detail-row td.ai-detail-cell {
+  background: #f8fbfd; padding: 5px 10px;
+  border-left: 1px solid #e9ecef; border-right: 1px solid #e9ecef; border-bottom: 1px dashed #d0d6dd;
+  text-align: center;
+}
+.ai-tech-detail { font-size: 11px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; line-height: 1.5; padding: 0 6px; }
+.ai-tech-detail .td-tag { color: #1971c2; font-weight: 800; font-size: 11px; }
+.ai-tech-detail .td-seg { display: flex; gap: 4px; align-items: baseline; }
+.ai-tech-detail .td-seg b { color: #495057; font-weight: 800; margin-right: 2px; font-size: 10.5px; letter-spacing: 0.5px; }
+.ai-tech-detail .td-sep { color: #ced4da; font-size: 12px; font-weight: 700; }
+.ai-tech-detail .kdj-hot { color: #c92a2a; font-weight: 800; }
+.ai-tech-detail .kdj-cold { color: #2b8a3e; font-weight: 800; }
+.ai-tech-detail .kdj-mid { color: #495057; }
+.ai-tech-detail .kdj-up { color: #2b8a3e; font-weight: 700; }
+.ai-tech-detail .kdj-down { color: #c92a2a; font-weight: 700; }
+.ai-tech-detail .macd-bull { color: #c92a2a; font-weight: 700; }
+.ai-tech-detail .macd-bear { color: #2b8a3e; font-weight: 700; }
+.ai-tech-detail .macd-flat { color: #495057; }
+.ai-tech-detail .vol-up { color: #c92a2a; font-weight: 700; }
+.ai-tech-detail .vol-dn { color: #1971c2; font-weight: 700; }
+.ai-tech-detail .vol-mid { color: #495057; }
+

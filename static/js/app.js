@@ -294,6 +294,116 @@
     };
   }
 
+  // 实时建议（紧凑 3 行：动作·数量 · 买卖价 · 止损止盈）
+  // r16 改：去掉"回踩MA5附近不破就买"这种术语，只给数字 + 距离提示
+  function _tpHtmlCompact(p, action, score) {
+    const tight = p.tight || {};
+    const price = p.price;
+    const buy = tight.buy, sell = tight.sell;
+    const sl = tight.stop_loss, tp = tight.take_profit;
+    const op = p.op_price;
+    const qty = p.op_qty || 0;
+    const shares = p.shares || 0;
+
+    if (!price) return '<span class="tp-mute">等价位</span>';
+
+    // 动作标签
+    let actTxt = "持有";
+    let actCls = "tp-hold";
+    if (action === "买入" || action === "强烈买入") { actTxt = "🟢 加仓"; actCls = "tp-buy"; }
+    else if (action === "卖出") { actTxt = "🔴 减仓"; actCls = "tp-sell"; }
+    else { actTxt = "🟡 持有"; actCls = "tp-hold"; }
+
+    // 距离提示（让王总一眼看到当前价距买/卖点差多远）
+    const distToBuy = buy ? ((buy - price) / price * 100) : null;
+    const distToSell = sell ? ((sell - price) / price * 100) : null;
+    const buyDistTxt = distToBuy != null ? ((distToBuy > 0 ? '距现价 -' : '已突破 ') + Math.abs(distToBuy).toFixed(2) + '%') : '';
+    const sellDistTxt = distToSell != null ? ((distToSell > 0 ? '距现价 +' : '已突破 ') + Math.abs(distToSell).toFixed(2) + '%') : '';
+
+    // 数量策略
+    let qtyTxt = '';
+    if (action === "买入" || action === "强烈买入") {
+      qtyTxt = qty ? '加 <b>' + qty + '</b> 股' : '等回调';
+    } else if (action === "卖出") {
+      qtyTxt = qty ? '减 <b>' + qty + '</b> 股' : '减 1/3';
+    } else {
+      qtyTxt = shares ? '持 <b>' + shares + '</b> 股' : '—';
+    }
+    const opHint = op ? ('<span class="tp-op">建/平仓价 <b>' + fmt(op, 2) + '</b></span>') : '';
+
+    return '<div class="tp-compact">' +
+      '<div class="tp-l1">' +
+        '<span class="tp-act ' + actCls + '">' + actTxt + '</span>　' +
+        '<span class="tp-qty">' + qtyTxt + '</span>' +
+        (opHint ? '　' + opHint : '') +
+      '</div>' +
+      '<div class="tp-l2">' +
+        '<span class="tp-buy-tag">买</span>' +
+        '<span class="tp-buy-px">' + (buy ? fmt(buy, 2) : '—') + '</span>' +
+        (buyDistTxt ? '<span class="tp-buy-dist">' + buyDistTxt + '</span>' : '') +
+        '　<span class="tp-sell-tag">卖</span>' +
+        '<span class="tp-sell-px">' + (sell ? fmt(sell, 2) : '—') + '</span>' +
+        (sellDistTxt ? '<span class="tp-sell-dist">' + sellDistTxt + '</span>' : '') +
+      '</div>' +
+      '<div class="tp-l3">' +
+        '<span class="tp-sl-tag">止损</span><span class="tp-sl-px">' + (sl ? fmt(sl, 2) : '—') + '</span>' +
+        '　<span class="tp-tp-tag">止盈</span><span class="tp-tp-px">' + (tp ? fmt(tp, 2) : '—') + '</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // 技术细节行：KDJ + MACD + 量能 + RSI + BOLL
+  // r16：王总原话"持仓只看 MACD 和 KDJ 还有量能这些，我需要最及时的技术面"
+  function _aiTechDetailHtml(p) {
+    const ts = p.tech_short || {};
+    const tm = ((p.intraday || {}).metrics) || {};
+    const kj = ts.kdj_j != null ? ts.kdj_j : tm.kdj_j;
+    const ks = ts.kdj_status || tm.kdj_status;
+    const kt = ts.kdj_turn || tm.kdj_turn;
+    const mr = ts.macd_status || tm.macd_status;
+    const vr = ts.vol_ratio != null ? ts.vol_ratio : (tm.vol_ratio != null ? tm.vol_ratio : null);
+    const rsi = ts.rsi != null ? ts.rsi : (tm.rsi != null ? tm.rsi : null);
+    const bp = ts.boll_pos || tm.boll_pos;
+
+    const kdjJCls = kj != null ? (kj > 90 ? 'kdj-hot' : kj < 10 ? 'kdj-cold' : 'kdj-mid') : 'kdj-mid';
+    const kdjStatusCls = ks === '超买' ? 'kdj-hot' : ks === '超卖' ? 'kdj-cold' : 'kdj-mid';
+    const kdjTurnCls = kt === '上拐' ? 'kdj-up' : kt === '下拐' ? 'kdj-down' : 'kdj-mid';
+    const macdCls = mr === '红柱扩' ? 'macd-bull' : mr === '红柱缩' ? 'macd-bear' : mr === '绿柱' ? 'macd-bear' : 'macd-flat';
+    const vrCls = vr != null ? (vr >= 1.5 ? 'vol-up' : vr <= 0.6 ? 'vol-dn' : 'vol-mid') : '';
+    const rsiCls = rsi != null ? (rsi >= 70 ? 'kdj-hot' : rsi <= 30 ? 'kdj-cold' : 'kdj-mid') : '';
+
+    return '<div class="ai-tech-detail">' +
+      '<span class="td-tag">📡 KDJ+MACD+量能（持仓短线）</span>' +
+      '<span class="td-seg"><b>KDJ</b>' +
+        '<span class="' + kdjJCls + '">J=' + (kj != null ? kj.toFixed(0) : '—') + '</span>' +
+        '<span class="' + kdjStatusCls + '">' + (ks || '—') + '</span>' +
+        '<span class="' + kdjTurnCls + '">' + (kt || '—') + '</span>' +
+      '</span>' +
+      '<span class="td-sep">｜</span>' +
+      '<span class="td-seg"><b>MACD</b>' +
+        '<span class="' + macdCls + '">' + (mr || '—') + '</span>' +
+      '</span>' +
+      (vr != null ? (
+        '<span class="td-sep">｜</span>' +
+        '<span class="td-seg"><b>量能</b>' +
+          '<span class="' + vrCls + '">量比 ' + vr.toFixed(2) + '</span>' +
+        '</span>'
+      ) : '') +
+      (rsi != null ? (
+        '<span class="td-sep">｜</span>' +
+        '<span class="td-seg"><b>RSI</b>' +
+          '<span class="' + rsiCls + '">' + rsi.toFixed(0) + '</span>' +
+        '</span>'
+      ) : '') +
+      (bp ? (
+        '<span class="td-sep">｜</span>' +
+        '<span class="td-seg"><b>BOLL</b>' +
+          '<span>' + bp + '</span>' +
+        '</span>'
+      ) : '') +
+    '</div>';
+  }
+
   function _tpHtml(plan) {
     if (!plan || !plan.lines || !plan.lines.length) {
       return '<div class="tp-line"><span class="tp-tag hold">持有</span><span class="tp-when">等价格到位</span></div>';
@@ -391,14 +501,14 @@ function renderAiAdvice(positions) {
     }
     // 按评分绝对值降序：最强信号（最值得操作）在最上面
     const sorted = positions.slice().sort((a, b) => Math.abs(+(b.advice_score || 0)) - Math.abs(+(a.advice_score || 0)));
-    // 横向布局：每只持仓 = 一行 <tr>，5 列对齐：股票 / 评分 / 操作 / 今日预估+板块 / 偏T方案
-    // 整个界面"对齐不要歪歪扭扭"。
+    // r16: 4 列极简横向：股票 / 评分 / 今日预估+板块 / 实时建议
+    // 仿参考截图1的简洁感，4 列严格对齐。MA5/MA20 不再用于持仓，只用 KDJ+MACD+量能
     el.innerHTML = '<table class="ai-table">' +
       '<thead><tr>' +
-        '<th class="ai-c-name" style="min-width:115px">股票</th>' +
-        '<th class="ai-c-score" style="width:60px">评分</th>' +
-        '<th class="ai-c-fc" style="min-width:300px">今日预估 + 板块</th>' +
-        '<th class="ai-c-tp" style="min-width:290px">实时建议</th>' +
+        '<th class="ai-c-name" style="min-width:140px">股票</th>' +
+        '<th class="ai-c-score" style="width:74px">评分</th>' +
+        '<th class="ai-c-fc" style="min-width:270px">今日预估 + 板块</th>' +
+        '<th class="ai-c-tp" style="min-width:300px">实时建议</th>' +
       '</tr></thead>' +
       '<tbody>' + sorted.map(_aiCardHtml).join("") + '</tbody>' +
       '</table>';
@@ -407,17 +517,17 @@ function renderAiAdvice(positions) {
   // AI 卡片：横向表格一行（5 列：股票 / 评分 / 操作 / 今日预估+板块 / 偏T方案）
   // 核心：跟实盘走 + 利润最大化 —— 偏T方案的 buy/sell 给 ATR 宽度，不做"±0.8% 紧价"。
   function _aiCardHtml(p) {
+    // r16: 持仓只参考 KDJ+MACD+量能（最及时技术面），MA5/MA20 给自选筛股
+    // 4 列极简横向：股票 / 评分 / 今日预估+板块 / 实时建议
     const action = p.action || "不动";
-    const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
     const score = p.advice_score != null ? p.advice_score : 0;
     const cls = action === "买入" || action === "强烈买入" ? "ai-buy" : action === "卖出" ? "ai-sell" : "ai-hold";
-    const strong = action === "强烈买入" || action === "买入";
-    // 行 class 控制整体底色（买=绿、卖=红、持有=黄）
-    const rowCls = action === "买入" || action === "强烈买入" ? "ai-row-buy" :
-                   action === "卖出" ? "ai-row-sell" : "ai-row-hold";
+    // r16: 整行白底，靠左侧 4px 色条 + 行内评级圆点传达信号，不刺眼
+    const rowCls = "ai-row-flat";
 
-    // 实时动态信号标签（基于盘中 5min 分时）
-    const liveHtml = _liveHint(p);
+    // 评级圆点 + 文字（合并到"股票"列里，整张表 4 列）
+    const gradeTxt = action === "买入" || action === "强烈买入" ? "加仓" :
+                     action === "卖出" ? "减仓" : "持有";
 
     // 价格 + 涨跌%
     const pxTxt = p.price != null ? fmt(p.price, 2) : '--';
@@ -432,8 +542,10 @@ function renderAiAdvice(positions) {
     const fcPct = fc.pct != null ? fc.pct : 0;
     const fcHi = fc.forecast_high;
     const fcLo = fc.forecast_low;
-    // r15: 资金净流入这条信息由下方板块块承载，此处与板块块重复，不再渲染
-    const basisHtml = (fc.basis || []).filter(b => b && !/资金净流入|净流入/.test(b)).slice(0, 5)
+    // r16: 资金净流入已在板块块承载，去重；再过滤 MA 系列（中线指标不用于持仓）
+    const basisHtml = (fc.basis || [])
+      .filter(b => b && !/资金净流入|净流入|均线|MA\d+/.test(b))
+      .slice(0, 5)
       .map(b => '<li>' + b + '</li>').join("");
 
     // 板块（合并到今日预估下方）
@@ -448,42 +560,52 @@ function renderAiAdvice(positions) {
     const secFundTxt = secFund == null ? '' : ('<span class="sec-fund-val ' + secFundCls + '">' + (secFund >= 0 ? '流入+' : '流出') + Math.abs(secFund).toFixed(1) + '亿' + secProxy + '</span>');
     const upRatioTxt = sec.up_ratio != null ? '<span class="sec-fund-mini">上涨占比 <b>' + (sec.up_ratio * 100).toFixed(0) + '%</b></span>' : '';
 
-    // 偏T方案（实时，跟实盘走）
-    const tpPlan = _tpPlan(p, fcTrend);
+    // r16: 实时建议（紧凑 5 行：动作·数量·买卖价·止损·止盈）+ 技术细节行（KDJ+MACD+量能）
+    const tpHtml = _tpHtmlCompact(p, action, score);
+    const detailHtml = _aiTechDetailHtml(p);
 
-    return '<tr class="' + rowCls + (strong ? ' ai-strong' : '') + '">' +
-      // ① 股票
+    // rowCls 直接白底（不用 ai-strong）
+    return '<tr class="' + rowCls + '">' +
+      // ① 股票（合并"评级+股票名+代码+当前价+涨跌"）
       '<td class="ai-c-name">' +
-        '<div class="name-line"><b>' + (p.name || p.code) + '</b><i class="code-mini">' + p.code + '</i></div>' +
-        '<div class="price-line">' +
-          '<span class="ss-px"><b>' + pxTxt + '</b></span>' +
-          (changeTxt ? '<span class="' + changeCls + '" style="font-size:11px;margin-left:4px">' + changeTxt + '</span>' : '') +
+        '<div class="ai-grade-row">' +
+          '<span class="ai-grade-dot ' + cls + '">●</span>' +
+          '<span class="ai-grade-text ' + cls + '">' + gradeTxt + '</span>' +
+          '<span class="ai-name-main"><b>' + (p.name || p.code) + '</b></span>' +
+          '<i class="ai-code-mini">' + p.code + '</i>' +
         '</div>' +
-        (liveHtml || '') +
+        '<div class="ai-price-row">' +
+          '<span class="ai-px"><b>' + pxTxt + '</b></span>' +
+          (changeTxt ? '<span class="ai-px-chg ' + changeCls + '">' + changeTxt + '</span>' : '') +
+        '</div>' +
       '</td>' +
       // ② 评分
-      '<td class="ai-c-score ' + cls + '">' + (score > 0 ? '+' : '') + score + '</td>' +
-      // ③ 今日预估 + 板块（r15: 板块块在最下方，资金净流入由它承担；上方不再重复）
+      '<td class="ai-c-score ' + cls + '">' +
+        '<div class="ai-score-num ' + cls + '">' + (score > 0 ? '+' : '') + score + '</div>' +
+        '<div class="ai-score-cap">分</div>' +
+      '</td>' +
+      // ③ 今日预估 + 板块（r16: 去掉 MA 系列 basis；板块块沿用）
       '<td class="ai-c-fc">' +
-        '<div class="fc-head"><span class="fc-trend ' + fcCls + '">' + fcTrend + ' </span>' +
-          '<span class="fc-pct ' + fcCls + '">' + (fcPct >= 0 ? '+' : '') + fcPct.toFixed(2) + '%</span></div>' +
+        '<div class="fc-head">' +
+          '<span class="fc-trend ' + fcCls + '">' + fcTrend + '</span>' +
+          '<span class="fc-pct ' + fcCls + '">' + (fcPct >= 0 ? '+' : '') + fcPct.toFixed(2) + '%</span>' +
+          ((fcHi || fcLo) ? '<span class="fc-band-mini">高 <b>' + (fcHi ? fmt(fcHi, 2) : '—') + '</b> / 低 <b>' + (fcLo ? fmt(fcLo, 2) : '—') + '</b></span>' : '') +
+        '</div>' +
         (basisHtml ? '<ul class="fc-basis">' + basisHtml + '</ul>' : '') +
-        // 高低预测（利润最大化）：今天预估能卖到的最高/能买到的最低
-        ((fcHi || fcLo) ? (
-          '<div class="fc-band">' +
-            '<span class="fc-band-hi" title="预估今天能卖在的最高价">高 <b>' + (fcHi ? fmt(fcHi, 2) : '—') + '</b></span>' +
-            '<span class="fc-band-mid">·</span>' +
-            '<span class="fc-band-lo" title="预估今天能买到的最低价">低 <b>' + (fcLo ? fmt(fcLo, 2) : '—') + '</b></span>' +
-          '</div>'
-        ) : '') +
-        // 板块块（合并到今日预估下方，含板块资金流入）
+        // 板块块（r16: 单行紧凑版，含名称/涨跌幅/资金流入/上涨占比）
         '<div class="ai-sec-block">' +
-          '<div class="sec-row1"><span class="sec-name">' + secName + '</span><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span></div>' +
-          '<div class="sec-row2">' + secFundTxt + (secFundTxt && upRatioTxt ? '　' : '') + upRatioTxt + '</div>' +
+          '<span class="sec-name">' + secName + '</span>' +
+          '<span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span>' +
+          (secFundTxt ? '　' + secFundTxt : '') +
+          (upRatioTxt ? '　' + upRatioTxt : '') +
         '</div>' +
       '</td>' +
-      // ④ 实时建议（r15: 原偏T方案，跟实盘走 + ATR 实时价位）
-      '<td class="ai-c-tp">' + _tpHtml(tpPlan) + '</td>' +
+      // ④ 实时建议（r16: 紧凑 5 行，仿真参考截图 1）
+      '<td class="ai-c-tp">' + tpHtml + '</td>' +
+    '</tr>' +
+    // ⑤ 技术细节行（KDJ+MACD+量能 —— 王总原话"持仓只看这些"）
+    '<tr class="ai-detail-row">' +
+      '<td colspan="4" class="ai-detail-cell">' + detailHtml + '</td>' +
     '</tr>';
   }
 

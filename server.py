@@ -408,27 +408,16 @@ def _build_position(analysis, qs, code=None):
 
 
 def _build_forecast(a, regime, outlook, prev_close, action, intraday=None, tl=None):
-    """今日预估：综合开盘价/集合竞价/板块涨跌/资金净流/均线方向，给出 (trend, pct, basis[], forecast_high, forecast_low)。
+    """今日预估：综合开盘/集合竞价/板块涨跌/资金净流/MACD+KDJ+量能短线信号，给 (trend, pct, basis[], forecast_high, forecast_low)。
 
-    forecast_high/low —— "利润最大化"用：整天预估最高/最低价，让用户卖在最高价附近、买在最低价附近。
-    算法：
-      - 高点 = max(当日已实现 high × 1.005, 现价 × (1 + pct_band), 阻力 × 1.005)
-      - 低点 = min(当日已实现 low × 0.995,  现价 × (1 - pct_band), 支撑 × 0.995)
-      - pct_band = max(2.5, |pct| × 0.7)（保守下限 2.5%）
+    forecast_high/low —— 整天预估最高/最低，用于"卖在最高附近、买在最低附近"。
+    r16 改动：去掉 MA5/MA10/MA20 basis（持仓只看短线最及时技术面，MA 用于自选筛股）。
+    basis 改为：集合竞价 + 板块 + MACD(K线零轴) + KDJ(J值拐头) + 量能(异动) + 短线综合。
     """
     ind = (a or {}).get("indicators") or {}
     macd = ind.get("macd") or {}
     kdj = ind.get("kdj") or {}
-    ma = ind.get("ma") or {}   # ma 是 dict: {ma5, ma10, ma20, ma60}
-    ma5 = ma.get("ma5")
-    ma10 = ma.get("ma10")
-    ma20 = ma.get("ma20")
-    # MACD/KDJ 在 indicators 模块里就是标量（末值）
-    dif = macd.get("dif")
-    dea = macd.get("dea")
-    hist = macd.get("hist")
-    k_v = kdj.get("k")
-    d_v = kdj.get("d")
+    vol = ind.get("vol") or {}
     price = (a or {}).get("price")
     op = (a or {}).get("open")
     basis = []
@@ -452,46 +441,67 @@ def _build_forecast(a, regime, outlook, prev_close, action, intraday=None, tl=No
                 pct += tpct * 0.4
             elif tpct <= -1.5:
                 basis.append(f"所属板块 {tpct:.1f}% 弱势")
-                pct += tpct * 0.4  # 已是负
+                pct += tpct * 0.4
         if fn is not None:
             if fn >= 2:
-                basis.append(f"资金净流入 +{fn:.1f}亿")
+                # r16: 资金净流入在板块块显示，今日预估不再列（避免重复）
                 pct += 0.8
             elif fn <= -2:
-                basis.append(f"资金净流出 {fn:.1f}亿")
                 pct -= 0.8
-    # 3) 均线趋势（多头/空头/震荡）
-    if ma5 and ma10 and ma20 and price:
-        if price > ma5 > ma10 > ma20:
-            basis.append("价>MA5>MA10>MA20 多头排列")
-            pct += 1.2
-        elif price < ma5 < ma10 < ma20:
-            basis.append("价<MA5<MA10<MA20 空头排列")
-            pct -= 1.2
-        elif price > ma20 and ma5 > ma10:
-            basis.append("价站上MA20、MA5>MA10 偏多")
-            pct += 0.6
-        elif price < ma20 and ma5 < ma10:
-            basis.append("价跌破MA20、MA5<MA10 偏空")
-            pct -= 0.6
-        else:
-            basis.append("均线交织 震荡")
-    # 4) MACD 方向
+    # 3) MACD 短线方向（r16：去掉 MA 系列，强化 MACD 零轴信号 = 中线趋势确认）
+    dif = macd.get("dif"); dea = macd.get("dea"); hist = macd.get("hist")
     if dif is not None and dea is not None:
-        if dif > dea and (hist is not None and hist > 0):
-            basis.append("MACD 金叉 红柱")
-            pct += 0.5
-        elif dif < dea and (hist is not None and hist < 0):
-            basis.append("MACD 死叉 绿柱")
-            pct -= 0.5
-    # 5) KDJ 状态
-    if k_v is not None and d_v is not None:
-        if k_v > 80 and d_v > 80:
-            basis.append(f"KDJ({k_v:.0f},{d_v:.0f}) 超买")
-            pct -= 0.4
-        elif k_v < 20 and d_v < 20:
-            basis.append(f"KDJ({k_v:.0f},{d_v:.0f}) 超卖")
+        if dif > dea and dif > 0 and (hist is None or hist > 0):
+            basis.append("MACD 零轴上金叉·中线偏多")
+            pct += 0.7
+        elif dif > dea and dif < 0:
+            basis.append("MACD 零轴下金叉·反弹启动")
             pct += 0.4
+        elif dif < dea and dif > 0:
+            basis.append("MACD 零轴上死叉·警惕回调")
+            pct -= 0.5
+        elif dif < dea and dif < 0 and (hist is None or hist < 0):
+            basis.append("MACD 零轴下死叉·趋势走弱")
+            pct -= 0.9
+        elif dif > dea:
+            basis.append("MACD 金叉·红柱")
+            pct += 0.4
+        elif dif < dea:
+            basis.append("MACD 死叉·绿柱")
+            pct -= 0.4
+    # 4) KDJ 短线拐点（r16：补 J 值/拐头，最及时的短线判断）
+    k_v = kdj.get("k"); d_v = kdj.get("d"); j_v = kdj.get("j")
+    j_turn_up = kdj.get("turn_up")
+    j_turn_down = kdj.get("turn_down")
+    kdj_overbought = kdj.get("overbought")
+    kdj_oversold = kdj.get("oversold")
+    if k_v is not None and d_v is not None and j_v is not None:
+        if j_v > 100:
+            basis.append(f"KDJ J={j_v:.0f} 极度超买·准备减仓")
+            pct -= 0.9
+        elif j_v < 0:
+            basis.append(f"KDJ J={j_v:.0f} 极度超卖·准备低吸")
+            pct += 0.9
+        elif kdj_overbought or (j_turn_down and j_v > 60):
+            basis.append(f"KDJ 拐头向下·短线警惕(J={j_v:.0f})")
+            pct -= 0.6
+        elif kdj_oversold or (j_turn_up and j_v < 40):
+            basis.append(f"KDJ 拐头向上·短线买入(J={j_v:.0f})")
+            pct += 0.6
+        elif k_v > d_v and j_v > kdj.get("j_prev", j_v):
+            basis.append(f"KDJ K上穿D·金叉(K={k_v:.0f},D={d_v:.0f})")
+            pct += 0.4
+        elif k_v < d_v and j_v < kdj.get("j_prev", j_v):
+            basis.append(f"KDJ K下穿D·死叉(K={k_v:.0f},D={d_v:.0f})")
+            pct -= 0.4
+    # 5) 量能（r16：补"量比"信号，突破/缩量共振）
+    vol_ratio = vol.get("ratio")
+    if vol_ratio is not None:
+        if vol_ratio >= 1.5:
+            basis.append(f"量比 {vol_ratio:.2f} 放量异动")
+            # 量能方向配合 MACD/KDJ（已经在上面的 basis 给出方向）
+        elif vol_ratio <= 0.6:
+            basis.append(f"量比 {vol_ratio:.2f} 缩量观望")
     # 定性：把 pct 映射到 trend
     if pct >= 0.8:
         trend = "偏多"
@@ -703,6 +713,33 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
         # intraday 模块自身对该场景给"持有看多/可回踩加仓"，统一收敛为"买入"（加仓），
         # 覆盖日线/防御模型可能给出的"卖出"——强反转日卖出等于卖飞。
         action = "买入"
+    # ===== r16 持仓短线 override：KDJ + MACD + 量能 1-3 天拐点 =====
+    # 王总原话："我持仓的你只需要参考 MACD 和 KDJ 还有量能这些，我需要最及时的技术面"
+    # MA5/MA20 只用于自选筛股；持仓决策让位于 intraday 5min KDJ(超买超卖/J拐头)+MACD(红绿柱)+量比
+    # 只在两种情况覆盖：(1) action 原本要"买入"但 KDJ 极度超买/死叉拐头 → 卖出 (2) action 原本要"卖出"但 KDJ 极度超卖/金叉上拐 + 量比>1 → 买入
+    # 这样保证最不利情况下也不让"加仓到顶"或"割在最低"
+    _tm = (intraday or {}).get("metrics") or {}
+    _kj = _tm.get("kdj_j")
+    _ks = _tm.get("kdj_status")
+    _kt = _tm.get("kdj_turn")
+    _mr = _tm.get("macd_status")
+    _vr = _tm.get("vol_ratio")
+    # override condition 1: 极度超买 + 死叉拐头 + 高位→强制卖出（哪怕之前是买入也得停）
+    if action == "买入" and _kj is not None:
+        if _kj > 100 or (_ks == "超买" and _kt == "下拐" and _vr and _vr >= 1.3):
+            action = "卖出"
+            reason_override = f"⚠️ KDJ J={_kj:.0f}超买+拐头向下，止盈卖出避免高位回调"
+        elif _kj > 95 and _mr == "红柱缩":
+            action = "卖出"
+            reason_override = f"⚠️ KDJ J={_kj:.0f}超买+MACD红柱缩短，分批止盈"
+    # override condition 2: 极度超卖 + 金叉上拐 + 放量→强制买入（哪怕之前要"卖出"也得拉回）
+    if action == "卖出" and _kj is not None:
+        if _kj < 0 or (_ks == "超卖" and _kt == "上拐" and _vr and _vr >= 1.3):
+            action = "买入"
+            reason_override = f"⚠️ KDJ J={_kj:.0f}超卖+拐头向上+放量，抢反弹"
+        elif _kj < 10 and _mr == "绿柱" and _vr and _vr >= 1.5:
+            action = "买入"
+            reason_override = f"⚠️ KDJ J={_kj:.0f}极度超卖+放量，跌不动了"
     # 操作价：买用当日买点/支撑，卖用当日卖点/阻力 —— 价格必须约束在当前价 ±3% 内，
     # 否则当天到不了那个价。建议卖出/买入是"现在/明天可执行"的动作，不是看天价。
     pl = a.get("price_levels") or {}
@@ -798,6 +835,7 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
         "op_qty": op_qty,
         "op_basis": (tl or {}).get("basis") or "",
         "reason": (outlook or {}).get("reason") or (a.get("reasons")[0]["text"] if a.get("reasons") else ""),
+        "reason_override": reason_override if "reason_override" in dir() else None,
         "regime": regime,
         "industry_today": industry_today,
         "indicators": a.get("indicators"),
@@ -806,6 +844,16 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
         "forecast": forecast,
         "sector_detail": sector_detail,
         "technical": technical,
+        # r16 短线技术面速读（持仓只看 MACD+KDJ+量能）
+        "tech_short": {
+            "kdj_j": _kj,
+            "kdj_status": _ks,
+            "kdj_turn": _kt,
+            "macd_status": _mr,
+            "vol_ratio": _vr,
+            "rsi": _tm.get("rsi"),
+            "boll_pos": _tm.get("boll_pos"),
+        } if intraday else None,
     }
 
 
@@ -876,6 +924,23 @@ def _tight_levels(price, intraday, tl):
         sell = round(day_high * 1.005, 2)
     if day_low and buy < day_low * 0.995:
         buy = round(day_low * 0.995, 2)
+
+    # 6) r16: KDJ 极值吸附 —— 极度超卖时再向低点贴 +0.5%，极度超买时再向高点贴 -0.5%
+    #    王总原话："持仓只看 KDJ+MACD+量能，最及时技术面"——把价位贴向 KDJ 极值点更精准
+    _tm = (intraday or {}).get("metrics") or {}
+    _kj = _tm.get("kdj_j")
+    if _kj is not None and day_low and _kj < 10:
+        _extreme = round(day_low * 1.005, 2)
+        if _extreme < buy:
+            buy = _extreme
+            support = day_low
+            band_label += f" · KDJ J={_kj:.0f}超卖→贴低点"
+    if _kj is not None and day_high and _kj > 90:
+        _extreme = round(day_high * 0.995, 2)
+        if _extreme > sell:
+            sell = _extreme
+            resist = day_high
+            band_label += f" · KDJ J={_kj:.0f}超买→贴高点"
 
     band_label = band_label.replace(" · 实盘目标价 → ", " · 实盘目标 → ")
 
