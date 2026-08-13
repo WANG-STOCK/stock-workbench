@@ -3,287 +3,230 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>婷婷量化AI</title>
-  <link rel="stylesheet" href="/static/css/styles.css?v=r18">
+  <title>婷婷量化AI · 金融K线AI工作台</title>
+  <link rel="stylesheet" href="/static/css/styles.css?v=r20">
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">📈</span>
-      <span>婷婷量化AI</span>
+<body class="theme-dark">
+  <!-- 顶部品牌条 -->
+  <header class="topbar-v3">
+    <div class="brand-v3">
+      <span class="logo-v3">📈</span>
+      <span>婷婷量化AI · 金融K线AI工作台</span>
+      <span class="brand-tag">v2026-08-13-r20</span>
     </div>
-    <div class="global-search">
-      <input id="globalSearch" class="input gs-input" placeholder="🔍 搜索股票 / 代码 / 拼音">
-      <div id="globalSearchResults" class="global-search-results"></div>
-    </div>
-    <div class="topbar-actions">
-      <button id="globalJudge" class="top-btn" title="按当前持仓+候选一键判案">⚖ 全局判案</button>
-      <details class="top-menu top-account">
-        <summary>📋 账户</summary>
-        <div class="top-menu-body account-body">
-          <div class="kpi"><div class="kpi-label">总资产</div><div class="kpi-val" id="kpiAsset">--</div></div>
-          <div class="kpi"><div class="kpi-label">可用资金</div><div class="kpi-val" id="kpiCash">--</div></div>
-          <div class="kpi kpi-today"><div class="kpi-label">当日盈亏</div><div class="kpi-val" id="kpiToday">--</div></div>
-          <div class="kpi kpi-total"><div class="kpi-label">累计盈亏</div><div class="kpi-val" id="kpiTotal">--</div></div>
-        </div>
-      </details>
-      <span class="status">
-        <span class="badge" id="marketBadge">A股 · 沪深</span>
-        <span class="badge" id="tdxStatus">数据源：检测中…</span>
-        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r18</span>
-        <span class="badge clock" id="clock">--:--:--</span>
-      </span>
+    <div class="topbar-meta-v3">
+      <span class="badge" id="buildTag">v2026-08-13-r20</span>
+      <span class="badge" id="marketBadge">A股 · 沪深</span>
+      <span class="badge" id="tdxStatus">数据源：检测中…</span>
+      <span class="badge clock" id="clock">--:--:--</span>
     </div>
   </header>
 
-  <div class="layout">
-    <!-- 左列：账户总览（上） + 每日/尾盘/复盘（下，折叠） -->
-    <div class="col-left">
-      <!-- ① 账户总览 + 持仓 -->
-      <section class="panel panel-account">
-        <div class="panel-title">
-          <span class="dot dot-orange"></span>
-          <span>💰 账户总览 · 持仓</span>
-          <span class="sub">实时 · 8 秒刷新</span>
-        </div>
+  <!-- 顶部黄色通知条 -->
+  <div class="notif-strip-v3">
+    🌟 <b>婷婷的战报</b> 推荐于模式策略盲从量化御疫·股人多买次次融资高斯棒读（仅折程）
+  </div>
 
-        <!-- 调试锚点：renderAccount 会把"接口实际返回"实时写到这里，王总刷新立刻看到真实数据 -->
-        <div id="__posDebug" style="font-size:11px;color:#1971c2;background:#e7f5ff;padding:4px 8px;border-radius:4px;margin-top:6px;border:1px dashed #74c0fc">
-          ⏳ 等 renderAccount 把接口真实返回写到这行…
-        </div>
-        <!-- v3.1 风格 KPI 5 卡（总资产/当日涨跌/持仓/浮盈/信号） -->
-        <div class="kpi5" id="kpi5">
-          <div class="kpi5-card"><div class="k5-label">总资产</div><div class="k5-val" id="k5Asset">--</div></div>
-          <div class="kpi5-card"><div class="k5-label">当日涨跌</div><div class="k5-val" id="k5Chg">--</div></div>
-          <div class="kpi5-card"><div class="k5-label">持仓</div><div class="k5-val" id="k5Pos">--</div></div>
-          <div class="kpi5-card"><div class="k5-label">浮盈</div><div class="k5-val" id="k5Total">--</div></div>
-          <div class="kpi5-card"><div class="k5-label">信号</div><div class="k5-val" id="k5Signal">--</div></div>
-        </div>
-        <!-- 大字 KPI -->
-        <div class="acct-kpis">
-          <div class="akpi">
-            <div class="akpi-label">总资产</div>
-            <div class="akpi-val" id="akAsset">--</div>
-            <div class="akpi-sub" id="akAssetSub">--</div>
-          </div>
-          <div class="akpi">
-            <div class="akpi-label">持仓资产</div>
-            <div class="akpi-val" id="akPosition">--</div>
-            <div class="akpi-sub" id="akPositionSub">--</div>
-          </div>
-          <div class="akpi">
-            <div class="akpi-label">现金</div>
-            <div class="akpi-val" id="akCash">--</div>
-            <div class="akpi-sub">来自持仓截图</div>
-          </div>
-          <div class="akpi akpi-today">
-            <div class="akpi-label">当日盈亏</div>
-            <div class="akpi-val" id="akToday">--</div>
-            <div class="akpi-sub" id="akTodaySub">--</div>
-          </div>
-        </div>
+  <div class="layout-v3">
+    <!-- 左侧导航 -->
+    <nav class="sidebar-v3">
+      <div class="sb-search-v3">
+        <input id="globalSearch" class="input" placeholder="🔍 搜索股票/代码/拼音">
+        <div id="globalSearchResults" class="gsr-v3"></div>
+      </div>
+      <ul class="sb-nav-v3" id="sbNav">
+        <li data-view="dashboard" class="active"><span>📊 行情看板</span><span class="dot-red"></span></li>
+        <li data-view="scan"><span>📡 信号扫描</span></li>
+        <li data-view="positions"><span>💼 持仓与仓位</span></li>
+        <li data-view="settings"><span>⚙ 设置</span></li>
+      </ul>
+      <div class="sb-footer-v3">数据已同步至云端，可一键绑定账户查看全部持仓</div>
+    </nav>
 
-        <!-- 持仓表 -->
-        <div class="pos-table-wrap">
-          <table class="pos-table">
-            <thead>
-              <tr>
-                <th>代码 / 名称</th>
-                <th class="r">成本价</th>
-                <th class="r">股数</th>
-                <th class="r">现价</th>
-                <th class="r">持仓金额</th>
-                <th class="r">盈亏金额</th>
-                <th class="r">盈亏%</th>
-                <th class="r">所属行业今日</th>
-              </tr>
-            </thead>
-            <tbody id="posTableBody">
-              <tr><td colspan="8" class="muted-cell">加载持仓中…</td></tr>
-            </tbody>
+    <!-- 主内容区 -->
+    <main class="main-v3">
+      <!-- 顶部 KPI5 卡（跨视图保留） -->
+      <div class="kpi5-v3" id="kpi5">
+        <div class="kpi5-card"><div class="k5-label">总资产</div><div class="k5-val" id="k5Asset">--</div><div class="k5-sub" id="k5AssetSub">趋势为55家</div></div>
+        <div class="kpi5-card"><div class="k5-label">当日涨跌</div><div class="k5-val" id="k5Chg">--</div><div class="k5-sub" id="k5ChgSub">0家上涨</div></div>
+        <div class="kpi5-card"><div class="k5-label">持仓</div><div class="k5-val" id="k5Pos">0只</div><div class="k5-sub" id="k5PosSub">&nbsp;</div></div>
+        <div class="kpi5-card"><div class="k5-label">浮盈</div><div class="k5-val" id="k5Total">0.0%</div><div class="k5-sub" id="k5TotalSub">金额</div></div>
+        <div class="kpi5-card"><div class="k5-label">信号</div><div class="k5-val" id="k5Signal">5个</div><div class="k5-sub" id="k5SignalSub">行情提醒</div></div>
+      </div>
+
+      <!-- 视图 1：行情看板 -->
+      <section class="view view-dashboard" data-view="dashboard">
+        <div class="view-grid-2">
+          <div class="dash-left">
+            <div class="panel-v3">
+              <div class="panel-title-v3">
+                <span>📋 自选股票实时追踪</span>
+                <span class="panel-extra">实时</span>
+              </div>
+              <div id="selfStocks"></div>
+            </div>
+          </div>
+          <div class="dash-right">
+            <div class="panel-v3">
+              <div class="panel-title-v3">
+                <span id="stockDetailTitle">🔍 个股详情与交易分析</span>
+                <span class="panel-extra" id="stockDetailMeta">点自选查看</span>
+              </div>
+              <div id="stockDetailBody" class="stock-detail-v3">
+                <div class="empty-v3">请在左侧自选表点击任意股票，查看短线信号与深度分析</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图 2：信号扫描 -->
+      <section class="view view-scan" data-view="scan" hidden>
+        <div class="panel-v3">
+          <div class="panel-title-v3">
+            <span>📡 信号扫描</span>
+            <span class="panel-extra">短线扫描（结合当前 MACD+KDJ+OBV 趋势）</span>
+          </div>
+          <div class="scan-grid">
+            <div class="scan-col buy">
+              <div class="scan-col-title">🔴 买入候选 <span class="count">5</span></div>
+              <div id="scanBuyList" class="scan-list"></div>
+            </div>
+            <div class="scan-col sell">
+              <div class="scan-col-title">🟢 卖出候选 <span class="count">5</span></div>
+              <div id="scanSellList" class="scan-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图 3：持仓与仓位 -->
+      <section class="view view-positions" data-view="positions" hidden>
+        <div class="panel-v3">
+          <div class="panel-title-v3">
+            <span>💼 持仓与仓位</span>
+            <span class="panel-extra">按指标</span>
+          </div>
+          <table class="pos-table-v3">
+            <thead><tr>
+              <th>名称代码</th>
+              <th class="r">现价</th>
+              <th class="r">成本</th>
+              <th class="r">持仓</th>
+              <th class="r">市值</th>
+              <th class="r">盈亏%</th>
+            </tr></thead>
+            <tbody id="posTableBody"><tr><td colspan="6" class="empty-cell">暂无持仓。可在「行情看板」或「自动优选」中添加</td></tr></tbody>
           </table>
         </div>
 
-        <!-- 当日交易录入：买卖后自动更新成本/股数/现金/真实盈亏 -->
-        <div class="trade-entry">
-          <div class="te-title">📝 当日交易录入（买/卖后自动更新成本·股数·现金·真实盈亏）</div>
-          <div class="row te-row">
-            <input list="heldCodes" id="tradeCode" class="input small" placeholder="代码/名称">
+        <div class="panel-v3">
+          <div class="panel-title-v3"><span>⚡ 实时建议（KDJ+MACD+量能）</span><span class="panel-extra">每 5 秒刷新</span></div>
+          <div id="aiAdviceBody"><div class="empty-v3">加载中…</div></div>
+        </div>
+
+        <div class="panel-v3 trade-entry-v3">
+          <div class="panel-title-v3"><span>📝 当日交易录入</span></div>
+          <div class="trade-form">
+            <input list="heldCodes" id="tradeCode" class="input" placeholder="代码/名称">
             <datalist id="heldCodes"></datalist>
-            <select id="tradeSide" class="input small">
-              <option value="buy">买入</option>
-              <option value="sell">卖出</option>
-            </select>
-          </div>
-          <div class="row te-row">
-            <button class="btn qty-step" data-delta="-500" type="button">−500</button>
-            <button class="btn qty-step" data-delta="-100" type="button">−100</button>
-            <input id="tradeQty" class="input small qty-input" type="number" placeholder="数量" min="0" step="100">
-            <button class="btn qty-step" data-delta="100" type="button">+100</button>
-            <button class="btn qty-step" data-delta="500" type="button">+500</button>
-            <input id="tradePrice" class="input small" type="number" placeholder="价格" step="0.01">
+            <select id="tradeSide" class="input"><option value="buy">买入</option><option value="sell">卖出</option></select>
+            <button class="btn qty-step" data-delta="-500">−500</button>
+            <button class="btn qty-step" data-delta="-100">−100</button>
+            <input id="tradeQty" class="input" type="number" placeholder="数量" min="0" step="100">
+            <button class="btn qty-step" data-delta="100">+100</button>
+            <button class="btn qty-step" data-delta="500">+500</button>
+            <input id="tradePrice" class="input" type="number" placeholder="价格" step="0.01">
             <button id="tradeBtn" class="btn">记录</button>
           </div>
-          <div class="sub" style="font-size:11px;color:var(--muted);margin-top:2px">
-            数量：点 <b>+100 / +500</b> 一键加 100/500 股（不够 1 手自动按整手算），
-            点 <b>−100 / −500</b> 减；数量不小于 0。买入：股数↑、成本按均价重算、现金↓；卖出：股数↓、现金↑。
-          </div>
-          <!-- 今日已成交明细（折叠窗口型：默认折叠，点开才看） -->
           <details class="trade-log" id="tradeLogDetails">
-            <summary><span class="tl-head-icon">📜</span> 今日已成交 · <span id="tlSummary" class="tl-summary">--</span> <span class="tl-toggle-hint">点击展开</span></summary>
+            <summary>📜 今日已成交 · <span id="tlSummary">--</span></summary>
             <table class="tl-table" id="tradeLogTable">
               <thead><tr><th>时间</th><th>代码</th><th>买/卖</th><th class="r">数量</th><th class="r">价格</th><th class="r">金额</th><th class="r">现金结余</th></tr></thead>
-              <tbody id="tradeLogBody">
-                <tr><td colspan="7" class="muted-cell">暂无成交记录</td></tr>
-              </tbody>
+              <tbody id="tradeLogBody"></tbody>
             </table>
+          </details>
+        </div>
+
+        <div class="panel-v3">
+          <details class="fold-box" id="foldDaily">
+            <summary>📅 每日策略（开盘判断 · 四时点快照）</summary>
+            <div class="fold-body">
+              <div class="daily-sub">
+                <div class="daily-sub-title">🌅 开盘判断（~9:30）</div>
+                <div id="dailyOpen" class="daily-open">加载中…</div>
+              </div>
+              <div class="daily-sub">
+                <div class="daily-sub-title">🕘 四时点快照</div>
+                <div class="daily-snap-tabs" id="dailySnapTabs">
+                  <button type="button" class="ds-btn active" data-t="09:30">9:30</button>
+                  <button type="button" class="ds-btn" data-t="10:30">10:30</button>
+                  <button type="button" class="ds-btn" data-t="13:00">13:00</button>
+                  <button type="button" class="ds-btn" data-t="14:00">14:00</button>
+                </div>
+                <div id="dailySnap" class="daily-snap">加载中…</div>
+              </div>
+            </div>
+          </details>
+          <details class="fold-box" id="foldTail">
+            <summary>📊 尾盘策略</summary>
+            <div class="fold-body">
+              <div id="tailConclusion">加载中…</div>
+              <div class="tail-cols">
+                <div class="tail-col"><div class="tail-col-title">🟠 持仓该减仓</div><ul id="tailReduce"></ul></div>
+                <div class="tail-col"><div class="tail-col-title">🟢 尾盘可埋伏</div><ul id="tailBury"></ul></div>
+              </div>
+            </div>
+          </details>
+          <details class="fold-box" id="foldReview">
+            <summary>📊 每日复盘</summary>
+            <div class="fold-body"><div id="reviewBox">加载中…</div></div>
           </details>
         </div>
       </section>
 
-      <!-- ② 左下角折叠区：每日策略 + 尾盘策略 + 复盘 -->
-      <section class="bottom-fold">
-        <details class="fold-box" id="foldDaily">
-          <summary>📅 每日策略（开盘判断 · 四时点快照） · 点开看</summary>
-          <div class="fold-body">
-            <div class="daily-sub">
-              <div class="daily-sub-title">🌅 开盘判断（~9:30）</div>
-              <div id="dailyOpen" class="daily-open">加载中…</div>
+      <!-- 视图 4：设置 -->
+      <section class="view view-settings" data-view="settings" hidden>
+        <div class="panel-v3">
+          <div class="panel-title-v3"><span>⚙ 设置</span></div>
+          <div class="settings-grid">
+            <div class="settings-col">
+              <div class="sub-title">评分权重</div>
+              <div id="weightSliders"></div>
+              <div class="row"><button id="saveWeights" class="btn">保存权重</button><button id="resetWeights" class="btn">重置</button></div>
+              <div class="sub-title">云端后端地址</div>
+              <div class="row"><input id="apiBase" class="input" placeholder="留空=本机"><button id="saveApiBase" class="btn">保存</button></div>
+              <div class="sub-title">通达信 vipdoc 路径</div>
+              <div class="row"><input id="tdxPath" class="input" placeholder="vipdoc 路径"><button id="saveTdx" class="btn">保存</button></div>
+              <div id="tdxPathTip" class="sub"></div>
             </div>
-            <div class="daily-sub">
-              <div class="daily-sub-title">🕘 四时点快照</div>
-              <div class="daily-snap-tabs" id="dailySnapTabs">
-                <button type="button" class="ds-btn active" data-t="09:30">9:30</button>
-                <button type="button" class="ds-btn" data-t="10:30">10:30</button>
-                <button type="button" class="ds-btn" data-t="13:00">13:00</button>
-                <button type="button" class="ds-btn" data-t="14:00">14:00</button>
-              </div>
-              <div id="dailySnap" class="daily-snap">加载中…</div>
-            </div>
-          </div>
-        </details>
-
-        <details class="fold-box" id="foldTail">
-          <summary>📊 尾盘策略（14:30–15:00 自动汇总减仓 / 埋伏） · 点开看</summary>
-          <div class="fold-body">
-            <div id="tailConclusion" class="tail-conclusion">加载中…</div>
-            <div class="tail-cols">
-              <div class="tail-col">
-                <div class="tail-col-title">🟠 持仓该减仓</div>
-                <ul id="tailReduce" class="tail-list"></ul>
-              </div>
-              <div class="tail-col">
-                <div class="tail-col-title">🟢 尾盘可埋伏</div>
-                <ul id="tailBury" class="tail-list"></ul>
-              </div>
-            </div>
-            <div class="sub" style="font-size:11px;color:var(--muted);margin-top:6px">
-              每天 14:30–15:00 自动汇总：减仓哪几只 / 埋伏哪 1 只。仅供参考，不构成投资建议。
+            <div class="settings-col">
+              <div class="sub-title">扫描范围</div>
+              <div class="row"><select id="scopeSelect" class="input">
+                <option value="candidate">十五五成长池（科技/医药/电力）</option>
+                <option value="universe">自定义股票池</option>
+                <option value="online_all">在线全市场</option>
+                <option value="tdx">通达信全市场</option>
+              </select></div>
+              <div class="sub-title">策略</div>
+              <div class="row"><select id="strategySelect" class="input">
+                <option value="composite">综合评分（买入及以上）</option>
+                <option value="ma_bull">均线多头排列</option>
+                <option value="golden_cross">MACD/KDJ 金叉</option>
+                <option value="breakout">突破 20 日新高</option>
+                <option value="volume_surge">放量上涨</option>
+                <option value="low_volume_rebound">缩量企稳反弹</option>
+                <option value="ma_converge_breakout">均线粘合突破</option>
+              </select></div>
+              <div class="row"><button id="rebuildBtn" class="btn">重建成长池</button></div>
             </div>
           </div>
-        </details>
-
-        <details class="fold-box" id="foldReview">
-          <summary>📊 每日复盘（按建议做T的准确率） · 点开看</summary>
-          <div class="fold-body">
-            <div id="reviewBox" class="review-box-body">加载中…</div>
-          </div>
-        </details>
-      </section>
-    </div>
-
-    <!-- 中列：AI 建议（每只持仓一张卡片，强烈买入置顶高亮） -->
-    <main class="center">
-      <section class="panel panel-aiadvice">
-        <div class="panel-title">
-          <span class="dot dot-blue"></span>
-          <span>🤖 AI 建议 · 每日持仓一行（今日预估 + 板块 + 实时建议 · 利润最大化）</span>
-          <span class="sub">每 5 秒刷新 · ⚡基于盘中分时 + 板块资金 + ATR 实时驱动 · 单元格居中、白底</span>
-        </div>
-        <div id="aiAdviceBody" class="ai-table-wrap">
-          <div class="ai-empty">加载 AI 建议中…</div>
         </div>
       </section>
     </main>
-
-    <!-- 右侧：自选股票（自动优选·最佳购买） -->
-    <aside class="right">
-      <section class="panel panel-self">
-        <div class="panel-title">
-          <span class="dot dot-blue"></span>
-          <span>📊 持仓看板</span>
-          <span class="panel-actions">
-            <button id="refreshSelf" class="mini" title="立即重新扫描成长池">刷新优选</button>
-            <button id="refreshSignals" class="mini" title="刷新自选股信号">刷信号</button>
-            <button id="addCurrent" class="mini" disabled title="先在搜索框选股">+加当前</button>
-            <details class="note-box inline">
-              <summary>⚙ 设置</summary>
-              <div style="padding:8px 6px;min-width:240px">
-                <div class="sub-title" style="margin-top:0">评分权重</div>
-                <div id="weightSliders" class="weight-sliders"></div>
-                <div class="row"><button id="saveWeights" class="btn tiny wide">保存权重</button><button id="resetWeights" class="btn tiny scan-rebuild">重置</button></div>
-                <div class="sub-title">云端后端地址</div>
-                <div class="row">
-                  <input id="apiBase" class="input xs" placeholder="留空=本机">
-                  <button id="saveApiBase" class="btn tiny">保存</button>
-                </div>
-                <div class="sub-title">通达信 vipdoc 路径</div>
-                <div class="row">
-                  <input id="tdxPath" class="input xs" placeholder="vipdoc 路径">
-                  <button id="saveTdx" class="btn tiny">保存</button>
-                </div>
-                <div id="tdxPathTip" class="sub" style="font-size:11px;margin-top:4px"></div>
-                <div class="sub-title">扫描范围 / 策略</div>
-                <div class="row">
-                  <select id="scopeSelect" class="input xs">
-                    <option value="candidate" selected>十五五成长池（科技/医药/电力）</option>
-                    <option value="universe">自定义股票池</option>
-                    <option value="online_all">在线全市场</option>
-                    <option value="tdx">通达信全市场</option>
-                  </select>
-                </div>
-                <div class="row">
-                  <select id="strategySelect" class="input xs">
-                    <option value="composite" selected>综合评分（买入及以上）</option>
-                    <option value="ma_bull">均线多头排列</option>
-                    <option value="golden_cross">MACD/KDJ 金叉</option>
-                    <option value="breakout">突破 20 日新高</option>
-                    <option value="volume_surge">放量上涨</option>
-                    <option value="low_volume_rebound">缩量企稳反弹</option>
-                    <option value="ma_converge_breakout">均线粘合突破</option>
-                  </select>
-                </div>
-                <div class="row"><button id="rebuildBtn" class="btn tiny scan-rebuild wide">重建成长池</button></div>
-                <div class="sub" style="font-size:11px;color:var(--muted);margin-top:4px">自动刷新：每 10 分钟重扫成长池，强烈买入置顶高亮。</div>
-              </div>
-            </details>
-          </span>
-        </div>
-
-        <div class="self-head">
-          <span id="hbCount" class="self-count"></span>
-          <span class="sub" style="font-size:11px;color:var(--muted)">持仓实时看板 · 每 5 秒刷新</span>
-        </div>
-        <div id="holdingsBoard" class="holdings-board">
-          <div class="signal-empty">加载持仓看板…</div>
-        </div>
-
-        <details class="note-box cand-fold">
-          <summary>📎 候选优选（自选扫描）</summary>
-          <input id="searchInput" class="input" placeholder="代码/名称/拼音（用来加入自选）">
-          <div id="searchResults" class="search-results"></div>
-          <div class="self-head">
-            <span id="selfCount" class="self-count"></span>
-            <span class="sub" style="font-size:11px;color:var(--muted)">优选 + 自选 · 自动更新</span>
-          </div>
-          <div id="selfStocks" class="self-stocks"></div>
-        </details>
-      </section>
-    </aside>
   </div>
 
   <div id="toast" class="toast"></div>
-
-  <script src="/static/js/app.js?v=r18"></script>
+  <script src="/static/js/app.js?v=r20"></script>
 </body>
 </html>

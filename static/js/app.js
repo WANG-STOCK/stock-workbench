@@ -952,6 +952,7 @@ function renderAiAdvice(positions) {
   function renderHoldingsBoard(positions) {
     const el = document.getElementById("holdingsBoard");
     if (!el) return;
+    if (!el) return;
     const cnt = document.getElementById("hbCount");
     if (cnt) cnt.textContent = `共 ${positions.length} 只`;
     if (!positions || !positions.length) {
@@ -2053,4 +2054,67 @@ function renderAiAdvice(positions) {
   }
 
   document.addEventListener("DOMContentLoaded", init);
+
+  // ========== v3.1 视图切换 ==========
+  function switchView(name) {
+    if (!name) return;
+    document.querySelectorAll('#sbNav li').forEach(li => {
+      li.classList.toggle('active', li.dataset.view === name);
+    });
+    document.querySelectorAll('.view').forEach(v => {
+      v.hidden = (v.dataset.view !== name);
+    });
+    // 视图进入时按需刷新数据
+    if (name === 'dashboard') {
+      try { renderSelfStocks(); } catch (e) {}
+    } else if (name === 'scan') {
+      try { renderScanView(); } catch (e) {}
+    }
+  }
+
+  function bindNav() {
+    document.querySelectorAll('#sbNav li').forEach(li => {
+      li.addEventListener('click', () => switchView(li.dataset.view));
+    });
+  }
+
+  // 简易信号扫描双列（适配 v3.1 详情页：买入候选红色 / 卖出候选绿色）
+  function renderScanView() {
+    const buyEl  = document.getElementById('scanBuyList');
+    const sellEl = document.getElementById('scanSellList');
+    if (!buyEl || !sellEl) return;
+    const paint = (msg) => {
+      buyEl.innerHTML  = `<div class="empty-v3">${msg}</div>`;
+      sellEl.innerHTML = `<div class="empty-v3">${msg}</div>`;
+    };
+    paint('加载中…');
+    fetch('/api/scan_status').then(r => r.json()).then(data => {
+      const results = (data && data.results) || [];
+      const buy  = results.filter(r => {
+        const a = (r.action || '').toLowerCase();
+        return a.includes('buy') || a.includes('买入') || a.includes('加仓');
+      }).slice(0, 5);
+      const sell = results.filter(r => {
+        const a = (r.action || '').toLowerCase();
+        return a.includes('sell') || a.includes('卖出') || a.includes('减仓');
+      }).slice(0, 5);
+      const rowHtml = (r) => {
+        const px  = r.price != null ? r.price.toFixed(2) : '--';
+        const chg = r.change_pct != null ? (r.change_pct >= 0 ? '+' : '') + r.change_pct.toFixed(2) + '%' : '';
+        const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
+        const sc  = r.score != null ? r.score : (r.advice_score != null ? r.advice_score : 0);
+        return `<div class="scan-row" data-code="${r.code || ''}">
+          <div><span class="sr-name">${r.name || r.code || '--'}</span><span class="sr-code">${r.code || ''}</span><div class="sr-price">¥${px}</div></div>
+          <div class="sr-chg ${chgCls}">${chg}</div>
+          <div class="sr-time">${r.time || ''}</div>
+          <div class="sr-score">${sc}</div>
+        </div>`;
+      };
+      buyEl.innerHTML  = buy.length  ? buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>';
+      sellEl.innerHTML = sell.length ? sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>';
+    }).catch(e => paint('信号扫描失败：' + (e.message || e)));
+  }
+
+  // 绑定导航（IIFE 内部直接调用确保仅一次）
+  bindNav();
 })();
