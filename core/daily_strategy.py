@@ -10,6 +10,7 @@
 import os
 import json
 import time
+import threading
 from datetime import datetime
 
 import core.data_source as ds
@@ -19,6 +20,9 @@ import core.signals as sig
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)
 DATA_DIR = os.path.join(BASE, "data")
+# 全局锁：服务端后台调度线程与前端轮询会并发读写 daily_strategy.json，统一串行化避免互相覆盖
+# 用 RLock（可重入）：run_daily 持锁时会调用 open_judgment（其内部也加锁），普通 Lock 会死锁
+_WRITE_LOCK = threading.RLock()
 STATIC_DIR = os.path.join(BASE, "static")
 
 DS_FILE = os.path.join(DATA_DIR, "daily_strategy.json")
@@ -233,23 +237,23 @@ def open_judgment(date=None):
         held = int(p.get("shares", 0) or 0)
         q = rt.get(code, {})
         bars = _daily_k(code)
-        score, sig, ob, os_ = _tech_score_daily(bars, q)
+        score, sigs, ob, os_ = _tech_score_daily(bars, q)
         if score > 0:
             bull += 1
         elif score < 0:
             bear += 1
         if ob:
             action = "卖出"
-            reason = "短线超买，建议止盈1/3：" + "、".join(sig[:2])
+            reason = "短线超买，建议止盈1/3：" + "、".join(sigs[:2])
         elif score >= 2:
             action = "持有"
-            reason = "多头排列：" + "、".join(sig[:2])
+            reason = "多头排列：" + "、".join(sigs[:2])
         elif score <= -2:
             action = "减仓"
-            reason = "转弱：" + "、".join(sig[:2])
+            reason = "转弱：" + "、".join(sigs[:2])
         else:
             action = "持有"
-            reason = "震荡：" + "、".join(sig[:2])
+            reason = "震荡：" + "、".join(sigs[:2])
         price = (q.get("price") or (bars[-1]["close"] if bars else None))
         price = round(price, 2) if price else None
         qty = size_sell(held) if action in ("卖出", "减仓") else 0
@@ -269,14 +273,14 @@ def open_judgment(date=None):
         name = p.get("name", code)
         q = rt.get(code, {})
         bars = _daily_k(code)
-        score, sig, ob, os_ = _tech_score_daily(bars, q)
+        score, sigs, ob, os_ = _tech_score_daily(bars, q)
         if not (os_ or (score >= 1 and not ob)):
             continue
         action = "买入"
         price = (q.get("price") or (bars[-1]["close"] if bars else None))
         price = round(price, 2) if price else None
         qty = size_buy(price) if price else 0
-        reason = ("超卖反弹" if os_ else "多头初现") + "、" + "、".join(sig[:2])
+        reason = ("超卖反弹" if os_ else "多头初现") + "、" + "、".join(sigs[:2])
         forecast = _quick_forecast(bars, q, score, sig)
         # 最佳购买价：基于技术面支撑（BOLL 下轨 / 近期低点）的低吸区
         _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
@@ -317,11 +321,12 @@ def open_judgment(date=None):
         "market_note": f"偏多 {bull} 只 / 偏空 {bear} 只（持仓+评级A候选），综合集合竞价与均线信号。建议按下方优先级排序，<b style='color:#2b8a3e'>买入</b>排最前（预期空间最大），<b style='color:#c92a2a'>卖出/减仓</b>排最后（风险高需处理）。",
         "suggestions": sugg,
     }
-    d = _load()
-    day = d.setdefault(date, {})
-    day["date"] = date
-    day["open"] = rec
-    _save(d)
+    with _WRITE_LOCK:
+        d = _load()
+        day = d.setdefault(date, {})
+        day["date"] = date
+        day["open"] = rec
+        _save(d)
     return rec
 
 
@@ -424,11 +429,12 @@ def generate_snapshot(time_label, date=None):
         })
 
     rec = {"ts": _now_str(), "rows": rows}
-    d = _load()
-    day = d.setdefault(date, {})
-    day["date"] = date
-    day.setdefault("snapshots", {})[time_label] = rec
-    _save(d)
+    with _WRITE_LOCK:
+        d = _load()
+        day = d.setdefault(date, {})
+        day["date"] = date
+        day.setdefault("snapshots", {})[time_label] = rec
+        _save(d)
     return rec
 
 
@@ -534,7 +540,8 @@ def generate_review(date=None):
         "calibration": calibration,
     }
     day["review"] = rec
-    _save(d)
+    with _WRITE_LOCK:
+        _save(d)
     return rec
 
 
@@ -613,38 +620,39 @@ def _now_min():
 
 def run_daily(mode="auto", t=None, date=None):
     """自动维护当日记录：缺失的开盘判断/已过时点快照/收盘复盘，各只生成一次。"""
-    date = date or _today()
-    d = _load()
-    day = d.setdefault(date, {})
-    day["date"] = date
-    wd = datetime.now().weekday()
-    trading = wd < 5
-    now = _now_min()
+    with _WRITE_LOCK:
+        date = date or _today()
+        d = _load()
+        day = d.setdefault(date, {})
+        day["date"] = date
+        wd = datetime.now().weekday()
+        trading = wd < 5
+        now = _now_min()
 
-    if mode in ("auto", "open") and trading:
-        op = day.get("open")
-        need_regen = ("open" not in day and now >= 9 * 60 + 25)
-        # 兼容旧缓存：已生成的开盘判断若缺 best_buy（新版的每日策略需要），回填一次
-        if not need_regen and op and op.get("suggestions") and "best_buy" not in op["suggestions"][0]:
-            need_regen = True
-        if need_regen:
-            day["open"] = open_judgment(date)
-            _save(d)
-
-    if mode in ("auto", "snapshot") and trading:
-        snaps = day.setdefault("snapshots", {})
-        targets = [t] if (mode == "snapshot" and t) else list(SNAP_MIN.keys())
-        for lbl, m in SNAP_MIN.items():
-            if lbl in targets and lbl not in snaps and now >= m:
-                snaps[lbl] = generate_snapshot(lbl, date)
+        if mode in ("auto", "open") and trading:
+            op = day.get("open")
+            need_regen = ("open" not in day and now >= 9 * 60 + 25)
+            # 兼容旧缓存：已生成的开盘判断若缺 best_buy（新版的每日策略需要），回填一次
+            if not need_regen and op and op.get("suggestions") and "best_buy" not in op["suggestions"][0]:
+                need_regen = True
+            if need_regen:
+                day["open"] = open_judgment(date)
                 _save(d)
 
-    if mode in ("auto", "review"):
-        if datetime.now().hour >= 15 and "review" not in day:
-            day["review"] = generate_review(date)
-            _save(d)
+        if mode in ("auto", "snapshot") and trading:
+            snaps = day.setdefault("snapshots", {})
+            targets = [t] if (mode == "snapshot" and t) else list(SNAP_MIN.keys())
+            for lbl, m in SNAP_MIN.items():
+                if lbl in targets and lbl not in snaps and now >= m:
+                    snaps[lbl] = generate_snapshot(lbl, date)
+                    _save(d)
 
-    return day
+        if mode in ("auto", "review"):
+            if datetime.now().hour >= 15 and "review" not in day:
+                day["review"] = generate_review(date)
+                _save(d)
+
+        return day
 
 
 if __name__ == "__main__":

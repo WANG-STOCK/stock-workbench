@@ -2058,6 +2058,22 @@ def main():
     print(f"通达信数据源： {'已启用 ' + _tdx_path if _tdx_available else '未配置（使用在线行情）'}")
     # 后台预生成全 A 股代码池，使首次「在线全市场」扫描即时可用
     threading.Thread(target=_get_universe, daemon=True).start()
+
+    # 服务端后台调度：自动生成开盘判断 + 四时点快照 + 收盘复盘（不依赖浏览器是否打开）
+    # 交易时段(9:00-15:10)每分钟检查一次；其余时间 5 分钟一次，省资源
+    def _daily_scheduler():
+        while True:
+            try:
+                run_daily("auto")
+            except Exception:
+                pass
+            h, m = time.localtime().tm_hour, time.localtime().tm_min
+            if 9 <= h < 15 or (h == 15 and m <= 10):
+                time.sleep(60)
+            else:
+                time.sleep(300)
+    threading.Thread(target=_daily_scheduler, daemon=True).start()
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
