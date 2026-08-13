@@ -172,6 +172,15 @@ body {
 .pos-table .muted-mini { color: var(--muted); font-size: 10px; }
 .pos-table .muted-cell { text-align: center; color: var(--muted); padding: 16px; }
 
+/* 所属行业今日列：表头居中、内容分三段居中显示（行业/涨%/净流入）*/
+.pos-table th:last-child, .pos-table td.pos-ind { text-align: center !important; }
+.pos-table th:last-child { padding-left: 4px; padding-right: 4px; }
+.pos-table td.pos-ind .pi-track { font-weight: 700; color: #1971c2; font-size: 12px; }
+.pos-table td.pos-ind .pi-pct { font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 1px; font-size: 12px; }
+.pos-table td.pos-ind .pi-fund { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.pos-table td.pos-ind .pi-fund.up { color: var(--up); }
+.pos-table td.pos-ind .pi-fund.down { color: var(--dn); }
+
 /* 持仓行底色（按盈亏）：赚钱浅红 / 亏钱浅绿 / 持平白，整行直观 */
 .pos-table tbody tr.pos-row-up   { background: linear-gradient(90deg, rgba(224,49,49,0.16) 0%, rgba(224,49,49,0.06) 100%); }
 .pos-table tbody tr.pos-row-down { background: linear-gradient(90deg, rgba(47,158,68,0.18) 0%, rgba(47,158,68,0.06) 100%); }
@@ -338,15 +347,65 @@ body {
 .ai-list-header > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- AI 建议卡片（替代稀疏表格，纵向铺满中栏） ---------- */
-.ai-cards { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
-.ai-card { background: #fff; border: 1.5px solid #bdd3e7; border-radius: 12px; padding: 12px 14px; box-shadow: 0 2px 6px rgba(31,91,168,0.08); }
+/* AI 卡片纵向三段（r11）：每段独占一行，所有信息垂直对齐 */
+.ai-card { background: #fff; border: 1.5px solid #bdd3e7; border-radius: 12px; padding: 10px 12px; box-shadow: 0 2px 6px rgba(31,91,168,0.08); display: flex; flex-direction: column; gap: 6px; }
 .ai-card.ai-hold { border-color: #f0c419; background: linear-gradient(135deg, #fffdf5, #fff8e1); }
 .ai-card.ai-buy  { border-color: #2b8a3e; background: linear-gradient(135deg, #f4fcf6, #e6fcf0); }
 .ai-card.ai-sell { border-color: #c92a2a; background: linear-gradient(135deg, #fff5f5, #ffe9e9); }
 .ai-card.ai-strong { border-color: #e8590c; box-shadow: 0 0 0 3px rgba(232,89,12,0.18), 0 4px 12px rgba(232,89,12,0.22); }
+
+/* 头部横条（不动） */
 .ai-card-head { display: flex; align-items: center; gap: 8px; }
 .ai-card-name { font-size: 15px; font-weight: 800; color: #212529; display: flex; align-items: baseline; gap: 6px; }
 .ai-card-name .code-mini { font-size: 11px; color: #868e96; font-weight: 500; font-style: normal; }
+
+/* 段标签（三段都有小标签：📊股票信息 / 🔮今日预估 / ⚡实时建议·操作价格） */
+.ai-card-section { border-top: 1px dashed rgba(73,80,87,0.22); padding: 8px 0 6px; }
+.ai-card-section:first-of-type { border-top: 0; padding-top: 4px; }
+.ai-sec-label { font-size: 10.5px; color: #868e96; letter-spacing: 1px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }
+
+/* 股票信息段：现价/评分/持仓/盈亏垂直堆叠 */
+.ai-info-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #495057; flex-wrap: wrap; }
+.ai-info-row1 .ai-info-price b { font-size: 22px; color: #212529; font-weight: 900; }
+.ai-info-row .ai-info-k { color: #868e96; font-size: 10.5px; }
+.ai-info-row .ai-info-v { font-weight: 700; color: #212529; font-size: 12.5px; }
+.ai-info-row .ai-info-v b { font-weight: 900; font-size: 14.5px; }
+.ai-info-row + .ai-info-row { margin-top: 4px; padding-top: 4px; border-top: 1px dotted rgba(73,80,87,0.18); }
+
+/* 今日预估段 */
+.fc-head { display: flex; gap: 6px; align-items: baseline; margin-bottom: 4px; }
+.fc-trend.up   { color: #1b5e20; }
+.fc-trend.down { color: #b71c1c; }
+.fc-trend.flat { color: #6d4c00; }
+.fc-trend { font-weight: 800; font-size: 13px; }
+.fc-pct { font-variant-numeric: tabular-nums; margin-left: 2px; font-weight: 700; }
+.fc-basis { font-size: 10.5px; color: #495057; margin: 2px 0 4px; padding: 0; list-style: none; line-height: 1.5; }
+.fc-basis li { margin: 1px 0; padding-left: 10px; position: relative; }
+.fc-basis li::before { content: "•"; position: absolute; left: 0; color: #868e96; }
+
+/* 操作价格段（大字显眼） */
+.ai-card-op { margin: 0; padding: 0; border: 0; }
+.ai-card-op .op-grid { display: flex; flex-direction: column; gap: 6px; }
+.ai-card-op .op-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: #f7f8fa; border: 1px solid #e9ecef; }
+.ai-card-op .op-row.op-on { background: #fff8e1; border-color: #f59f00; box-shadow: 0 0 0 1px rgba(245,159,0,0.12); }
+.ai-card-op .op-row.op-big { padding: 8px 12px; }
+.ai-card-op .op-tag { font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 900; min-width: 40px; text-align: center; color: #fff; letter-spacing: .5px; }
+.ai-card-op .op-tag.buy  { background: #2b8a3e; }
+.ai-card-op .op-tag.sell { background: #c92a2a; }
+.ai-card-op .op-tag.stop { background: #495057; }
+.ai-card-op .op-tag.tp   { background: #1971c2; margin-left: 8px; }
+.ai-card-op .op-row.op-on .op-tag.buy { box-shadow: 0 0 0 2px rgba(43,138,62,0.25); }
+.ai-card-op .op-row.op-on .op-tag.sell { box-shadow: 0 0 0 2px rgba(201,42,42,0.25); }
+.ai-card-op .op-price { font-weight: 900; font-variant-numeric: tabular-nums; padding: 0; font-size: 20px; color: #212529; min-width: 64px; text-align: right; }
+.ai-card-op .op-row.op-big .op-price { font-size: 24px; }
+.ai-card-op .op-price-buy  { color: #1b5e20; }
+.ai-card-op .op-price-sell { color: #b71c1c; }
+.ai-card-op .op-row.op-on .op-price { color: #b75309; }
+.ai-card-op .op-pct { color: #868e96; font-size: 12px; font-variant-numeric: tabular-nums; min-width: 56px; }
+.ai-card-op .op-pct-up { color: #c92a2a; font-weight: 700; }
+.ai-card-op .op-pct-dn { color: #2b8a3e; font-weight: 700; }
+.ai-card-op .op-row.op-row-tpsl { background: rgba(73,80,87,0.06); }
+.ai-card-op .op-band { color: #6d4c00; font-size: 10.5px; margin-top: 6px; padding: 4px 8px; background: #fff8e1; border-radius: 4px; border-left: 3px solid #f59f00; }
 .ai-score-badge { margin-left: auto; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; padding: 2px 10px; border-radius: 10px; background: #f1f3f5; color: #495057; }
 .ai-score-badge.ai-buy  { color: #1b5e20; background: #d3f9d8; }
 .ai-score-badge.ai-sell { color: #b71c1c; background: #ffe3e3; }
@@ -355,18 +414,13 @@ body {
 .ai-action-pill.ai-buy  { color: #1b5e20; border-color: #2b8a3e; background: #fff; }
 .ai-action-pill.ai-sell { color: #b71c1c; border-color: #c92a2a; background: #fff; }
 .ai-action-pill.ai-hold { color: #6d4c00; border-color: #f59f00; background: #fff; }
-.ai-card-price { margin: 8px 0 6px; font-size: 13px; color: #495057; }
-.ai-card-price .ai-c-price b { font-size: 16px; color: #212529; }
-.ai-card-fc { /* 今日预估容器，内部复用 .fc-* / .ai-sec-block */ }
-.ai-card-fc .fc-trend { font-weight: 800; font-size: 12px; display: block; margin-bottom: 2px; }
-.ai-card-fc .fc-trend.up   { color: #1b5e20; }
-.ai-card-fc .fc-trend.down { color: #b71c1c; }
-.ai-card-fc .fc-trend.flat { color: #6d4c00; }
-.ai-card-fc .fc-pct { font-variant-numeric: tabular-nums; margin-left: 4px; font-weight: 700; }
-.ai-card-fc .fc-basis { font-size: 10.5px; color: #495057; margin: 3px 0 0; padding: 0; list-style: none; }
-.ai-card-fc .fc-basis li { margin: 1px 0; padding-left: 10px; position: relative; }
-.ai-card-fc .fc-basis li::before { content: "•"; position: absolute; left: 0; color: #868e96; }
-.ai-card-tp { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(73,80,87,0.2); }
+
+/* AI 卡片列表：纵向滚动容器 */
+.ai-cards { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+
+/* 以下选择器已被 r11 拆段后弃用——为兼容旧数据保留兜底 */
+.ai-card-price { display: none; }
+.ai-card-fc, .ai-card-tp { display: none; }
 .ai-card-tp .tp-line { display: flex; gap: 5px; align-items: center; margin-bottom: 3px; flex-wrap: wrap; }
 .ai-card-tp .tp-tag { font-size: 10.5px; padding: 2px 7px; border-radius: 4px; font-weight: 800; min-width: 36px; text-align: center; color: #fff; }
 .ai-card-tp .tp-tag.buy  { background: #2b8a3e; }

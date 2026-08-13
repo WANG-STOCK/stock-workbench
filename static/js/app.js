@@ -104,11 +104,49 @@
       renderPosTable(positions);
       renderAiAdvice(positions);
       computeSignalsForWatchlist();   // 自选股也注入当日行业资金流
+      // 同时刷新今日已成交明细（不让"刚录入的记录"看起来消失）
+      loadTradeLog();
       // 调试：把首次大开销暴露给用户，提示自动被后续覆盖
       if (took > 3000 && !state._slowNoticeShown) {
         state._slowNoticeShown = true;
         toast("首次加载 " + took + "ms（板块+指标冷启），后续 5s 缓存秒回", true);
       }
+    } catch (e) { /* ignore */ }
+  }
+
+  // 加载今日已成交明细（刷新生效不丢）
+  async function loadTradeLog() {
+    try {
+      const data = await api("GET", "/api/trade_log");
+      if (!data || !data.ok) return;
+      const body = document.getElementById("tradeLogBody");
+      const summary = document.getElementById("tlSummary");
+      if (summary) {
+        summary.innerHTML =
+          `共 <b>${(data.rows || []).length}</b> 笔 · ` +
+          `<span class="up">买入支出 ¥${fmt(data.buy_amt, 0)}</span> · ` +
+          `<span class="down">卖出回款 ¥${fmt(data.sell_amt, 0)}</span> · ` +
+          `<b>净额 ${signed(data.net, 0)}</b>`;
+      }
+      if (!body) return;
+      if (!data.rows || !data.rows.length) {
+        body.innerHTML = '<tr><td colspan="7" class="muted-cell">暂无成交记录</td></tr>';
+        return;
+      }
+      body.innerHTML = data.rows.map(r => {
+        const sideTxt = r.side === "buy"
+          ? '<span class="up"><b>买入</b></span>'
+          : '<span class="down"><b>卖出</b></span>';
+        return '<tr>' +
+          '<td>' + (r.ts || '').slice(11, 19) + '</td>' +
+          '<td>' + (r.name || r.code) + ' <span class="code-mini">' + r.code + '</span></td>' +
+          '<td>' + sideTxt + '</td>' +
+          '<td class="r">' + r.qty + '</td>' +
+          '<td class="r">' + fmt(r.price, 2) + '</td>' +
+          '<td class="r">' + (r.amount >= 0 ? '+' : '') + fmt(r.amount, 0) + '</td>' +
+          '<td class="r">' + (r.cash_after != null ? fmt(r.cash_after, 0) : '--') + '</td>' +
+        '</tr>';
+      }).join('');
     } catch (e) { /* ignore */ }
   }
 
@@ -140,7 +178,7 @@
         <td class="r">${fmt(mkt, 0)}</td>
         <td class="r ${txtCls}"><b>${signed(profit.toFixed(0))}</b></td>
         <td class="r ${txtCls}"><b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b></td>
-        <td class="r">${it.track ? it.track + '<br>' : ''}<span class="${tpct != null && tpct > 0 ? "up" : tpct != null && tpct < 0 ? "down" : ""}">${tpct != null ? (tpct >= 0 ? "+" : "") + tpct.toFixed(2) + "%" : "--"}</span>${fn != null ? '　<span class="muted-mini">' + (fn >= 0 ? "净流入+" : "净流出") + Math.abs(fn).toFixed(2) + '亿</span>' : ''}</td>
+        <td class="r pos-ind"><div class="pi-track">${it.track || it.sector || '—'}</div><div class="pi-pct ${tpct != null && tpct > 0 ? "up" : tpct != null && tpct < 0 ? "down" : ""}">${tpct != null ? (tpct >= 0 ? "+" : "") + tpct.toFixed(2) + "%" : "--"}</div><div class="pi-fund ${fn != null && fn >= 0 ? "up" : fn != null && fn < 0 ? "down" : "muted"}">${fn != null ? (fn >= 0 ? "净流入 +" : "净流出 ") + Math.abs(fn).toFixed(2) + '亿' : ""}</div></td>
       </tr>`;
     }).join("");
   }
@@ -251,19 +289,22 @@
     }
     const pct = (v) => v == null ? "—" : ((v - price) / price * 100).toFixed(1) + "%";
     const clsBuy = act.includes("买") || act.includes("加仓") ? "op-on" : "";
-    const clsSell = act.includes("卖") || act.includes("减仓") ? "op-on" : "";
+    const clsSell = act.includes("卖") || act.includes("减仓") || act.includes("止盈") ? "op-on" : "";
     return '<div class="op-grid">' +
-        '<div class="op-row ' + clsBuy + '">' +
+        // 显眼大字「买」
+        '<div class="op-row op-big ' + clsBuy + '">' +
           '<span class="op-tag buy">买</span>' +
-          '<span class="op-price">' + fmt(buy, 2) + '</span>' +
-          '<span class="op-pct">' + (tight.buy_pct != null ? signed(tight.buy_pct, 1) + "%" : pct(buy)) + '</span>' +
+          '<span class="op-price op-price-buy">' + fmt(buy, 2) + '</span>' +
+          '<span class="op-pct op-pct-dn">' + (tight.buy_pct != null ? (tight.buy_pct >= 0 ? '+' : '') + tight.buy_pct.toFixed(1) + "%" : pct(buy)) + '</span>' +
         '</div>' +
-        '<div class="op-row ' + clsSell + '">' +
+        // 显眼大字「卖」
+        '<div class="op-row op-big ' + clsSell + '">' +
           '<span class="op-tag sell">卖</span>' +
-          '<span class="op-price">' + fmt(sell, 2) + '</span>' +
-          '<span class="op-pct">' + (tight.sell_pct != null ? "+" + tight.sell_pct.toFixed(1) + "%" : pct(sell)) + '</span>' +
+          '<span class="op-price op-price-sell">' + fmt(sell, 2) + '</span>' +
+          '<span class="op-pct op-pct-up">' + (tight.sell_pct != null ? "+" + tight.sell_pct.toFixed(1) + "%" : pct(sell)) + '</span>' +
         '</div>' +
-        '<div class="op-row op-stop">' +
+        // 止损 + 止盈 横排
+        '<div class="op-row op-row-tpsl">' +
           '<span class="op-tag stop">止损</span>' +
           '<span class="op-price">' + fmt(sl, 2) + '</span>' +
           '<span class="op-pct">' + pct(sl) + '</span>' +
@@ -317,7 +358,8 @@
     el.innerHTML = sorted.map(function (p) { return _aiCardHtml(p); }).join("");
   }
 
-  // 单只股票 → 一张卡片（买卖底色更醒目，强烈买入高亮）。卡片纵向铺满中栏，避免稀疏表格显得空。
+  // AI 卡片：纵向三段堆叠（股票信息 / 今日预估 / 实时建议+操作价格）
+  // 与原来最大区别——之前是横向多列堆在一行难看清；现在每个区块独占一行，所有信息对齐
   function _aiCardHtml(p) {
     const action = p.action || "不动";
     const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
@@ -328,12 +370,12 @@
     // 现价 + 涨跌
     const priceHtml = p.price != null ? ('<span class="ai-c-price"><b>' + fmt(p.price, 2) + '</b>' + (p.change_pct != null ? ' <span class="' + (p.change_pct >= 0 ? 'up' : 'down') + '">' + signed(p.change_pct, 2) + '%</span>' : '') + '</span>') : '';
 
-    // 今日预估（forecast）+ 合并板块信息（涨跌比例 + 主力资金流入/流出金额）
+    // 今日预估（forecast）
     const fc = p.forecast || {};
     const fcTrend = fc.trend || (p.outlook ? p.outlook.trend : "震荡");
     const fcCls = fcTrend === "偏多" ? "up" : fcTrend === "偏空" ? "down" : "flat";
     const fcPct = fc.pct != null ? '<span class="fc-pct ' + fcCls + '">' + (fc.pct >= 0 ? '+' : '') + fc.pct.toFixed(2) + '%</span>' : '';
-    const basisHtml = (fc.basis || (p.outlook ? [p.outlook.reason] : [])).filter(Boolean).slice(0, 3)
+    const basisHtml = (fc.basis || (p.outlook ? [p.outlook.reason] : [])).filter(Boolean).slice(0, 4)
       .map(b => '<li>' + b + '</li>').join("");
 
     // 板块信息：板块名 + 涨跌% + 主力流入/流出金额 + 上涨占比
@@ -347,10 +389,6 @@
     const secFundCls = secFund == null ? '' : (secFund >= 0 ? 'sec-fund-in' : 'sec-fund-out');
     const secFundTxt = secFund == null ? '' : ('<span class="sec-fund-val ' + secFundCls + '">' + (secFund >= 0 ? '流入+' : '流出') + Math.abs(secFund).toFixed(1) + '亿' + secProxy + '</span>');
     const upRatioTxt = sec.up_ratio != null ? '<span class="sec-fund-mini">上涨占比 <b>' + (sec.up_ratio * 100).toFixed(0) + '%</b></span>' : '';
-    const secBlock = '<div class="ai-sec-block">' +
-        '<div class="sec-row1"><span class="sec-name">' + secName + '</span><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span></div>' +
-        '<div class="sec-row2">' + secFundTxt + (secFundTxt && upRatioTxt ? '　' : '') + upRatioTxt + '</div>' +
-      '</div>';
 
     // 操作建议（紧凑三档：买/卖/止损&止盈）—— 不再做"回踩 MA5 附近不破就买"这种术语，直接给数字
     const opHtml = _opHtml(p);
@@ -358,16 +396,56 @@
     // 实时动态建议（基于盘中 1min 分时 + 当前价 + 板块资金）：闪烁标签
     const liveHtml = _liveHint(p);
 
+    // ===== 股票信息段：现价、涨跌、成本、股数、持仓金额、盈亏金额、盈亏% =====
+    const pos = p.position || {};
+    const shares = pos.shares || 0;
+    const cost = pos.cost;
+    const posAmt = (p.price && shares) ? (p.price * shares) : null;
+    const profit = (p.price && cost != null && shares) ? ((p.price - cost) * shares) : null;
+    const profitPct = (p.price && cost != null) ? ((p.price - cost) / cost * 100) : null;
+    const infoRow2 = shares > 0 ? (
+      '<div class="ai-info-row">' +
+        '<span class="ai-info-k">持股</span>' +
+        '<span class="ai-info-v"><b>' + shares + '</b>股 @¥' + fmt(cost, 2) + '</span>' +
+        (posAmt != null ? '<span class="ai-info-k">· 现市值</span><span class="ai-info-v"><b>' + Math.round(posAmt).toLocaleString() + '</b></span>' : '') +
+        (profit != null ? '<span class="ai-info-k">· 当日盈亏</span><span class="ai-info-v ' + (profit >= 0 ? 'up' : 'down') + '"><b>' + (profit >= 0 ? '+' : '') + Math.round(profit).toLocaleString() + '</b> (' + (profitPct >= 0 ? '+' : '') + profitPct.toFixed(2) + '%)</span>' : '') +
+      '</div>'
+    ) : '';
+
     return '<div class="ai-card ' + cls + (strong ? ' ai-strong' : '') + '">' +
+      // 头部：名称/代码 + 评分 + 动作 + ⚡实时
       '<div class="ai-card-head">' +
         '<span class="ai-card-name"><b>' + (p.name || p.code) + '</b><i class="code-mini">' + p.code + '</i></span>' +
         '<span class="ai-score-badge ' + cls + '">' + (score > 0 ? '+' : '') + score + '</span>' +
         '<span class="ai-action-pill ' + cls + '">' + label + '</span>' +
         liveHtml +
       '</div>' +
-      '<div class="ai-card-price">' + priceHtml + '</div>' +
-      '<div class="ai-card-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + ' ' + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul>' + secBlock + '</div>' +
-      '<div class="ai-card-op">' + opHtml + '</div>' +
+      // ① 股票信息（成本·股数·盈亏·现价大）
+      '<div class="ai-card-section ai-info">' +
+        '<div class="ai-sec-label">📊 股票信息</div>' +
+        '<div class="ai-info-row ai-info-row1">' +
+          '<span class="ai-info-k">现价</span>' +
+          '<span class="ai-info-price">' + priceHtml + '</span>' +
+          '<span class="ai-info-k">· 评分</span>' +
+          '<span class="ai-info-v"><b class="' + (score >= 0 ? 'up' : 'down') + '">' + (score > 0 ? '+' : '') + score + '</b></span>' +
+        '</div>' +
+        infoRow2 +
+      '</div>' +
+      // ② 今日预估（倾向 +% + 板块资金 + 上因）
+      '<div class="ai-card-section ai-fc">' +
+        '<div class="ai-sec-label">🔮 今日预估</div>' +
+        '<div class="fc-head"><span class="fc-trend ' + fcCls + '">' + fcTrend + ' ' + fcPct + '</span></div>' +
+        (basisHtml ? '<ul class="fc-basis">' + basisHtml + '</ul>' : '') +
+        '<div class="ai-sec-block">' +
+          '<div class="sec-row1"><span class="sec-name">' + secName + '</span><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span></div>' +
+          '<div class="sec-row2">' + secFundTxt + (secFundTxt && upRatioTxt ? '　' : '') + upRatioTxt + '</div>' +
+        '</div>' +
+      '</div>' +
+      // ③ 实时建议 + 操作价格（大字显眼）
+      '<div class="ai-card-section ai-op">' +
+        '<div class="ai-sec-label">⚡ 实时建议 · 操作价格</div>' +
+        opHtml +
+      '</div>' +
     '</div>';
   }
 
@@ -580,6 +658,8 @@
         if (r && r.ok) {
           toast(`${side === "buy" ? "买入" : "卖出"} ${qty}股 @¥${price} 已记录（现金 ¥${fmt(r.cash, 0)}）`);
           $("#tradeQty").value = ""; $("#tradePrice").value = "";
+          // 立即刷新明细（不让"刚记录的一笔"看起来消失）
+          loadTradeLog();
           await renderAccount();
         } else {
           toast("记录失败：" + (r && r.error ? r.error : "未知错误"));

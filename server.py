@@ -40,6 +40,10 @@ STATIC_POSITIONS = os.path.join(BASE, "static", "positions.json")
 ACCOUNT = os.path.join(DATA_DIR, "account.json")
 STATIC_ACCOUNT = os.path.join(BASE, "static", "account.json")
 CONFIG = os.path.join(DATA_DIR, "config.json")
+# 今日成交明细：所有 trade 操作都附加写一份日志（含时间/价格/数量），前端可查今日已买/卖清单
+TRADE_LOG = os.path.join(DATA_DIR, "trade_log.json")
+# 公开云端主源（git 跟踪），重启/部署后能恢复
+STATIC_TRADE_LOG = os.path.join(BASE, "static", "trade_log.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -642,6 +646,8 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
     pos = sig.position_advice(a["score"], a["action"], price,
                               capital=capital, max_single=_POS.get("max_single", 0.25),
                               current_shares=held, lot=_POS.get("lot", 100))
+    # 盘中实时建议（5min 分时级别，看一眼该买/卖/等的瞬时判断）—— 先算，供下方 action 收敛使用
+    intraday = _intraday_for(code, price, prev_close)
     # 收敛为 买/卖/不动
     if adp.get("bias") == "defensive":
         action = "卖出"
@@ -651,6 +657,13 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
         action = "卖出"
     else:
         action = "不动"
+    # 盘中强势反转（早盘下杀→午后拉起）：明确的盘中看多信号，绝不"卖出"。
+    # 王总反馈：太极这种"早上低点→现在涨很多"的强反转日，不该给"卖出"，应加仓看多。
+    _intra_sc = (intraday or {}).get("scenario")
+    if _intra_sc == "探底回升·强势多头":
+        # intraday 模块自身对该场景给"持有看多/可回踩加仓"，统一收敛为"买入"（加仓），
+        # 覆盖日线/防御模型可能给出的"卖出"——强反转日卖出等于卖飞。
+        action = "买入"
     # 操作价：买用当日买点/支撑，卖用当日卖点/阻力 —— 价格必须约束在当前价 ±3% 内，
     # 否则当天到不了那个价。建议卖出/买入是"现在/明天可执行"的动作，不是看天价。
     pl = a.get("price_levels") or {}
@@ -669,15 +682,16 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
     # 操作量：买=加仓股数，卖=减仓股数（不超持仓），不动=0
     delta = int(pos.get("delta_shares") or 0)
     if action == "买入":
-        op_qty = max(0, delta)
+        # 强势反转日（探底回升）默认回踩加仓 1 手（_POS.lot）；若仓位模型本身建议更多则取较大者。
+        # 注意：必须保证 op_qty 至少为 1 手，否则下方会被重置成"不动"，强反转buy信号失效。
+        _lot = _POS.get("lot", 100)
+        op_qty = max(_lot, delta) if delta > 0 else _lot
     elif action == "卖出":
         op_qty = min(max(0, -delta), held)
     else:
         op_qty = 0
     if action in ("买入", "卖出") and op_qty <= 0:
         action, op_qty = "不动", 0
-    # 盘中实时建议（5min 分时级别，看一眼该买/卖/等的瞬时判断）
-    intraday = _intraday_for(code, price, prev_close)
     # 实时动态价位（贴在现价 ±0.8% 的紧凑区间，替代原本宽达 ±3% 的做T价）
     # 既保留 dynamic_levels 的支撑/阻力参考，又贴现价给出"立刻能挂的限价"。
     tight = _tight_levels(price, intraday, tl)
@@ -1585,7 +1599,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/trade":
             # 当日交易录入：买入=加股数/重算成本/现金减；卖出=减股数/现金加。
-            # 买卖后前端重拉 /api/positions_advice，真实当日盈亏自动更新。
+            # 同时追加一条记录到 trade_log.json（前端可查今日已成交清单）。
             item = payload if isinstance(payload, dict) else {}
             code = str(item.get("code", "")).strip().lower()
             if not code:
@@ -1606,6 +1620,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             positions = _load_positions()
             rec = next((p for p in positions if p.get("code") == code), None)
+            old_cost = 0.0
+            old_shares = 0
+            new_cost = 0.0
+            new_shares = 0
+            name = code
             if side == "buy":
                 if rec is None:
                     name = item.get("name", "") or ""
@@ -1619,9 +1638,14 @@ class Handler(BaseHTTPRequestHandler):
                 old = int(rec.get("shares", 0) or 0)
                 oldcost = float(rec.get("cost", 0) or 0)
                 new = old + qty
-                rec["cost"] = round((oldcost * old + price * qty) / new, 4) if new > 0 else 0.0
+                old_cost = oldcost
+                old_shares = old
+                new_cost = round((oldcost * old + price * qty) / new, 4) if new > 0 else 0.0
+                rec["cost"] = new_cost
                 rec["shares"] = new
                 rec["name"] = item.get("name") or rec.get("name") or code
+                new_shares = new
+                name = rec.get("name") or code
             else:
                 if rec is None:
                     self._send(400, {"error": "未持有该股票，无法卖出"})
@@ -1630,9 +1654,14 @@ class Handler(BaseHTTPRequestHandler):
                 if qty > old:
                     self._send(400, {"error": f"卖出数量 {qty} 超过持仓 {old}"})
                     return
+                old_cost = float(rec.get("cost", 0) or 0)
+                old_shares = old
                 rec["shares"] = old - qty
                 if rec["shares"] <= 0:
                     positions = [p for p in positions if p.get("code") != code]
+                new_shares = rec.get("shares", 0)
+                new_cost = old_cost
+                name = rec.get("name") or code
             # 现金随交易变动（买入减、卖出加）
             acct = _load_account()
             if side == "buy":
@@ -1645,7 +1674,44 @@ class Handler(BaseHTTPRequestHandler):
                 _save_json(STATIC_POSITIONS, positions)
             except Exception as e:
                 print("[WARN] static positions write failed (cloud may be read-only):", e)
-            self._send(200, {"ok": True, "cash": acct["cash"], "positions": positions})
+            # 写 trade_log（前端可查今日成交明细，刷新不丢）
+            try:
+                log = _load_json(TRADE_LOG, []) or []
+                log.append({
+                    "id": int(time.time() * 1000),
+                    "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "date": time.strftime("%Y-%m-%d"),
+                    "code": code, "name": name,
+                    "side": side, "qty": qty, "price": price,
+                    "amount": round(price * qty, 2),
+                    "before_shares": old_shares, "before_cost": round(old_cost, 4),
+                    "after_shares": new_shares, "after_cost": round(new_cost, 4),
+                    "cash_after": float(acct.get("cash", 0) or 0),
+                })
+                _save_json(TRADE_LOG, log)
+                try:
+                    _save_json(STATIC_TRADE_LOG, log)
+                except Exception as e:
+                    print("[WARN] static trade_log write failed (cloud may be read-only):", e)
+            except Exception as e:
+                print("[WARN] trade_log write failed:", e)
+            self._send(200, {"ok": True, "cash": acct["cash"],
+                             "positions": positions,
+                             "log_id": int(time.time() * 1000)})
+            return
+        if route == "/api/trade_log":
+            # 今日成交明细（刷新不丢）。可选参数：?date=YYYY-MM-DD；不传则返回今天。
+            log = _load_json(TRADE_LOG, []) or []
+            qd = (qs.get("date") or [None])[0]
+            if not qd:
+                qd = time.strftime("%Y-%m-%d")
+            rows = [r for r in log if r.get("date") == qd]
+            # 同时给今日的现金流（买入支出/卖出收入）
+            buy_amt = round(sum(r["amount"] for r in rows if r["side"] == "buy"), 2)
+            sell_amt = round(sum(r["amount"] for r in rows if r["side"] == "sell"), 2)
+            self._send(200, {"ok": True, "date": qd, "rows": rows,
+                             "buy_amt": buy_amt, "sell_amt": sell_amt,
+                             "net": round(sell_amt - buy_amt, 2)})
             return
         if route == "/api/account":
             # 持仓截图同步：由 AI 解析图片后调用，整体覆盖现金 + 持仓，
@@ -2154,18 +2220,35 @@ def main():
     threading.Thread(target=_sector_warmer, daemon=True).start()
 
     # 服务端后台调度：自动生成开盘判断 + 四时点快照 + 收盘复盘（不依赖浏览器是否打开）
-    # 交易时段(9:00-15:10)每分钟检查一次；其余时间 5 分钟一次，省资源
+    # 交易时段(9:00-15:10)每 20 秒检查一次，更敏捷（原来 60s 偶发延迟到时点后 60s 才出现）；
+    # 30 分钟无变化（scheduler_heartbeat 留住证据），如崩了重启即补。其余时间 5 分钟一次，省资源
+    import os as _os
+    HEARTBEAT_FILE = _os.path.join(DATA_DIR, "_scheduler_heartbeat.json")
+
+    def _write_heartbeat(note):
+        try:
+            _save_json(HEARTBEAT_FILE, {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": note})
+        except Exception:
+            pass
+
     def _daily_scheduler():
+        last_alive = 0
         while True:
             try:
+                _write_heartbeat("tick")
                 run_daily("auto")
-            except Exception:
-                pass
+            except Exception as e:
+                _write_beat_error = True
+                try:
+                    _save_json(HEARTBEAT_FILE, {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "error": str(e)})
+                except Exception:
+                    pass
             h, m = time.localtime().tm_hour, time.localtime().tm_min
             if 9 <= h < 15 or (h == 15 and m <= 10):
-                time.sleep(60)
+                time.sleep(20)
             else:
                 time.sleep(300)
+    _write_heartbeat("started")
     threading.Thread(target=_daily_scheduler, daemon=True).start()
 
     try:

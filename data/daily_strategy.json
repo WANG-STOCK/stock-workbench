@@ -5791,398 +5791,482 @@
   },
   "2026-08-13": {
     "date": "2026-08-13",
+    "open": {
+      "generated_at": "2026-08-13 11:06:46",
+      "trend": "up",
+      "confidence": 67,
+      "market_note": "偏多 4 只 / 偏空 1 只（持仓+评级A候选），综合集合竞价与均线信号。建议按下方优先级排序，<b style='color:#2b8a3e'>买入</b>排最前（预期空间最大），<b style='color:#c92a2a'>卖出/减仓</b>排最后（风险高需处理）。",
+      "suggestions": [
+        {
+          "code": "sz002049",
+          "name": "紫光国微",
+          "role": "candidate",
+          "action": "买入",
+          "price": 67.38,
+          "best_buy": 66.71,
+          "qty": 200,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "半导体芯片",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 2.2,
+            "basis": [
+              "高开 +0.8%（集合竞价偏多）",
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 4
+        },
+        {
+          "code": "sz002916",
+          "name": "深南电路",
+          "role": "candidate",
+          "action": "买入",
+          "price": 388.33,
+          "best_buy": 384.45,
+          "qty": 0,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "PCB",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 2.2,
+            "basis": [
+              "高开 +2.4%（集合竞价偏多）",
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 6
+        },
+        {
+          "code": "sz002050",
+          "name": "三花智控",
+          "role": "candidate",
+          "action": "买入",
+          "price": 39.18,
+          "best_buy": 38.79,
+          "qty": 300,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "机器人",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.7,
+            "basis": [
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 2
+        },
+        {
+          "code": "sh601689",
+          "name": "拓普集团",
+          "role": "candidate",
+          "action": "买入",
+          "price": 50.7,
+          "best_buy": 49.94,
+          "qty": 200,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "机器人",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.7,
+            "basis": [
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 2
+        },
+        {
+          "code": "sh603259",
+          "name": "药明康德",
+          "role": "candidate",
+          "action": "买入",
+          "price": 161.7,
+          "best_buy": 159.75,
+          "qty": 0,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "CXO",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.7,
+            "basis": [
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 3
+        },
+        {
+          "code": "sz002028",
+          "name": "思源电气",
+          "role": "candidate",
+          "action": "买入",
+          "price": 170.77,
+          "best_buy": 168.21,
+          "qty": 0,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "特高压电网",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.7,
+            "basis": [
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 4
+        },
+        {
+          "code": "sz002371",
+          "name": "北方华创",
+          "role": "candidate",
+          "action": "买入",
+          "price": 761.67,
+          "best_buy": 751.51,
+          "qty": 0,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "半导体设备",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +1.1%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 3
+        },
+        {
+          "code": "sh603986",
+          "name": "兆易创新",
+          "role": "candidate",
+          "action": "买入",
+          "price": 425.15,
+          "best_buy": 418.77,
+          "qty": 0,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "半导体芯片",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +2.9%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 4
+        },
+        {
+          "code": "sz002463",
+          "name": "沪电股份",
+          "role": "candidate",
+          "action": "买入",
+          "price": 124.58,
+          "best_buy": 123.33,
+          "qty": 100,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "PCB",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +1.5%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 3
+        },
+        {
+          "code": "sh600487",
+          "name": "亨通光电",
+          "role": "candidate",
+          "action": "买入",
+          "price": 59.7,
+          "best_buy": 59.0,
+          "qty": 200,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "光纤",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +1.4%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 3
+        },
+        {
+          "code": "sh600522",
+          "name": "中天科技",
+          "role": "candidate",
+          "action": "买入",
+          "price": 34.06,
+          "best_buy": 33.72,
+          "qty": 400,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "光纤",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +1.4%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 3
+        },
+        {
+          "code": "sh601138",
+          "name": "工业富联",
+          "role": "candidate",
+          "action": "买入",
+          "price": 66.06,
+          "best_buy": 65.4,
+          "qty": 200,
+          "reason": "多头初现、价在MA5下、MA5>MA10多头",
+          "track": "AI算力",
+          "grade": "A",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.0,
+            "basis": [
+              "高开 +3.6%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 1
+        },
+        {
+          "code": "sz000063",
+          "name": "中兴通讯",
+          "role": "candidate",
+          "action": "买入",
+          "price": 35.15,
+          "best_buy": 34.8,
+          "qty": 400,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "通信设备",
+          "grade": "A",
+          "forecast": {
+            "trend": "震荡",
+            "pct": 0.5,
+            "basis": [
+              "低开 -0.8%（集合竞价偏空）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 2
+        },
+        {
+          "code": "sz002475",
+          "name": "立讯精密",
+          "role": "candidate",
+          "action": "买入",
+          "price": 56.95,
+          "best_buy": 56.38,
+          "qty": 200,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "消费电子",
+          "grade": "A",
+          "forecast": {
+            "trend": "震荡",
+            "pct": 0.5,
+            "basis": [
+              "高开 +1.1%（集合竞价偏多）",
+              "价跌破MA20 偏空"
+            ]
+          },
+          "score": 4
+        },
+        {
+          "code": "sz002422",
+          "name": "科伦药业",
+          "role": "candidate",
+          "action": "买入",
+          "price": 47.01,
+          "best_buy": 46.42,
+          "qty": 300,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "创新药",
+          "grade": "A",
+          "forecast": {
+            "trend": "震荡",
+            "pct": 0.0,
+            "basis": [
+              "低开 -1.5%（集合竞价偏空）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 1
+        },
+        {
+          "code": "sh603501",
+          "name": "豪威集团",
+          "role": "candidate",
+          "action": "买入",
+          "price": 91.41,
+          "best_buy": 90.5,
+          "qty": 100,
+          "reason": "多头初现、价在MA5上、MA5>MA10多头",
+          "track": "半导体芯片",
+          "grade": "A",
+          "forecast": {
+            "trend": "震荡",
+            "pct": -0.5,
+            "basis": [
+              "价跌破MA20 偏空"
+            ]
+          },
+          "score": 1
+        },
+        {
+          "code": "sh603606",
+          "name": "东方电缆",
+          "role": "candidate",
+          "action": "买入",
+          "price": 38.64,
+          "best_buy": 38.25,
+          "qty": 300,
+          "reason": "多头初现、价在MA5上、MA5<MA10",
+          "track": "特高压电网",
+          "grade": "A",
+          "forecast": {
+            "trend": "震荡",
+            "pct": -0.5,
+            "basis": [
+              "价跌破MA20 偏空"
+            ]
+          },
+          "score": 1
+        },
+        {
+          "code": "sh600206",
+          "name": "有研新材",
+          "role": "holding",
+          "action": "持有",
+          "price": 51.82,
+          "best_buy": 51.3,
+          "qty": 0,
+          "reason": "多头排列：价在MA5上、MA5>MA10多头",
+          "track": "",
+          "grade": "",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 2.2,
+            "basis": [
+              "高开 +2.0%（集合竞价偏多）",
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 4
+        },
+        {
+          "code": "sh600276",
+          "name": "恒瑞医药",
+          "role": "holding",
+          "action": "持有",
+          "price": 54.78,
+          "best_buy": 53.96,
+          "qty": 0,
+          "reason": "震荡：价在MA5上、MA5>MA10多头",
+          "track": "",
+          "grade": "",
+          "forecast": {
+            "trend": "震荡",
+            "pct": 0.0,
+            "basis": [
+              "低开 -0.6%（集合竞价偏空）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": -1
+        },
+        {
+          "code": "sh600667",
+          "name": "太极实业",
+          "role": "holding",
+          "action": "卖出",
+          "price": 24.24,
+          "best_buy": 23.88,
+          "qty": 100,
+          "reason": "短线超买，建议止盈1/3：价在MA5上、MA5>MA10多头",
+          "track": "",
+          "grade": "",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.7,
+            "basis": [
+              "价>MA5>MA10>MA20 多头"
+            ]
+          },
+          "score": 5
+        },
+        {
+          "code": "sh600183",
+          "name": "生益科技",
+          "role": "holding",
+          "action": "卖出",
+          "price": 146.62,
+          "best_buy": 145.15,
+          "qty": 100,
+          "reason": "短线超买，建议止盈1/3：价在MA5上、MA5>MA10多头",
+          "track": "",
+          "grade": "",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +2.0%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 4
+        },
+        {
+          "code": "sh600105",
+          "name": "永鼎股份",
+          "role": "holding",
+          "action": "卖出",
+          "price": 41.91,
+          "best_buy": 41.28,
+          "qty": 100,
+          "reason": "短线超买，建议止盈1/3：价在MA5上、MA5>MA10多头",
+          "track": "",
+          "grade": "",
+          "forecast": {
+            "trend": "偏多",
+            "pct": 1.5,
+            "basis": [
+              "高开 +4.7%（集合竞价偏多）",
+              "价站上MA20 偏多"
+            ]
+          },
+          "score": 4
+        }
+      ]
+    },
     "snapshots": {
-      "10:00": {
-        "ts": "2026-08-13 09:55:29",
-        "rows": [
-          {
-            "code": "sh600183",
-            "name": "生益科技",
-            "role": "holding",
-            "action": "卖出",
-            "price": 147.94,
-            "qty": 100,
-            "reason": "日内最大涨幅 +6.05%，当前 +2.77%，已回落 3.28%",
-            "now_pct": 2.77,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sh600276",
-            "name": "恒瑞医药",
-            "role": "holding",
-            "action": "持有",
-            "price": 54.44,
-            "qty": 0,
-            "reason": "低位震荡 0.15%，等企稳",
-            "now_pct": 0.15,
-            "scenario": "低位震荡"
-          },
-          {
-            "code": "sh600206",
-            "name": "有研新材",
-            "role": "holding",
-            "action": "持有",
-            "price": 51.89,
-            "qty": 0,
-            "reason": "急跌 -2.00%，放量下杀",
-            "now_pct": -2.0,
-            "scenario": "急跌中"
-          },
-          {
-            "code": "sh600667",
-            "name": "太极实业",
-            "role": "holding",
-            "action": "持有",
-            "price": 22.69,
-            "qty": 0,
-            "reason": "从最低点反弹 3.43%",
-            "now_pct": -0.09,
-            "scenario": "急跌后反弹"
-          },
-          {
-            "code": "sh600105",
-            "name": "永鼎股份",
-            "role": "holding",
-            "action": "持有",
-            "price": 41.3,
-            "qty": 0,
-            "reason": "高位震荡 +0.22%，等方向",
-            "now_pct": 0.22,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sz002371",
-            "name": "北方华创",
-            "role": "candidate",
-            "action": "持有",
-            "price": 757.96,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.27,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh603501",
-            "name": "豪威集团",
-            "role": "candidate",
-            "action": "持有",
-            "price": 91.43,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.1,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh603986",
-            "name": "兆易创新",
-            "role": "candidate",
-            "action": "卖出",
-            "price": 423.44,
-            "qty": 0,
-            "reason": "日内最大涨幅 +4.54%，当前 +1.97%，已回落 2.56%",
-            "now_pct": 1.97,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sz002049",
-            "name": "紫光国微",
-            "role": "candidate",
-            "action": "持有",
-            "price": 67.48,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.3,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002463",
-            "name": "沪电股份",
-            "role": "candidate",
-            "action": "卖出",
-            "price": 126.69,
-            "qty": 0,
-            "reason": "日内最大涨幅 +4.86%，当前 +2.48%，已回落 2.38%",
-            "now_pct": 2.48,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sz002916",
-            "name": "深南电路",
-            "role": "candidate",
-            "action": "持有",
-            "price": 389.18,
-            "qty": 0,
-            "reason": "高位震荡 +0.88%，等方向",
-            "now_pct": 0.88,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sz002938",
-            "name": "鹏鼎控股",
-            "role": "candidate",
-            "action": "持有",
-            "price": 101.1,
-            "qty": 0,
-            "reason": "高位震荡 +0.10%，等方向",
-            "now_pct": 0.1,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sh600487",
-            "name": "亨通光电",
-            "role": "candidate",
-            "action": "持有",
-            "price": 59.08,
-            "qty": 0,
-            "reason": "高位震荡 +-0.37%，等方向",
-            "now_pct": -0.37,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sh600522",
-            "name": "中天科技",
-            "role": "candidate",
-            "action": "持有",
-            "price": 33.9,
-            "qty": 0,
-            "reason": "稳步上涨 +1.04%，MACD 红柱",
-            "now_pct": 1.04,
-            "scenario": "稳步上涨"
-          },
-          {
-            "code": "sh601138",
-            "name": "工业富联",
-            "role": "candidate",
-            "action": "持有",
-            "price": 66.14,
-            "qty": 0,
-            "reason": "高位震荡 +0.82%，等方向",
-            "now_pct": 0.82,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sh603019",
-            "name": "中科曙光",
-            "role": "candidate",
-            "action": "持有",
-            "price": 88.08,
-            "qty": 0,
-            "reason": "稳步上涨 +1.92%，MACD 红柱",
-            "now_pct": 1.92,
-            "scenario": "稳步上涨"
-          },
-          {
-            "code": "sz002415",
-            "name": "海康威视",
-            "role": "candidate",
-            "action": "持有",
-            "price": 36.46,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.03,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz000063",
-            "name": "中兴通讯",
-            "role": "candidate",
-            "action": "持有",
-            "price": 35.09,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -1.4,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600941",
-            "name": "中国移动",
-            "role": "candidate",
-            "action": "持有",
-            "price": 96.39,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.18,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002050",
-            "name": "三花智控",
-            "role": "candidate",
-            "action": "持有",
-            "price": 39.23,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.15,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz000333",
-            "name": "美的集团",
-            "role": "candidate",
-            "action": "持有",
-            "price": 84.25,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.11,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh601689",
-            "name": "拓普集团",
-            "role": "candidate",
-            "action": "持有",
-            "price": 50.48,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.36,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002422",
-            "name": "科伦药业",
-            "role": "candidate",
-            "action": "持有",
-            "price": 46.94,
-            "qty": 0,
-            "reason": "低位震荡 0.06%，等企稳",
-            "now_pct": 0.06,
-            "scenario": "低位震荡"
-          },
-          {
-            "code": "sh603259",
-            "name": "药明康德",
-            "role": "candidate",
-            "action": "持有",
-            "price": 161.66,
-            "qty": 0,
-            "reason": "稳步上涨 +1.65%，MACD 红柱",
-            "now_pct": 1.65,
-            "scenario": "稳步上涨"
-          },
-          {
-            "code": "sh600436",
-            "name": "片仔癀",
-            "role": "candidate",
-            "action": "持有",
-            "price": 135.1,
-            "qty": 0,
-            "reason": "低位震荡 0.01%，等企稳",
-            "now_pct": 0.01,
-            "scenario": "低位震荡"
-          },
-          {
-            "code": "sh600905",
-            "name": "三峡能源",
-            "role": "candidate",
-            "action": "持有",
-            "price": 3.76,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.27,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600025",
-            "name": "华能水电",
-            "role": "candidate",
-            "action": "持有",
-            "price": 9.71,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.21,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600900",
-            "name": "长江电力",
-            "role": "candidate",
-            "action": "持有",
-            "price": 28.05,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.11,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600674",
-            "name": "川投能源",
-            "role": "candidate",
-            "action": "持有",
-            "price": 15.16,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.66,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600406",
-            "name": "国电南瑞",
-            "role": "candidate",
-            "action": "持有",
-            "price": 23.96,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.42,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002028",
-            "name": "思源电气",
-            "role": "candidate",
-            "action": "持有",
-            "price": 166.07,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.11,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh603606",
-            "name": "东方电缆",
-            "role": "candidate",
-            "action": "持有",
-            "price": 38.76,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.67,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh601985",
-            "name": "中国核电",
-            "role": "candidate",
-            "action": "持有",
-            "price": 8.79,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.23,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002475",
-            "name": "立讯精密",
-            "role": "candidate",
-            "action": "持有",
-            "price": 57.03,
-            "qty": 0,
-            "reason": "高位震荡 +-0.56%，等方向",
-            "now_pct": -0.56,
-            "scenario": "高位震荡"
-          }
-        ]
-      },
       "09:30": {
-        "ts": "2026-08-13 09:59:56",
+        "ts": "2026-08-13 11:06:46",
         "rows": [
           {
             "code": "sh600183",
             "name": "生益科技",
             "role": "holding",
             "action": "卖出",
-            "price": 149.69,
+            "price": 147.36,
             "qty": 100,
-            "reason": "日内最大涨幅 +6.05%，当前 +3.99%，已回落 2.06%",
-            "now_pct": 3.99,
+            "reason": "日内最大涨幅 +6.05%，当前 +2.37%，已回落 3.68%",
+            "now_pct": 2.37,
             "scenario": "急涨后回落"
           },
           {
@@ -6190,10 +6274,10 @@
             "name": "恒瑞医药",
             "role": "holding",
             "action": "持有",
-            "price": 54.67,
+            "price": 54.7,
             "qty": 0,
-            "reason": "低位震荡 0.57%，等企稳",
-            "now_pct": 0.57,
+            "reason": "低位震荡 0.63%，等企稳",
+            "now_pct": 0.63,
             "scenario": "低位震荡"
           },
           {
@@ -6201,411 +6285,32 @@
             "name": "有研新材",
             "role": "holding",
             "action": "持有",
-            "price": 52.08,
+            "price": 51.82,
             "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -1.64,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600667",
-            "name": "太极实业",
-            "role": "holding",
-            "action": "持有",
-            "price": 22.73,
-            "qty": 0,
-            "reason": "高位震荡 +0.09%，等方向",
-            "now_pct": 0.09,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sh600105",
-            "name": "永鼎股份",
-            "role": "holding",
-            "action": "持有",
-            "price": 41.56,
-            "qty": 0,
-            "reason": "高位震荡 +0.85%，等方向",
-            "now_pct": 0.85,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sz002371",
-            "name": "北方华创",
-            "role": "candidate",
-            "action": "持有",
-            "price": 758.63,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.18,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh603501",
-            "name": "豪威集团",
-            "role": "candidate",
-            "action": "持有",
-            "price": 91.49,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.03,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh603986",
-            "name": "兆易创新",
-            "role": "candidate",
-            "action": "卖出",
-            "price": 424.65,
-            "qty": 0,
-            "reason": "日内最大涨幅 +4.54%，当前 +2.27%，已回落 2.27%",
-            "now_pct": 2.27,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sz002049",
-            "name": "紫光国微",
-            "role": "candidate",
-            "action": "持有",
-            "price": 67.54,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.39,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002463",
-            "name": "沪电股份",
-            "role": "candidate",
-            "action": "卖出",
-            "price": 127.26,
-            "qty": 0,
-            "reason": "日内最大涨幅 +4.86%，当前 +2.94%，已回落 1.92%",
-            "now_pct": 2.94,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sz002916",
-            "name": "深南电路",
-            "role": "candidate",
-            "action": "卖出",
-            "price": 394.95,
-            "qty": 0,
-            "reason": "日内最大涨幅 +4.43%，当前 +1.86%，已回落 2.56%",
-            "now_pct": 1.86,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sz002938",
-            "name": "鹏鼎控股",
-            "role": "candidate",
-            "action": "持有",
-            "price": 101.46,
-            "qty": 0,
-            "reason": "高位震荡 +0.46%，等方向",
-            "now_pct": 0.46,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sh600487",
-            "name": "亨通光电",
-            "role": "candidate",
-            "action": "持有",
-            "price": 59.25,
-            "qty": 0,
-            "reason": "高位震荡 +-0.08%，等方向",
-            "now_pct": -0.08,
-            "scenario": "高位震荡"
-          },
-          {
-            "code": "sh600522",
-            "name": "中天科技",
-            "role": "candidate",
-            "action": "持有",
-            "price": 33.96,
-            "qty": 0,
-            "reason": "稳步上涨 +1.22%，MACD 红柱",
-            "now_pct": 1.22,
-            "scenario": "稳步上涨"
-          },
-          {
-            "code": "sh601138",
-            "name": "工业富联",
-            "role": "candidate",
-            "action": "卖出",
-            "price": 66.63,
-            "qty": 0,
-            "reason": "日内最大涨幅 +3.78%，当前 +1.07%，已回落 2.71%",
-            "now_pct": 1.07,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sh603019",
-            "name": "中科曙光",
-            "role": "candidate",
-            "action": "持有",
-            "price": 88.19,
-            "qty": 0,
-            "reason": "稳步上涨 +2.05%，MACD 红柱",
-            "now_pct": 2.05,
-            "scenario": "稳步上涨"
-          },
-          {
-            "code": "sz002415",
-            "name": "海康威视",
-            "role": "candidate",
-            "action": "持有",
-            "price": 36.42,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.14,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz000063",
-            "name": "中兴通讯",
-            "role": "candidate",
-            "action": "持有",
-            "price": 35.09,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -1.4,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600941",
-            "name": "中国移动",
-            "role": "candidate",
-            "action": "持有",
-            "price": 96.28,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.06,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002050",
-            "name": "三花智控",
-            "role": "candidate",
-            "action": "持有",
-            "price": 39.28,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.28,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz000333",
-            "name": "美的集团",
-            "role": "candidate",
-            "action": "持有",
-            "price": 84.21,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.15,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh601689",
-            "name": "拓普集团",
-            "role": "candidate",
-            "action": "持有",
-            "price": 50.5,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.4,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002422",
-            "name": "科伦药业",
-            "role": "candidate",
-            "action": "持有",
-            "price": 47.21,
-            "qty": 0,
-            "reason": "低位震荡 0.64%，等企稳",
-            "now_pct": 0.64,
-            "scenario": "低位震荡"
-          },
-          {
-            "code": "sh603259",
-            "name": "药明康德",
-            "role": "candidate",
-            "action": "持有",
-            "price": 161.9,
-            "qty": 0,
-            "reason": "稳步上涨 +1.80%，MACD 红柱",
-            "now_pct": 1.8,
-            "scenario": "稳步上涨"
-          },
-          {
-            "code": "sh600436",
-            "name": "片仔癀",
-            "role": "candidate",
-            "action": "持有",
-            "price": 135.13,
-            "qty": 0,
-            "reason": "低位震荡 0.04%，等企稳",
-            "now_pct": 0.04,
-            "scenario": "低位震荡"
-          },
-          {
-            "code": "sh600905",
-            "name": "三峡能源",
-            "role": "candidate",
-            "action": "持有",
-            "price": 3.76,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.27,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600025",
-            "name": "华能水电",
-            "role": "candidate",
-            "action": "持有",
-            "price": 9.68,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.1,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600900",
-            "name": "长江电力",
-            "role": "candidate",
-            "action": "持有",
-            "price": 28.04,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.07,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600674",
-            "name": "川投能源",
-            "role": "candidate",
-            "action": "持有",
-            "price": 15.14,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.53,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh600406",
-            "name": "国电南瑞",
-            "role": "candidate",
-            "action": "持有",
-            "price": 23.92,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.58,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002028",
-            "name": "思源电气",
-            "role": "candidate",
-            "action": "持有",
-            "price": 166.7,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.49,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh603606",
-            "name": "东方电缆",
-            "role": "candidate",
-            "action": "持有",
-            "price": 38.77,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.64,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sh601985",
-            "name": "中国核电",
-            "role": "candidate",
-            "action": "持有",
-            "price": 8.78,
-            "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -0.34,
-            "scenario": "中性整理"
-          },
-          {
-            "code": "sz002475",
-            "name": "立讯精密",
-            "role": "candidate",
-            "action": "持有",
-            "price": 57.1,
-            "qty": 0,
-            "reason": "高位震荡 +-0.44%，等方向",
-            "now_pct": -0.44,
-            "scenario": "高位震荡"
-          }
-        ]
-      },
-      "10:30": {
-        "ts": "2026-08-13 10:30:57",
-        "rows": [
-          {
-            "code": "sh600183",
-            "name": "生益科技",
-            "role": "holding",
-            "action": "卖出",
-            "price": 148.19,
-            "qty": 100,
-            "reason": "日内最大涨幅 +6.05%，当前 +2.95%，已回落 3.11%",
-            "now_pct": 2.95,
-            "scenario": "急涨后回落"
-          },
-          {
-            "code": "sh600276",
-            "name": "恒瑞医药",
-            "role": "holding",
-            "action": "持有",
-            "price": 54.54,
-            "qty": 0,
-            "reason": "低位震荡 0.33%，等企稳",
-            "now_pct": 0.33,
-            "scenario": "低位震荡"
-          },
-          {
-            "code": "sh600206",
-            "name": "有研新材",
-            "role": "holding",
-            "action": "持有",
-            "price": 51.8,
-            "qty": 0,
-            "reason": "急跌 -2.17%，放量下杀",
-            "now_pct": -2.17,
+            "reason": "急跌 -2.13%，放量下杀",
+            "now_pct": -2.13,
             "scenario": "急跌中"
           },
           {
             "code": "sh600667",
             "name": "太极实业",
             "role": "holding",
-            "action": "卖出",
-            "price": 23.69,
-            "qty": 100,
-            "reason": "日内最大涨幅 +5.64%，当前 +3.79%，已回落 1.85%",
-            "now_pct": 3.79,
-            "scenario": "急涨后回落"
+            "action": "持有",
+            "price": 23.88,
+            "qty": 0,
+            "reason": "盘中探底 -3.52% 后强势拉起，当前 +6.74%，多头动能强",
+            "now_pct": 6.74,
+            "scenario": "探底回升·强势多头"
           },
           {
             "code": "sh600105",
             "name": "永鼎股份",
             "role": "holding",
             "action": "持有",
-            "price": 41.96,
+            "price": 41.91,
             "qty": 0,
-            "reason": "日内最大涨幅 +4.95%，当前 +1.82%，已回落 3.13%",
-            "now_pct": 1.82,
+            "reason": "日内最大涨幅 +4.95%，当前 +1.70%，已回落 3.25%",
+            "now_pct": 1.7,
             "scenario": "急涨后回落"
           },
           {
@@ -6613,10 +6318,10 @@
             "name": "北方华创",
             "role": "candidate",
             "action": "持有",
-            "price": 762.9,
+            "price": 761.66,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.38,
+            "now_pct": 0.22,
             "scenario": "中性整理"
           },
           {
@@ -6624,10 +6329,10 @@
             "name": "豪威集团",
             "role": "candidate",
             "action": "持有",
-            "price": 91.34,
+            "price": 91.41,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": -0.2,
+            "now_pct": -0.12,
             "scenario": "中性整理"
           },
           {
@@ -6635,10 +6340,10 @@
             "name": "兆易创新",
             "role": "candidate",
             "action": "卖出",
-            "price": 428.32,
+            "price": 427.28,
             "qty": 0,
-            "reason": "日内最大涨幅 +4.54%，当前 +3.15%，已回落 1.38%",
-            "now_pct": 3.15,
+            "reason": "日内最大涨幅 +4.54%，当前 +2.90%，已回落 1.64%",
+            "now_pct": 2.9,
             "scenario": "急涨后回落"
           },
           {
@@ -6646,10 +6351,10 @@
             "name": "紫光国微",
             "role": "candidate",
             "action": "持有",
-            "price": 67.54,
+            "price": 67.38,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.39,
+            "now_pct": 0.15,
             "scenario": "中性整理"
           },
           {
@@ -6657,76 +6362,76 @@
             "name": "沪电股份",
             "role": "candidate",
             "action": "卖出",
-            "price": 126.58,
+            "price": 125.2,
             "qty": 0,
-            "reason": "日内最大涨幅 +4.86%，当前 +2.39%，已回落 2.47%",
-            "now_pct": 2.39,
+            "reason": "日内最大涨幅 +4.86%，当前 +1.28%，已回落 3.59%",
+            "now_pct": 1.28,
             "scenario": "急涨后回落"
           },
           {
             "code": "sz002916",
             "name": "深南电路",
             "role": "candidate",
-            "action": "卖出",
-            "price": 394.56,
+            "action": "持有",
+            "price": 388.33,
             "qty": 0,
-            "reason": "日内最大涨幅 +4.43%，当前 +1.76%，已回落 2.66%",
-            "now_pct": 1.76,
-            "scenario": "急涨后回落"
+            "reason": "高位震荡 +0.66%，等方向",
+            "now_pct": 0.66,
+            "scenario": "高位震荡"
           },
           {
             "code": "sz002938",
             "name": "鹏鼎控股",
             "role": "candidate",
             "action": "持有",
-            "price": 100.5,
+            "price": 99.58,
             "qty": 0,
-            "reason": "高位震荡 +-0.50%，等方向",
-            "now_pct": -0.5,
-            "scenario": "高位震荡"
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.41,
+            "scenario": "中性整理"
           },
           {
             "code": "sh600487",
             "name": "亨通光电",
             "role": "candidate",
             "action": "持有",
-            "price": 60.08,
+            "price": 59.7,
             "qty": 0,
-            "reason": "稳步上涨 +1.32%，MACD 红柱",
-            "now_pct": 1.32,
-            "scenario": "稳步上涨"
+            "reason": "高位震荡 +0.67%，等方向",
+            "now_pct": 0.67,
+            "scenario": "高位震荡"
           },
           {
             "code": "sh600522",
             "name": "中天科技",
             "role": "candidate",
             "action": "持有",
-            "price": 34.16,
+            "price": 34.47,
             "qty": 0,
-            "reason": "稳步上涨 +1.82%，MACD 红柱",
-            "now_pct": 1.82,
+            "reason": "稳步上涨 +1.52%，MACD 红柱",
+            "now_pct": 1.52,
             "scenario": "稳步上涨"
           },
           {
             "code": "sh601138",
             "name": "工业富联",
             "role": "candidate",
-            "action": "卖出",
-            "price": 67.03,
+            "action": "持有",
+            "price": 66.06,
             "qty": 0,
-            "reason": "日内最大涨幅 +3.78%，当前 +1.68%，已回落 2.10%",
-            "now_pct": 1.68,
-            "scenario": "急涨后回落"
+            "reason": "高位震荡 +0.70%，等方向",
+            "now_pct": 0.7,
+            "scenario": "高位震荡"
           },
           {
             "code": "sh603019",
             "name": "中科曙光",
             "role": "candidate",
             "action": "持有",
-            "price": 89.07,
+            "price": 88.93,
             "qty": 0,
-            "reason": "仍在创新高 +3.07%",
-            "now_pct": 3.07,
+            "reason": "仍在创新高 +2.90%",
+            "now_pct": 2.9,
             "scenario": "急涨中（创新高）"
           },
           {
@@ -6734,10 +6439,10 @@
             "name": "海康威视",
             "role": "candidate",
             "action": "持有",
-            "price": 36.32,
+            "price": 36.03,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": -0.41,
+            "now_pct": -1.21,
             "scenario": "中性整理"
           },
           {
@@ -6745,21 +6450,21 @@
             "name": "中兴通讯",
             "role": "candidate",
             "action": "持有",
-            "price": 35.25,
+            "price": 35.15,
             "qty": 0,
-            "reason": "低位震荡 -0.96%，等企稳",
-            "now_pct": -0.96,
-            "scenario": "低位震荡"
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.24,
+            "scenario": "中性整理"
           },
           {
             "code": "sh600941",
             "name": "中国移动",
             "role": "candidate",
             "action": "持有",
-            "price": 96.24,
+            "price": 96.03,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.02,
+            "now_pct": -0.2,
             "scenario": "中性整理"
           },
           {
@@ -6767,10 +6472,10 @@
             "name": "三花智控",
             "role": "candidate",
             "action": "持有",
-            "price": 39.22,
+            "price": 39.18,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.13,
+            "now_pct": 0.03,
             "scenario": "中性整理"
           },
           {
@@ -6778,10 +6483,10 @@
             "name": "美的集团",
             "role": "candidate",
             "action": "持有",
-            "price": 83.88,
+            "price": 84.16,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": -0.55,
+            "now_pct": -0.21,
             "scenario": "中性整理"
           },
           {
@@ -6789,10 +6494,10 @@
             "name": "拓普集团",
             "role": "candidate",
             "action": "持有",
-            "price": 50.61,
+            "price": 50.7,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.62,
+            "now_pct": 0.8,
             "scenario": "中性整理"
           },
           {
@@ -6800,21 +6505,21 @@
             "name": "科伦药业",
             "role": "candidate",
             "action": "持有",
-            "price": 46.52,
+            "price": 47.01,
             "qty": 0,
-            "reason": "从最低点反弹 2.00%",
-            "now_pct": -0.83,
-            "scenario": "急跌后反弹"
+            "reason": "低位震荡 0.21%，等企稳",
+            "now_pct": 0.21,
+            "scenario": "低位震荡"
           },
           {
             "code": "sh603259",
             "name": "药明康德",
             "role": "candidate",
             "action": "持有",
-            "price": 160.65,
+            "price": 163.87,
             "qty": 0,
-            "reason": "稳步上涨 +1.01%，MACD 红柱",
-            "now_pct": 1.01,
+            "reason": "稳步上涨 +1.82%，MACD 红柱",
+            "now_pct": 1.82,
             "scenario": "稳步上涨"
           },
           {
@@ -6822,10 +6527,10 @@
             "name": "片仔癀",
             "role": "candidate",
             "action": "持有",
-            "price": 135.5,
+            "price": 135.67,
             "qty": 0,
-            "reason": "低位震荡 0.31%，等企稳",
-            "now_pct": 0.31,
+            "reason": "低位震荡 0.44%，等企稳",
+            "now_pct": 0.44,
             "scenario": "低位震荡"
           },
           {
@@ -6855,10 +6560,10 @@
             "name": "长江电力",
             "role": "candidate",
             "action": "持有",
-            "price": 28.03,
+            "price": 28.02,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.04,
+            "now_pct": 0.0,
             "scenario": "中性整理"
           },
           {
@@ -6866,10 +6571,10 @@
             "name": "川投能源",
             "role": "candidate",
             "action": "持有",
-            "price": 15.11,
+            "price": 15.09,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": 0.33,
+            "now_pct": 0.2,
             "scenario": "中性整理"
           },
           {
@@ -6877,43 +6582,43 @@
             "name": "国电南瑞",
             "role": "candidate",
             "action": "持有",
-            "price": 23.78,
+            "price": 23.82,
             "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -1.16,
-            "scenario": "中性整理"
+            "reason": "低位震荡 -1.00%，等企稳",
+            "now_pct": -1.0,
+            "scenario": "低位震荡"
           },
           {
             "code": "sz002028",
             "name": "思源电气",
             "role": "candidate",
-            "action": "持有",
-            "price": 166.24,
+            "action": "卖出",
+            "price": 169.49,
             "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": 0.21,
-            "scenario": "中性整理"
+            "reason": "仍在创新高 +2.94%",
+            "now_pct": 2.94,
+            "scenario": "急涨中（创新高）"
           },
           {
             "code": "sh603606",
             "name": "东方电缆",
             "role": "candidate",
             "action": "持有",
-            "price": 38.62,
+            "price": 38.63,
             "qty": 0,
-            "reason": "分时中性，可继续观察",
-            "now_pct": -1.03,
-            "scenario": "中性整理"
+            "reason": "低位震荡 -1.00%，等企稳",
+            "now_pct": -1.0,
+            "scenario": "低位震荡"
           },
           {
             "code": "sh601985",
             "name": "中国核电",
             "role": "candidate",
             "action": "持有",
-            "price": 8.78,
+            "price": 8.81,
             "qty": 0,
             "reason": "分时中性，可继续观察",
-            "now_pct": -0.34,
+            "now_pct": 0.0,
             "scenario": "中性整理"
           },
           {
@@ -6921,477 +6626,772 @@
             "name": "立讯精密",
             "role": "candidate",
             "action": "持有",
-            "price": 57.01,
+            "price": 56.96,
             "qty": 0,
-            "reason": "高位震荡 +-0.59%，等方向",
-            "now_pct": -0.59,
+            "reason": "高位震荡 +-0.68%，等方向",
+            "now_pct": -0.68,
+            "scenario": "高位震荡"
+          }
+        ]
+      },
+      "10:00": {
+        "ts": "2026-08-13 11:06:46",
+        "rows": [
+          {
+            "code": "sh600183",
+            "name": "生益科技",
+            "role": "holding",
+            "action": "卖出",
+            "price": 147.35,
+            "qty": 100,
+            "reason": "日内最大涨幅 +6.05%，当前 +2.37%，已回落 3.69%",
+            "now_pct": 2.37,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sh600276",
+            "name": "恒瑞医药",
+            "role": "holding",
+            "action": "持有",
+            "price": 54.7,
+            "qty": 0,
+            "reason": "低位震荡 0.63%，等企稳",
+            "now_pct": 0.63,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh600206",
+            "name": "有研新材",
+            "role": "holding",
+            "action": "持有",
+            "price": 51.82,
+            "qty": 0,
+            "reason": "急跌 -2.13%，放量下杀",
+            "now_pct": -2.13,
+            "scenario": "急跌中"
+          },
+          {
+            "code": "sh600667",
+            "name": "太极实业",
+            "role": "holding",
+            "action": "持有",
+            "price": 23.88,
+            "qty": 0,
+            "reason": "盘中探底 -3.52% 后强势拉起，当前 +6.74%，多头动能强",
+            "now_pct": 6.74,
+            "scenario": "探底回升·强势多头"
+          },
+          {
+            "code": "sh600105",
+            "name": "永鼎股份",
+            "role": "holding",
+            "action": "持有",
+            "price": 41.91,
+            "qty": 0,
+            "reason": "日内最大涨幅 +4.95%，当前 +1.70%，已回落 3.25%",
+            "now_pct": 1.7,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sz002371",
+            "name": "北方华创",
+            "role": "candidate",
+            "action": "持有",
+            "price": 761.66,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.22,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh603501",
+            "name": "豪威集团",
+            "role": "candidate",
+            "action": "持有",
+            "price": 91.41,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.12,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh603986",
+            "name": "兆易创新",
+            "role": "candidate",
+            "action": "卖出",
+            "price": 427.28,
+            "qty": 0,
+            "reason": "日内最大涨幅 +4.54%，当前 +2.90%，已回落 1.64%",
+            "now_pct": 2.9,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sz002049",
+            "name": "紫光国微",
+            "role": "candidate",
+            "action": "持有",
+            "price": 67.38,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.15,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002463",
+            "name": "沪电股份",
+            "role": "candidate",
+            "action": "卖出",
+            "price": 125.18,
+            "qty": 0,
+            "reason": "日内最大涨幅 +4.86%，当前 +1.26%，已回落 3.60%",
+            "now_pct": 1.26,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sz002916",
+            "name": "深南电路",
+            "role": "candidate",
+            "action": "持有",
+            "price": 388.37,
+            "qty": 0,
+            "reason": "高位震荡 +0.67%，等方向",
+            "now_pct": 0.67,
+            "scenario": "高位震荡"
+          },
+          {
+            "code": "sz002938",
+            "name": "鹏鼎控股",
+            "role": "candidate",
+            "action": "持有",
+            "price": 99.5,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.49,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600487",
+            "name": "亨通光电",
+            "role": "candidate",
+            "action": "持有",
+            "price": 59.7,
+            "qty": 0,
+            "reason": "高位震荡 +0.67%，等方向",
+            "now_pct": 0.67,
+            "scenario": "高位震荡"
+          },
+          {
+            "code": "sh600522",
+            "name": "中天科技",
+            "role": "candidate",
+            "action": "持有",
+            "price": 34.47,
+            "qty": 0,
+            "reason": "稳步上涨 +1.52%，MACD 红柱",
+            "now_pct": 1.52,
+            "scenario": "稳步上涨"
+          },
+          {
+            "code": "sh601138",
+            "name": "工业富联",
+            "role": "candidate",
+            "action": "持有",
+            "price": 66.06,
+            "qty": 0,
+            "reason": "高位震荡 +0.70%，等方向",
+            "now_pct": 0.7,
+            "scenario": "高位震荡"
+          },
+          {
+            "code": "sh603019",
+            "name": "中科曙光",
+            "role": "candidate",
+            "action": "持有",
+            "price": 88.93,
+            "qty": 0,
+            "reason": "仍在创新高 +2.90%",
+            "now_pct": 2.9,
+            "scenario": "急涨中（创新高）"
+          },
+          {
+            "code": "sz002415",
+            "name": "海康威视",
+            "role": "candidate",
+            "action": "持有",
+            "price": 36.04,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.18,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz000063",
+            "name": "中兴通讯",
+            "role": "candidate",
+            "action": "持有",
+            "price": 35.15,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.24,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600941",
+            "name": "中国移动",
+            "role": "candidate",
+            "action": "持有",
+            "price": 96.01,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.22,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002050",
+            "name": "三花智控",
+            "role": "candidate",
+            "action": "持有",
+            "price": 39.18,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.03,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz000333",
+            "name": "美的集团",
+            "role": "candidate",
+            "action": "持有",
+            "price": 84.16,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.21,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh601689",
+            "name": "拓普集团",
+            "role": "candidate",
+            "action": "持有",
+            "price": 50.7,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.8,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002422",
+            "name": "科伦药业",
+            "role": "candidate",
+            "action": "持有",
+            "price": 47.01,
+            "qty": 0,
+            "reason": "低位震荡 0.21%，等企稳",
+            "now_pct": 0.21,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh603259",
+            "name": "药明康德",
+            "role": "candidate",
+            "action": "持有",
+            "price": 163.64,
+            "qty": 0,
+            "reason": "稳步上涨 +1.67%，MACD 红柱",
+            "now_pct": 1.67,
+            "scenario": "稳步上涨"
+          },
+          {
+            "code": "sh600436",
+            "name": "片仔癀",
+            "role": "candidate",
+            "action": "持有",
+            "price": 135.67,
+            "qty": 0,
+            "reason": "低位震荡 0.44%，等企稳",
+            "now_pct": 0.44,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh600905",
+            "name": "三峡能源",
+            "role": "candidate",
+            "action": "持有",
+            "price": 3.75,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.53,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600025",
+            "name": "华能水电",
+            "role": "candidate",
+            "action": "持有",
+            "price": 9.65,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.41,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600900",
+            "name": "长江电力",
+            "role": "candidate",
+            "action": "持有",
+            "price": 28.02,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.0,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600674",
+            "name": "川投能源",
+            "role": "candidate",
+            "action": "持有",
+            "price": 15.09,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.2,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600406",
+            "name": "国电南瑞",
+            "role": "candidate",
+            "action": "持有",
+            "price": 23.81,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.04,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002028",
+            "name": "思源电气",
+            "role": "candidate",
+            "action": "卖出",
+            "price": 169.49,
+            "qty": 0,
+            "reason": "仍在创新高 +2.94%",
+            "now_pct": 2.94,
+            "scenario": "急涨中（创新高）"
+          },
+          {
+            "code": "sh603606",
+            "name": "东方电缆",
+            "role": "candidate",
+            "action": "持有",
+            "price": 38.63,
+            "qty": 0,
+            "reason": "低位震荡 -1.00%，等企稳",
+            "now_pct": -1.0,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh601985",
+            "name": "中国核电",
+            "role": "candidate",
+            "action": "持有",
+            "price": 8.81,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.0,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002475",
+            "name": "立讯精密",
+            "role": "candidate",
+            "action": "持有",
+            "price": 56.96,
+            "qty": 0,
+            "reason": "高位震荡 +-0.68%，等方向",
+            "now_pct": -0.68,
+            "scenario": "高位震荡"
+          }
+        ]
+      },
+      "10:30": {
+        "ts": "2026-08-13 11:06:47",
+        "rows": [
+          {
+            "code": "sh600183",
+            "name": "生益科技",
+            "role": "holding",
+            "action": "卖出",
+            "price": 147.35,
+            "qty": 100,
+            "reason": "日内最大涨幅 +6.05%，当前 +2.37%，已回落 3.69%",
+            "now_pct": 2.37,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sh600276",
+            "name": "恒瑞医药",
+            "role": "holding",
+            "action": "持有",
+            "price": 54.7,
+            "qty": 0,
+            "reason": "低位震荡 0.63%，等企稳",
+            "now_pct": 0.63,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh600206",
+            "name": "有研新材",
+            "role": "holding",
+            "action": "持有",
+            "price": 51.82,
+            "qty": 0,
+            "reason": "急跌 -2.13%，放量下杀",
+            "now_pct": -2.13,
+            "scenario": "急跌中"
+          },
+          {
+            "code": "sh600667",
+            "name": "太极实业",
+            "role": "holding",
+            "action": "持有",
+            "price": 23.88,
+            "qty": 0,
+            "reason": "盘中探底 -3.52% 后强势拉起，当前 +6.74%，多头动能强",
+            "now_pct": 6.74,
+            "scenario": "探底回升·强势多头"
+          },
+          {
+            "code": "sh600105",
+            "name": "永鼎股份",
+            "role": "holding",
+            "action": "持有",
+            "price": 41.91,
+            "qty": 0,
+            "reason": "日内最大涨幅 +4.95%，当前 +1.70%，已回落 3.25%",
+            "now_pct": 1.7,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sz002371",
+            "name": "北方华创",
+            "role": "candidate",
+            "action": "持有",
+            "price": 761.67,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.22,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh603501",
+            "name": "豪威集团",
+            "role": "candidate",
+            "action": "持有",
+            "price": 91.41,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.12,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh603986",
+            "name": "兆易创新",
+            "role": "candidate",
+            "action": "卖出",
+            "price": 427.28,
+            "qty": 0,
+            "reason": "日内最大涨幅 +4.54%，当前 +2.90%，已回落 1.64%",
+            "now_pct": 2.9,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sz002049",
+            "name": "紫光国微",
+            "role": "candidate",
+            "action": "持有",
+            "price": 67.38,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.15,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002463",
+            "name": "沪电股份",
+            "role": "candidate",
+            "action": "卖出",
+            "price": 125.2,
+            "qty": 0,
+            "reason": "日内最大涨幅 +4.86%，当前 +1.28%，已回落 3.59%",
+            "now_pct": 1.28,
+            "scenario": "急涨后回落"
+          },
+          {
+            "code": "sz002916",
+            "name": "深南电路",
+            "role": "candidate",
+            "action": "持有",
+            "price": 388.33,
+            "qty": 0,
+            "reason": "高位震荡 +0.66%，等方向",
+            "now_pct": 0.66,
+            "scenario": "高位震荡"
+          },
+          {
+            "code": "sz002938",
+            "name": "鹏鼎控股",
+            "role": "candidate",
+            "action": "持有",
+            "price": 99.58,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.41,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600487",
+            "name": "亨通光电",
+            "role": "candidate",
+            "action": "持有",
+            "price": 59.7,
+            "qty": 0,
+            "reason": "高位震荡 +0.67%，等方向",
+            "now_pct": 0.67,
+            "scenario": "高位震荡"
+          },
+          {
+            "code": "sh600522",
+            "name": "中天科技",
+            "role": "candidate",
+            "action": "持有",
+            "price": 34.47,
+            "qty": 0,
+            "reason": "稳步上涨 +1.52%，MACD 红柱",
+            "now_pct": 1.52,
+            "scenario": "稳步上涨"
+          },
+          {
+            "code": "sh601138",
+            "name": "工业富联",
+            "role": "candidate",
+            "action": "持有",
+            "price": 66.06,
+            "qty": 0,
+            "reason": "高位震荡 +0.70%，等方向",
+            "now_pct": 0.7,
+            "scenario": "高位震荡"
+          },
+          {
+            "code": "sh603019",
+            "name": "中科曙光",
+            "role": "candidate",
+            "action": "持有",
+            "price": 88.93,
+            "qty": 0,
+            "reason": "仍在创新高 +2.90%",
+            "now_pct": 2.9,
+            "scenario": "急涨中（创新高）"
+          },
+          {
+            "code": "sz002415",
+            "name": "海康威视",
+            "role": "candidate",
+            "action": "持有",
+            "price": 36.03,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.21,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz000063",
+            "name": "中兴通讯",
+            "role": "candidate",
+            "action": "持有",
+            "price": 35.15,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -1.24,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600941",
+            "name": "中国移动",
+            "role": "candidate",
+            "action": "持有",
+            "price": 96.03,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.2,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002050",
+            "name": "三花智控",
+            "role": "candidate",
+            "action": "持有",
+            "price": 39.18,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.03,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz000333",
+            "name": "美的集团",
+            "role": "candidate",
+            "action": "持有",
+            "price": 84.13,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.25,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh601689",
+            "name": "拓普集团",
+            "role": "candidate",
+            "action": "持有",
+            "price": 50.7,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.8,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002422",
+            "name": "科伦药业",
+            "role": "candidate",
+            "action": "持有",
+            "price": 47.01,
+            "qty": 0,
+            "reason": "低位震荡 0.21%，等企稳",
+            "now_pct": 0.21,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh603259",
+            "name": "药明康德",
+            "role": "candidate",
+            "action": "持有",
+            "price": 163.87,
+            "qty": 0,
+            "reason": "稳步上涨 +1.82%，MACD 红柱",
+            "now_pct": 1.82,
+            "scenario": "稳步上涨"
+          },
+          {
+            "code": "sh600436",
+            "name": "片仔癀",
+            "role": "candidate",
+            "action": "持有",
+            "price": 135.67,
+            "qty": 0,
+            "reason": "低位震荡 0.44%，等企稳",
+            "now_pct": 0.44,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh600905",
+            "name": "三峡能源",
+            "role": "candidate",
+            "action": "持有",
+            "price": 3.75,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.53,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600025",
+            "name": "华能水电",
+            "role": "candidate",
+            "action": "持有",
+            "price": 9.65,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": -0.41,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600900",
+            "name": "长江电力",
+            "role": "candidate",
+            "action": "持有",
+            "price": 28.02,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.0,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600674",
+            "name": "川投能源",
+            "role": "candidate",
+            "action": "持有",
+            "price": 15.09,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.2,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sh600406",
+            "name": "国电南瑞",
+            "role": "candidate",
+            "action": "持有",
+            "price": 23.82,
+            "qty": 0,
+            "reason": "低位震荡 -1.00%，等企稳",
+            "now_pct": -1.0,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sz002028",
+            "name": "思源电气",
+            "role": "candidate",
+            "action": "卖出",
+            "price": 169.49,
+            "qty": 0,
+            "reason": "仍在创新高 +2.94%",
+            "now_pct": 2.94,
+            "scenario": "急涨中（创新高）"
+          },
+          {
+            "code": "sh603606",
+            "name": "东方电缆",
+            "role": "candidate",
+            "action": "持有",
+            "price": 38.63,
+            "qty": 0,
+            "reason": "低位震荡 -1.00%，等企稳",
+            "now_pct": -1.0,
+            "scenario": "低位震荡"
+          },
+          {
+            "code": "sh601985",
+            "name": "中国核电",
+            "role": "candidate",
+            "action": "持有",
+            "price": 8.81,
+            "qty": 0,
+            "reason": "分时中性，可继续观察",
+            "now_pct": 0.0,
+            "scenario": "中性整理"
+          },
+          {
+            "code": "sz002475",
+            "name": "立讯精密",
+            "role": "candidate",
+            "action": "持有",
+            "price": 56.95,
+            "qty": 0,
+            "reason": "高位震荡 +-0.70%，等方向",
+            "now_pct": -0.7,
             "scenario": "高位震荡"
           }
         ]
       }
-    },
-    "open": {
-      "generated_at": "2026-08-13 09:59:56",
-      "trend": "up",
-      "confidence": 67,
-      "market_note": "偏多 4 只 / 偏空 1 只（持仓+评级A候选），综合集合竞价与均线信号。建议按下方优先级排序，<b style='color:#2b8a3e'>买入</b>排最前（预期空间最大），<b style='color:#c92a2a'>卖出/减仓</b>排最后（风险高需处理）。",
-      "suggestions": [
-        {
-          "code": "sz002049",
-          "name": "紫光国微",
-          "role": "candidate",
-          "action": "买入",
-          "price": 67.53,
-          "best_buy": 62.16,
-          "qty": 200,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "半导体芯片",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 2.2,
-            "basis": [
-              "高开 +0.8%（集合竞价偏多）",
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 4
-        },
-        {
-          "code": "sz002916",
-          "name": "深南电路",
-          "role": "candidate",
-          "action": "买入",
-          "price": 393.03,
-          "best_buy": 286.76,
-          "qty": 0,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "PCB",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 2.2,
-            "basis": [
-              "高开 +2.4%（集合竞价偏多）",
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 6
-        },
-        {
-          "code": "sz002050",
-          "name": "三花智控",
-          "role": "candidate",
-          "action": "买入",
-          "price": 39.28,
-          "best_buy": 34.47,
-          "qty": 300,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "机器人",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.7,
-            "basis": [
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 2
-        },
-        {
-          "code": "sh601689",
-          "name": "拓普集团",
-          "role": "candidate",
-          "action": "买入",
-          "price": 50.5,
-          "best_buy": 43.91,
-          "qty": 200,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "机器人",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.7,
-            "basis": [
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 2
-        },
-        {
-          "code": "sh603259",
-          "name": "药明康德",
-          "role": "candidate",
-          "action": "买入",
-          "price": 161.83,
-          "best_buy": 107.16,
-          "qty": 0,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "CXO",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.7,
-            "basis": [
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 3
-        },
-        {
-          "code": "sz002028",
-          "name": "思源电气",
-          "role": "candidate",
-          "action": "买入",
-          "price": 166.61,
-          "best_buy": 147.91,
-          "qty": 0,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "特高压电网",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.7,
-            "basis": [
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 4
-        },
-        {
-          "code": "sz002371",
-          "name": "北方华创",
-          "role": "candidate",
-          "action": "买入",
-          "price": 758.62,
-          "best_buy": 647.22,
-          "qty": 0,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "半导体设备",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +1.1%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 3
-        },
-        {
-          "code": "sh603986",
-          "name": "兆易创新",
-          "role": "candidate",
-          "action": "买入",
-          "price": 422.54,
-          "best_buy": 325.57,
-          "qty": 0,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "半导体芯片",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +2.9%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 4
-        },
-        {
-          "code": "sz002463",
-          "name": "沪电股份",
-          "role": "candidate",
-          "action": "买入",
-          "price": 126.85,
-          "best_buy": 96.51,
-          "qty": 100,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "PCB",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +1.5%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 3
-        },
-        {
-          "code": "sh600487",
-          "name": "亨通光电",
-          "role": "candidate",
-          "action": "买入",
-          "price": 59.25,
-          "best_buy": 45.28,
-          "qty": 200,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "光纤",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +1.4%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 3
-        },
-        {
-          "code": "sh600522",
-          "name": "中天科技",
-          "role": "candidate",
-          "action": "买入",
-          "price": 33.96,
-          "best_buy": 27.3,
-          "qty": 400,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "光纤",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +1.4%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 3
-        },
-        {
-          "code": "sh601138",
-          "name": "工业富联",
-          "role": "candidate",
-          "action": "买入",
-          "price": 66.31,
-          "best_buy": 52.55,
-          "qty": 200,
-          "reason": "多头初现、价在MA5下、MA5>MA10多头",
-          "track": "AI算力",
-          "grade": "A",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.0,
-            "basis": [
-              "高开 +3.6%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 1
-        },
-        {
-          "code": "sz000063",
-          "name": "中兴通讯",
-          "role": "candidate",
-          "action": "买入",
-          "price": 35.08,
-          "best_buy": 32.04,
-          "qty": 400,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "通信设备",
-          "grade": "A",
-          "forecast": {
-            "trend": "震荡",
-            "pct": 0.5,
-            "basis": [
-              "低开 -0.8%（集合竞价偏空）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 2
-        },
-        {
-          "code": "sz002475",
-          "name": "立讯精密",
-          "role": "candidate",
-          "action": "买入",
-          "price": 57.06,
-          "best_buy": 53.18,
-          "qty": 200,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "消费电子",
-          "grade": "A",
-          "forecast": {
-            "trend": "震荡",
-            "pct": 0.5,
-            "basis": [
-              "高开 +1.1%（集合竞价偏多）",
-              "价跌破MA20 偏空"
-            ]
-          },
-          "score": 4
-        },
-        {
-          "code": "sz002422",
-          "name": "科伦药业",
-          "role": "candidate",
-          "action": "买入",
-          "price": 47.19,
-          "best_buy": 40.26,
-          "qty": 300,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "创新药",
-          "grade": "A",
-          "forecast": {
-            "trend": "震荡",
-            "pct": 0.0,
-            "basis": [
-              "低开 -1.5%（集合竞价偏空）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 1
-        },
-        {
-          "code": "sh603501",
-          "name": "豪威集团",
-          "role": "candidate",
-          "action": "买入",
-          "price": 91.49,
-          "best_buy": 82.08,
-          "qty": 100,
-          "reason": "多头初现、价在MA5上、MA5>MA10多头",
-          "track": "半导体芯片",
-          "grade": "A",
-          "forecast": {
-            "trend": "震荡",
-            "pct": -0.5,
-            "basis": [
-              "价跌破MA20 偏空"
-            ]
-          },
-          "score": 1
-        },
-        {
-          "code": "sh603606",
-          "name": "东方电缆",
-          "role": "candidate",
-          "action": "买入",
-          "price": 38.77,
-          "best_buy": 37.29,
-          "qty": 300,
-          "reason": "多头初现、价在MA5上、MA5<MA10",
-          "track": "特高压电网",
-          "grade": "A",
-          "forecast": {
-            "trend": "震荡",
-            "pct": -0.5,
-            "basis": [
-              "价跌破MA20 偏空"
-            ]
-          },
-          "score": 1
-        },
-        {
-          "code": "sh600206",
-          "name": "有研新材",
-          "role": "holding",
-          "action": "持有",
-          "price": 52.08,
-          "best_buy": 30.77,
-          "qty": 0,
-          "reason": "多头排列：价在MA5上、MA5>MA10多头",
-          "track": "",
-          "grade": "",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 2.2,
-            "basis": [
-              "高开 +2.0%（集合竞价偏多）",
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 4
-        },
-        {
-          "code": "sh600276",
-          "name": "恒瑞医药",
-          "role": "holding",
-          "action": "持有",
-          "price": 54.67,
-          "best_buy": 52.25,
-          "qty": 0,
-          "reason": "震荡：价在MA5上、MA5>MA10多头",
-          "track": "",
-          "grade": "",
-          "forecast": {
-            "trend": "震荡",
-            "pct": 0.0,
-            "basis": [
-              "低开 -0.6%（集合竞价偏空）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": -1
-        },
-        {
-          "code": "sh600667",
-          "name": "太极实业",
-          "role": "holding",
-          "action": "卖出",
-          "price": 22.73,
-          "best_buy": 14.19,
-          "qty": 100,
-          "reason": "短线超买，建议止盈1/3：价在MA5上、MA5>MA10多头",
-          "track": "",
-          "grade": "",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.7,
-            "basis": [
-              "价>MA5>MA10>MA20 多头"
-            ]
-          },
-          "score": 5
-        },
-        {
-          "code": "sh600183",
-          "name": "生益科技",
-          "role": "holding",
-          "action": "卖出",
-          "price": 148.72,
-          "best_buy": 97.15,
-          "qty": 100,
-          "reason": "短线超买，建议止盈1/3：价在MA5上、MA5>MA10多头",
-          "track": "",
-          "grade": "",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +2.0%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 4
-        },
-        {
-          "code": "sh600105",
-          "name": "永鼎股份",
-          "role": "holding",
-          "action": "卖出",
-          "price": 41.56,
-          "best_buy": 29.07,
-          "qty": 100,
-          "reason": "短线超买，建议止盈1/3：价在MA5上、MA5>MA10多头",
-          "track": "",
-          "grade": "",
-          "forecast": {
-            "trend": "偏多",
-            "pct": 1.5,
-            "basis": [
-              "高开 +4.7%（集合竞价偏多）",
-              "价站上MA20 偏多"
-            ]
-          },
-          "score": 4
-        }
-      ]
     }
   }
 }

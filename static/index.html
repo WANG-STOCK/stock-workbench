@@ -30,7 +30,7 @@
       <span class="status">
         <span class="badge" id="marketBadge">A股 · 沪深</span>
         <span class="badge" id="tdxStatus">数据源：检测中…</span>
-        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r10</span>
+        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r11</span>
         <span class="badge clock" id="clock">--:--:--</span>
       </span>
     </div>
@@ -115,6 +115,16 @@
           <div class="sub" style="font-size:11px;color:var(--muted);margin-top:2px">
             数量：点 <b>+100 / +500</b> 一键加 100/500 股（不够 1 手自动按整手算），
             点 <b>−100 / −500</b> 减；数量不小于 0。买入：股数↑、成本按均价重算、现金↓；卖出：股数↓、现金↑。
+          </div>
+          <!-- 今日已成交明细（刷新不丢） -->
+          <div class="trade-log" id="tradeLog">
+            <div class="tl-head">📜 今日已成交 · <span id="tlSummary" class="tl-summary">--</span></div>
+            <table class="tl-table" id="tradeLogTable">
+              <thead><tr><th>时间</th><th>代码</th><th>买/卖</th><th class="r">数量</th><th class="r">价格</th><th class="r">金额</th><th class="r">现金结余</th></tr></thead>
+              <tbody id="tradeLogBody">
+                <tr><td colspan="7" class="muted-cell">暂无成交记录</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>

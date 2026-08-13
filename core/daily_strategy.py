@@ -203,6 +203,48 @@ def _intraday_advice(code, q, period="5m"):
     return intraday_mod.intraday_advice(q or {}, bars or [], prev_close)
 
 
+def _today_good_buy(code, price):
+    """当日能到的最佳买价：取今日已出现的最低价略上方（+0.3%），最多 -1.5% 偏离现价。
+
+    王总反馈：紫光国微全天没到过 62，但推荐了 62 买——原来是拿几日支撑。
+    改用当日实时分时：取今日已走出的 low 略加一档，确保今天就能成交。
+    若分时拉不到，退到「现价 -1%」。
+    """
+    if not price or price <= 0:
+        return None
+    try:
+        bars = ds.get_kline(code, "5m", 60)
+    except Exception:
+        bars = []
+    today_low = None
+    today_high = None
+    today_open = None
+    if bars:
+        today = bars[-1].get("date")
+        today_bars = [b for b in bars if (not today or b.get("date") == today)]
+        if not today_bars:
+            today_bars = bars
+        if today_bars:
+            today_open = today_bars[0]["open"]
+            today_low = min(b["low"] for b in today_bars)
+            today_high = max(b["high"] for b in today_bars)
+    # 候选 1：今日已出现的最低价 × 1.003（再上一档确保能成交）
+    cands = []
+    if today_low:
+        cands.append(round(today_low * 1.003, 2))
+    # 候选 2：今开 × 0.99（低开后下杀场景）
+    if today_open:
+        cands.append(round(today_open * 0.99, 2))
+    # 候选 3：现价 × 0.99（兜底：等回踩 1% 才买）
+    cands.append(round(price * 0.99, 2))
+    # 选最低（确保当天一定到得了），但不能低于「现价 × 0.985」（避免接刀子）
+    if not cands:
+        return None
+    floor = round(price * 0.985, 2)
+    buy = max(min(cands), floor)
+    return round(buy, 2)
+
+
 def _map_action(adv_action):
     a = adv_action or ""
     if "买" in a:
@@ -258,9 +300,11 @@ def open_judgment(date=None):
         price = round(price, 2) if price else None
         qty = size_sell(held) if action in ("卖出", "减仓") else 0
         forecast = _quick_forecast(bars, q, score, sig)
-        # 最佳购买价：基于技术面支撑（BOLL 下轨 / 近期低点）的低吸区
-        _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
-        best_buy = round(_pl["buy"], 2) if (_pl and _pl.get("buy")) else None
+        # 最佳购买价：基于当日分时已出现低点，确保今天能到的好买价（不要几日低点）
+        best_buy = _today_good_buy(code, price)
+        if best_buy is None:
+            _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
+            best_buy = round(_pl["buy"], 2) if (_pl and _pl.get("buy")) else None
         sugg.append({
             "code": code, "name": name, "role": "holding",
             "action": action, "price": price, "best_buy": best_buy, "qty": qty,
@@ -282,9 +326,11 @@ def open_judgment(date=None):
         qty = size_buy(price) if price else 0
         reason = ("超卖反弹" if os_ else "多头初现") + "、" + "、".join(sigs[:2])
         forecast = _quick_forecast(bars, q, score, sig)
-        # 最佳购买价：基于技术面支撑（BOLL 下轨 / 近期低点）的低吸区
-        _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
-        best_buy = round(_pl["buy"], 2) if (_pl and _pl.get("buy")) else None
+        # 最佳购买价：基于当日分时已出现低点，确保今天能到的好买价（不要几日低点）
+        best_buy = _today_good_buy(code, price)
+        if best_buy is None:
+            _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
+            best_buy = round(_pl["buy"], 2) if (_pl and _pl.get("buy")) else None
         sugg.append({
             "code": code, "name": name, "role": "candidate",
             "action": action, "price": price, "best_buy": best_buy, "qty": qty,

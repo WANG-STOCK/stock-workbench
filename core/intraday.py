@@ -135,6 +135,10 @@ def _scenario(quote: Dict, indicators: Dict, bars_5m: List[Dict], prev_close: fl
     low_pct = (day_low - prev_close) / prev_close * 100
     pullback = (day_high - cur) / prev_close * 100 if cur < day_high else 0
 
+    # 探底回升·强势多头：盘中曾深跌（≤-2%），当前强势收回并大涨（≥+3%）
+    #   —— 即"早盘下杀→午后拉起"，属强反转日，应看多而非止盈
+    if low_pct <= -2.0 and cur_pct >= 3.0:
+        return "探底回升·强势多头"
     # 急涨后回落：最大涨幅>=3% 且 已回落>=0.5%
     if high_pct >= 3.0 and pullback >= 0.5 and cur_pct >= 1.0:
         return "急涨后回落"
@@ -191,7 +195,28 @@ def _decide(scenario: str, quote: Dict, indicators: Dict, prev_close: float) -> 
     stop_loss = None
     action_color = "#1971c2"  # 默认蓝
 
-    if scenario == "急涨后回落":
+    if scenario == "探底回升·强势多头":
+        # 王总反馈：太极这种"早上低点→现在涨很多"的强反转日，不该给"立即卖出"
+        #   —— 这是早盘下杀后强势拉起的多头，应看多 / 回踩可加仓
+        reasons.append(f"盘中探底 {low_pct:.2f}% 后强势拉起，当前 +{cur_pct:.2f}%，多头动能强")
+        action = "持有看多"
+        urgency = "看后续"
+        action_color = "#2b8a3e"
+        if (j is not None and 60 < (j or 0) < 92) and macd > 0 and not kdj_overbought and vol_ratio >= 1.0:
+            action = "可回踩加仓"
+            urgency = "回踩时"
+            target_price = round(cur * 0.985, 2)
+            target_type = "加仓"
+            stop_loss = round(cur * 0.95, 2)
+            reasons.append("动能未竭（KDJ 未极超买、MACD 红柱），回踩可加仓追涨")
+        elif kdj_overbought and (j is not None and j >= 95):
+            action = "持有看多"
+            urgency = "看后续"
+            reasons.append("但 KDJ 已极超买，防回落，不追高（回踩买点再加）")
+        else:
+            action = "持有看多"
+        action_color = "#2b8a3e"
+    elif scenario == "急涨后回落":
         # 主要卖出场景：止盈
         reasons.append(f"日内最大涨幅 +{high_pct:.2f}%，当前 +{cur_pct:.2f}%，已回落 {pullback:.2f}%")
         if (j is not None and j >= 95) or (kdj_overbought and kdj_turn_down):
@@ -247,7 +272,16 @@ def _decide(scenario: str, quote: Dict, indicators: Dict, prev_close: float) -> 
         action = "持有观察"
         urgency = "看后续"
         reasons.append(f"稳步上涨 +{cur_pct:.2f}%，MACD 红柱")
-        if macd_red_shrinking and vol_ratio < 1.0:
+        # 新增（王总反馈）：强势拉升但未极超买 → 给出"可加仓追涨"
+        if (j is not None and 60 < (j or 0) < 95) and macd > 0 and vol_ratio >= 1.2 and cur_pct >= 1.5 and not macd_red_shrinking:
+            action = "可加仓追涨"
+            urgency = "立即"
+            target_price = round(cur * 1.012, 2)
+            target_type = "追涨"
+            stop_loss = round(ma5 * 0.995, 2)
+            reasons.append(f"强势拉升 +{cur_pct:.2f}%（KDJ J={j:.0f}）、放量（量比 {vol_ratio:.2f}）、MACD 仍扩张")
+            action_color = "#2b8a3e"
+        elif macd_red_shrinking and vol_ratio < 1.0:
             action = "分批止盈"
             urgency = "5分钟内"
             target_price = round(cur * 1.008, 2)
@@ -255,7 +289,7 @@ def _decide(scenario: str, quote: Dict, indicators: Dict, prev_close: float) -> 
             stop_loss = round(ma5 * 0.99, 2)
             reasons.append(f"MACD 红柱缩短 + 缩量（量比 {vol_ratio:.2f}）")
             action_color = "#e8590c"
-        action_color = "#1971c2"
+        action_color = "#2b8a3e" if action == "可加仓追涨" else "#1971c2"
     elif scenario == "急跌中":
         action = "暂不加仓"
         urgency = "立即"

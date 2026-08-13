@@ -8,3 +8,9 @@ data/watchlist.json
 data/review.json
 .vscode/
 .workbuddy/
+_srv.err
+_srv.log
+data/_scheduler_heartbeat.json
+data/trade_log.json
+static/trade_log.json
+
