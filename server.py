@@ -501,6 +501,7 @@ def _build_sector_detail(regime):
         "sector": regime.get("sector"),
         "trend_pct": tpct,
         "fund_net": fn,
+        "fund_proxy": regime.get("fund_proxy", False),
         "up_ratio": up_ratio,
         "state": state,
     }
@@ -681,7 +682,8 @@ def _advise_position(code, capital):
             "sector": regime.get("sector"),
             "track": regime.get("track"),
             "trend_pct": regime.get("trend_pct"),       # 当日细分赛道平均涨跌%（正值涨/负值跌）
-            "fund_net": regime.get("fund_net"),         # 行业大类（科技/医药/电力）当日资金净流入（亿元）
+            "fund_net": regime.get("fund_net"),         # 行业大类（科技/医药/电力）当日资金净流入（亿元，本地为估算）
+            "fund_proxy": regime.get("fund_proxy", False),  # True=本地估算(东财不可用时)
             "up_ratio": regime.get("up_ratio"),         # 赛道成分股上涨占比（0~1）
         }
     # ===== 今日预估（涨/跌/震荡 + pct + 依据）=====
@@ -1834,6 +1836,7 @@ class Handler(BaseHTTPRequestHandler):
                     "news_score": 50,
                     "combined": combined,
                     "price": price,
+                    "change_pct": (rt.get("change_pct") if rt else None),
                     "buy_price": buy_price,
                     "sell_price": sell_price,
                     "ma5": cl["ma5"] if cl else None,

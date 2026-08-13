@@ -14,6 +14,7 @@ from datetime import datetime
 
 import core.data_source as ds
 import core.intraday as intraday_mod
+import core.signals as sig
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)
@@ -253,9 +254,12 @@ def open_judgment(date=None):
         price = round(price, 2) if price else None
         qty = size_sell(held) if action in ("卖出", "减仓") else 0
         forecast = _quick_forecast(bars, q, score, sig)
+        # 最佳购买价：基于技术面支撑（BOLL 下轨 / 近期低点）的低吸区
+        _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
+        best_buy = round(_pl["buy"], 2) if (_pl and _pl.get("buy")) else None
         sugg.append({
             "code": code, "name": name, "role": "holding",
-            "action": action, "price": price, "qty": qty,
+            "action": action, "price": price, "best_buy": best_buy, "qty": qty,
             "reason": reason, "track": p.get("track", ""), "grade": p.get("grade", ""),
             "forecast": forecast, "score": score,
         })
@@ -274,9 +278,12 @@ def open_judgment(date=None):
         qty = size_buy(price) if price else 0
         reason = ("超卖反弹" if os_ else "多头初现") + "、" + "、".join(sig[:2])
         forecast = _quick_forecast(bars, q, score, sig)
+        # 最佳购买价：基于技术面支撑（BOLL 下轨 / 近期低点）的低吸区
+        _pl = sig.price_levels(bars) if (bars and len(bars) >= 20) else None
+        best_buy = round(_pl["buy"], 2) if (_pl and _pl.get("buy")) else None
         sugg.append({
             "code": code, "name": name, "role": "candidate",
-            "action": action, "price": price, "qty": qty,
+            "action": action, "price": price, "best_buy": best_buy, "qty": qty,
             "reason": reason, "track": p.get("track", ""), "grade": p.get("grade", ""),
             "forecast": forecast, "score": score,
         })
@@ -469,11 +476,15 @@ def generate_review(date=None):
         name = s.get("name", code)
         action = s.get("action")
         price = s.get("price")
+        best_buy = s.get("best_buy")
         qty = s.get("qty") or 0
         hi, lo, cl = hlc.get(code, (None, None, None))
+        # 推荐购买价：优先用开盘推荐的 best_buy（技术面支撑低吸区），否则回退开盘实时价
+        rec_buy = best_buy if (best_buy and best_buy > 0) else price
         hit = None
         pnl = None
         correct = None
+        profit = None  # 是否盈利（仅买入类动作：按推荐买价 vs 尾盘收盘判断）
         # 建议价相对最高/最低/收盘的偏差（用于诊断建议价是否合理）
         dev_hi = None
         dev_lo = None
@@ -484,20 +495,24 @@ def generate_review(date=None):
             dev_hi = round((price - hi) / hi * 100, 2)
         if price and lo:
             dev_lo = round((price - lo) / lo * 100, 2)
-        if price and cl is not None:
-            if action == "买入":
-                hit = (lo is not None and lo <= price)
-                pnl = round((cl - price) * qty, 2) if qty else None
-                correct = cl > price
-            elif action == "卖出":
-                hit = (hi is not None and hi >= price)
-                pnl = round((price - cl) * qty, 2) if qty else None
-                correct = cl < price
+        if cl is not None:
+            if action in ("买入", "强烈买入"):
+                # 推荐买价当天是否被触及（当日最低 ≤ 推荐买价）
+                hit = (lo is not None and rec_buy is not None and lo <= rec_buy)
+                # 若按开盘推荐价买入，尾盘结算是否盈利
+                pnl = round((cl - rec_buy) * qty, 2) if (qty and rec_buy) else None
+                correct = cl > rec_buy if rec_buy else None
+                profit = correct
+            elif action in ("卖出", "减仓"):
+                hit = (hi is not None and price is not None and hi >= price)
+                pnl = round((price - cl) * qty, 2) if (qty and price) else None
+                correct = cl < price if price else None
         rows.append({
             "code": code, "name": name, "role": s.get("role"),
-            "source": src, "action": action, "price": price, "qty": qty,
+            "source": src, "action": action, "price": price, "best_buy": best_buy,
+            "rec_buy": rec_buy, "qty": qty,
             "high": hi, "low": lo, "close": cl,
-            "hit": hit, "pnl": pnl, "correct": correct,
+            "hit": hit, "pnl": pnl, "correct": correct, "profit": profit,
             "dev_hi_pct": dev_hi, "dev_lo_pct": dev_lo, "dev_close_pct": dev_close,
         })
 
@@ -607,7 +622,12 @@ def run_daily(mode="auto", t=None, date=None):
     now = _now_min()
 
     if mode in ("auto", "open") and trading:
-        if "open" not in day and now >= 9 * 60 + 25:
+        op = day.get("open")
+        need_regen = ("open" not in day and now >= 9 * 60 + 25)
+        # 兼容旧缓存：已生成的开盘判断若缺 best_buy（新版的每日策略需要），回填一次
+        if not need_regen and op and op.get("suggestions") and "best_buy" not in op["suggestions"][0]:
+            need_regen = True
+        if need_regen:
             day["open"] = open_judgment(date)
             _save(d)
 

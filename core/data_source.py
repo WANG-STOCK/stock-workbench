@@ -323,6 +323,8 @@ def fetch_realtime(codes):
                 "amplitude": _to_float(p[43]),
                 "turnover": _to_float(p[38]),
                 "pe": _to_float(p[39]),
+                "total_mv": _to_float(p[44]) if len(p) > 44 else None,   # 总市值（单位可能 元/万元/亿，sector_flow 内统一换算成 亿）
+                "circ_mv": _to_float(p[45]) if len(p) > 45 else None,    # 流通市值
             }
         except (ValueError, IndexError):
             continue

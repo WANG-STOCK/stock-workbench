@@ -35,6 +35,7 @@
     current: { code: "", name: "", period: "daily" },
     watchlist: [],
     watchMeta: {},   // code -> {price, change, change_pct, action, score}
+    candidates: [],  // 自动优选（候选扫描）结果
     positions: [],   // [{code, name, shares, cost}]
     posAdvice: [],   // 批量持仓建议（买/卖/不动 + 操作价 + 操作量 + 行业强弱）
     lastKline: null,
@@ -227,25 +228,26 @@
     const el = document.getElementById("aiAdviceBody");
     if (!el) return;
     if (!positions || !positions.length) {
-      el.innerHTML = '<tr><td colspan="6" class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</td></tr>';
+      el.innerHTML = '<div class="ai-empty">暂无持仓，添加一行后这里会出现加减仓建议。</div>';
       return;
     }
     // 按评分绝对值降序：最强信号（最值得操作）在最上面
     const sorted = positions.slice().sort((a, b) => Math.abs(+(b.advice_score || 0)) - Math.abs(+(a.advice_score || 0)));
-    el.innerHTML = sorted.map(function (p) { return _aiRowHtml(p); }).join("");
+    el.innerHTML = sorted.map(function (p) { return _aiCardHtml(p); }).join("");
   }
 
-  // 单只股票 → 一行 7 个 <td>。底色由 <tr class="ai-row-buy/sell/hold"> 控制（table-mode 下 CSS 直接吃 tr）。
-  function _aiRowHtml(p) {
+  // 单只股票 → 一张卡片（买卖底色更醒目，强烈买入高亮）。卡片纵向铺满中栏，避免稀疏表格显得空。
+  function _aiCardHtml(p) {
     const action = p.action || "不动";
     const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
     const score = p.advice_score != null ? p.advice_score : 0;
-    const rowCls = action === "买入" ? "ai-row-buy" : action === "卖出" ? "ai-row-sell" : "ai-row-hold";
+    const cls = action === "买入" || action === "强烈买入" ? "ai-buy" : action === "卖出" ? "ai-sell" : "ai-hold";
+    const strong = action === "强烈买入" || action === "买入";
 
-    // 列 1：股票 + 现价
-    const priceHtml = p.price != null ? ('<div class="ai-c-price">现价 <b>' + fmt(p.price, 2) + '</b>' + (p.change_pct != null ? ' <span class="' + (p.change_pct >= 0 ? 'up' : 'down') + '">' + signed(p.change_pct, 2) + '%</span>' : '') + '</div>') : '';
+    // 现价 + 涨跌
+    const priceHtml = p.price != null ? ('<span class="ai-c-price"><b>' + fmt(p.price, 2) + '</b>' + (p.change_pct != null ? ' <span class="' + (p.change_pct >= 0 ? 'up' : 'down') + '">' + signed(p.change_pct, 2) + '%</span>' : '') + '</span>') : '';
 
-    // 列 4：今日预估（forecast）
+    // 今日预估（forecast）+ 合并板块信息（涨跌比例 + 主力资金流入/流出金额）
     const fc = p.forecast || {};
     const fcTrend = fc.trend || (p.outlook ? p.outlook.trend : "震荡");
     const fcCls = fcTrend === "偏多" ? "up" : fcTrend === "偏空" ? "down" : "flat";
@@ -253,29 +255,36 @@
     const basisHtml = (fc.basis || (p.outlook ? [p.outlook.reason] : [])).filter(Boolean).slice(0, 3)
       .map(b => '<li>' + b + '</li>').join("");
 
-    // 列 5：板块（板块名 + 涨跌% + 主力资金流入/流出 + 上涨占比，对齐清晰、显眼）
+    // 板块信息：板块名 + 涨跌% + 主力流入/流出金额 + 上涨占比
     const sec = p.sector_detail || p.industry_today || {};
     const secName = sec.name || sec.track || sec.sector || '—';
     const secTrend = sec.trend_pct != null ? sec.trend_pct : null;
     const secFund = sec.fund_net != null ? sec.fund_net : null;
+    const secProxy = sec.fund_proxy ? '<span class="sec-est">估</span>' : '';
     const secPctCls = secTrend == null ? '' : (secTrend >= 0 ? 'sec-up' : 'sec-dn');
     const secPctTxt = secTrend == null ? '—' : (secTrend >= 0 ? '+' : '') + secTrend.toFixed(2) + '%';
     const secFundCls = secFund == null ? '' : (secFund >= 0 ? 'sec-fund-in' : 'sec-fund-out');
-    const secFundTxt = secFund == null ? '' : ('<span class="sec-fund-val ' + secFundCls + '">' + (secFund >= 0 ? '主力流入 +' : '主力流出 ') + Math.abs(secFund).toFixed(1) + '亿</span>');
+    const secFundTxt = secFund == null ? '' : ('<span class="sec-fund-val ' + secFundCls + '">' + (secFund >= 0 ? '流入+' : '流出') + Math.abs(secFund).toFixed(1) + '亿' + secProxy + '</span>');
     const upRatioTxt = sec.up_ratio != null ? '<span class="sec-fund-mini">上涨占比 <b>' + (sec.up_ratio * 100).toFixed(0) + '%</b></span>' : '';
+    const secBlock = '<div class="ai-sec-block">' +
+        '<div class="sec-row1"><span class="sec-name">' + secName + '</span><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span></div>' +
+        '<div class="sec-row2">' + secFundTxt + (secFundTxt && upRatioTxt ? '　' : '') + upRatioTxt + '</div>' +
+      '</div>';
 
-    // 列 6：做T方案（按 forecast.trend 严格分三态）
+    // 做T方案（按 forecast.trend 严格分三态）
     const plan = _tpPlan(p, fcTrend);
     const tpHtml = _tpHtml(plan);
 
-    return '<tr class="ai-row ' + rowCls + '">' +
-      '<td class="ai-c-name"><b>' + (p.name || p.code) + '</b><span class="code-mini">' + p.code + '</span>' + priceHtml + '</td>' +
-      '<td class="ai-c-score">' + (score > 0 ? '+' : '') + score + '</td>' +
-      '<td class="ai-c-action"><span class="ai-action-pill">' + label + '</span></td>' +
-      '<td class="ai-c-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul></td>' +
-      '<td class="ai-c-sec"><span class="sec-name">' + secName + '</span><div class="sec-row1"><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span> ' + secFundTxt + '</div>' + upRatioTxt + '</td>' +
-      '<td class="ai-c-tp">' + tpHtml + '</td>' +
-    '</tr>';
+    return '<div class="ai-card ' + cls + (strong ? ' ai-strong' : '') + '">' +
+      '<div class="ai-card-head">' +
+        '<span class="ai-card-name"><b>' + (p.name || p.code) + '</b><i class="code-mini">' + p.code + '</i></span>' +
+        '<span class="ai-score-badge ' + cls + '">' + (score > 0 ? '+' : '') + score + '</span>' +
+        '<span class="ai-action-pill ' + cls + '">' + label + '</span>' +
+      '</div>' +
+      '<div class="ai-card-price">' + priceHtml + '</div>' +
+      '<div class="ai-card-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + ' ' + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul>' + secBlock + '</div>' +
+      '<div class="ai-card-tp">' + tpHtml + '</div>' +
+    '</div>';
   }
 
   // 给自选股注入今日赛道（板块资金流走的是同个数据源，后端 positions_advice 已含，自选侧复用同 cache）
@@ -302,6 +311,7 @@
         ? "数据源：通达信本地 + 在线" : "数据源：在线行情（未配置通达信）";
       $("#marketBadge").textContent = cfg.market || "A股";
     } catch (e) {}
+    // 注意：已按需求移除「可用资金」输入（扫描候选量改由后端默认配置计算）
 
     bindEvents();
     // 任何一步失败都不影响其余渲染（避免整页白屏）
@@ -309,7 +319,6 @@
     try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
     try { setupWeights(cfg); } catch (e) {}
     try {
-      $("#availCapital").value = (cfg.available_capital != null ? cfg.available_capital : 100000);
       $("#apiBase").value = API_BASE;
       $("#tdxPath").value = cfg.tdx_path || "";
       $("#tdxPathTip").textContent = cfg.tdx_available
@@ -341,11 +350,9 @@
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
-    // 调试：?demo=scan 同时跑一次候选扫描
-    const _qp = new URLSearchParams(location.search);
-    if (_qp.get("demo") === "scan") {
-      setTimeout(() => { const s = $("#scopeSelect"); if (s) { s.value = "candidate"; runScreener(); } }, 1200);
-    }
+    // 自动优选：进入即扫描成长池（无需手动点扫描），并每 10 分钟自动刷新
+    try { autoScan(); } catch (e) { console.warn("自动优选启动失败：", e); }
+    state.timers.push(setInterval(autoScan, 10 * 60 * 1000));
   }
 
   function startClock() {
@@ -424,13 +431,9 @@
     });
 
     $("#addCurrent").addEventListener("click", addCurrentToWatch);
-    $("#refreshSignals").addEventListener("click", computeSignals);
-    $("#scanBtn").addEventListener("click", runScreener);
-    $("#availCapital").addEventListener("change", async () => {
-      const v = parseFloat($("#availCapital").value || "100000");
-      await api("POST", "/api/config", { available_capital: v }).catch(() => {});
-      toast("可用资金已设为 ¥" + v.toLocaleString("zh-CN"));
-    });
+    $("#refreshSignals").addEventListener("click", () => { pollQuotes(); computeSignals(); });
+    const rs = $("#refreshSelf");
+    if (rs) rs.addEventListener("click", autoScan);
     $("#rebuildBtn").addEventListener("click", rebuildUniverse);
 
     // 当日交易录入（买卖驱动真实盈亏 / 成本 / 股数 / 现金）
@@ -536,53 +539,148 @@
   function _inWatch(code) { const n = _normCode(code); return state.watchlist.some(w => _normCode(w.code) === n); }
 
   function renderWatchlist() {
-    const ul = $("#watchlist");
-    const items = state.watchlist || [];
-    if (!items.length) {
-      ul.innerHTML = `<li class="watch-empty" style="text-align:center;color:var(--muted);padding:14px;font-size:12px">暂无自选，点「+加当前」或扫描后「加自选」</li>`;
-      return;
-    }
-    ul.innerHTML = items.map(w => {
-      const code = w.code;
-      const m = state.watchMeta[code] || {};
-      const cur = state.current.code === code ? "active" : "";
-      const act = m.action || "";
-      const dot = act ? `<span class="sig-dot" style="background:${ACT_COLOR[act] || '#ccc'}"></span>` : `<span class="sig-dot" style="background:#ddd"></span>`;
-      const px = m.price != null ? `<div class="wi-price"><div class="px ${chgClass(m.change)}">${fmt(m.price)}</div><div class="chg ${chgClass(m.change)}">${m.change_pct != null ? (m.change_pct >= 0 ? "+" : "") + fmt(m.change_pct) + "%" : ""}</div></div>` : `<div class="wi-price"></div>`;
-      // 增长：现价 vs 添加时价格
-      let grow = "--";
-      if (m.price != null && w.add_price != null && w.add_price > 0) {
-        const gp = (m.price / w.add_price - 1) * 100;
-        grow = `<span class="${gp >= 0 ? 'up' : 'down'}">${gp >= 0 ? '+' : ''}${gp.toFixed(1)}%</span>`;
-      }
-      const addTime = w.add_time ? w.add_time.slice(5, 16).replace("T", " ") : "--";
-      const addPrice = w.add_price != null ? fmt(w.add_price) : "--";
-      const recBuy = w.scan_buy != null ? `<b style="color:#2b8a3e">${fmt(w.scan_buy)}</b>` : "--";
-      return `<li class="watch-item ${cur}" data-code="${code}">${dot}${px}
-        <div class="wi-name"><div class="nm">${m.name || w.name || code}</div><div class="cd">${code}</div></div>
-        <div class="wi-meta">
-          <div>添加 <b>${addTime}</b></div>
-          <div>添加价 <b>${addPrice}</b></div>
-          <div>增长 ${grow}</div>
-          <div>荐买 ${recBuy}</div>
-        </div>
-        <span class="wi-del" data-code="${code}">✕</span></li>`;
-    }).join("");
-    ul.querySelectorAll(".watch-item").forEach(el => {
-      const code = el.dataset.code;
-      el.addEventListener("click", (e) => {
-        if (e.target.classList.contains("wi-del")) return;
-        const m = state.watchMeta[code] || {};
-        openStock(code, m.name || code);
+    // 合并渲染：自选 + 自动优选 统一进「自选股票」列表
+    renderSelfStocks();
+  }
+
+  // 自动优选（候选扫描）+ 自选 合并成一张按「购买优先级」排序的列表
+  const SS_RANK = { '强烈买入': 0, '买入': 0, '加仓': 0, '持有': 1, '持有观察': 1, '减仓': 2, '卖出': 2 };
+
+  function _ssActionClass(act) {
+    if (act === "强烈买入" || act === "买入" || act === "加仓") return "ss-buy";
+    if (act === "减仓" || act === "卖出") return "ss-sell";
+    return "ss-hold";
+  }
+
+  function buildSelfList() {
+    const out = [];
+    // 自动优选（候选扫描结果）
+    (state.candidates || []).forEach(r => {
+      out.push({
+        origin: "优选",
+        code: r.code, name: r.name || r.code,
+        action: r.action || "",
+        score: r.combined != null ? r.combined : (r.score != null ? r.score : null),
+        price: r.price, change_pct: r.change_pct,
+        buy_price: r.buy_price, sell_price: r.sell_price,
+        track: r.track, sector_trend: r.sector_trend, sector_fund: r.sector_fund,
+        fund_grade: r.fund_grade, pe: r.pe,
+        tech_score: r.tech_score, sector_score: r.sector_score, val_score: r.val_score, mom_score: r.mom_score,
+        raw: r,
       });
     });
-    ul.querySelectorAll(".wi-del").forEach(el =>
-      el.addEventListener("click", async (e) => {
+    // 自选（用户手动加，带实时信号）
+    (state.watchlist || []).forEach(w => {
+      const m = state.watchMeta[w.code] || {};
+      out.push({
+        origin: "自选",
+        code: w.code, name: m.name || w.name || w.code,
+        action: m.action || "",
+        score: m.score != null ? m.score : null,
+        price: m.price != null ? m.price : (w.add_price || null), change_pct: m.change_pct,
+        buy_price: w.scan_buy, sell_price: null,
+        track: m.track, sector_trend: m.sector_trend, sector_fund: m.sector_fund,
+        fund_grade: m.fund_grade, pe: m.pe,
+        tech_score: m.tech_score, sector_score: m.sector_score, val_score: m.val_score, mom_score: m.mom_score,
+        watch: w,
+      });
+    });
+    // 排序：强买>买入>持有>减仓>卖出；同档按综合分/评分降序
+    out.sort((a, b) => {
+      const ra = SS_RANK[a.action] != null ? SS_RANK[a.action] : 1;
+      const rb = SS_RANK[b.action] != null ? SS_RANK[b.action] : 1;
+      if (ra !== rb) return ra - rb;
+      const sa = a.score != null ? a.score : -1e9;
+      const sb = b.score != null ? b.score : -1e9;
+      return sb - sa;
+    });
+    return out;
+  }
+
+  function renderSelfStocks() {
+    const el = $("#selfStocks");
+    if (!el) return;
+    const list = buildSelfList();
+    const cnt = $("#selfCount");
+    if (cnt) cnt.textContent = `共 ${list.length} 只`;
+    if (!list.length) {
+      el.innerHTML = `<div class="signal-empty">自动优选中…（首次约 1 分钟扫描成长池）</div>`;
+      return;
+    }
+    el.innerHTML = list.map(it => {
+      const act = it.action || "—";
+      const strong = act === "强烈买入";
+      const cls = _ssActionClass(act);
+      const c = ACT_COLOR[act] || "#868e96";
+      const pxTxt = it.price != null
+        ? `<span class="ss-px ${chgClass(it.change_pct)}">${fmt(it.price)}</span><span class="ss-chg ${chgClass(it.change_pct)}">${it.change_pct != null ? (it.change_pct >= 0 ? "+" : "") + fmt(it.change_pct) + "%" : ""}</span>`
+        : `<span class="ss-px">--</span>`;
+      const scoreTxt = it.score != null ? `综合 <b>${it.score}</b>` : "";
+      const sec = [];
+      if (it.track) sec.push(`<span class="ss-track">${it.track}</span>`);
+      if (it.sector_trend != null) sec.push(`<span class="${it.sector_trend >= 0 ? 'up' : 'down'}">${it.sector_trend >= 0 ? '↑' : '↓'}${fmt(it.sector_trend)}%</span>`);
+      if (it.sector_fund != null) sec.push(`<span class="${it.sector_fund >= 0 ? 'up' : 'down'}">主力${it.sector_fund >= 0 ? '+' : ''}${fmt(it.sector_fund)}亿</span>`);
+      const buyTxt = it.buy_price != null ? `荐买 <b class="ss-buy-price">${fmt(it.buy_price)}</b>` : "";
+      const sellTxt = it.sell_price != null ? `卖 <b class="ss-sell-price">${fmt(it.sell_price)}</b>` : "";
+      const gradeTxt = it.fund_grade ? `<span class="ss-grade g-${it.fund_grade}">${it.fund_grade}</span>` : "";
+      const peTxt = it.pe != null ? `PE ${it.pe}` : "";
+      // 操作按钮：优选可加自选；自选可移除
+      const actionBtn = it.origin === "自选"
+        ? `<span class="ss-del" data-code="${it.code}" title="移除自选">✕</span>`
+        : (_inWatch(it.code) ? `<span class="ss-added">已加</span>` : `<span class="ss-add" data-code="${it.code}" data-name="${it.name}" data-price="${it.price != null ? it.price : ''}" data-buy="${it.buy_price != null ? it.buy_price : ''}">+自选</span>`);
+      return `<div class="ss-row ${cls}${strong ? ' ss-strong' : ''}" data-code="${it.code}" data-name="${it.name}">
+        <div class="ss-top">
+          <span class="ss-act" style="background:${c}">${strong ? '🔥' : ''}${act}</span>
+          <span class="ss-name">${it.name}<i>${it.code}</i></span>
+          <span class="ss-tag tag-${it.origin}">${it.origin}</span>
+          ${actionBtn}
+        </div>
+        <div class="ss-mid">
+          ${pxTxt}
+          <span class="ss-score">${scoreTxt}</span>
+          <span class="ss-sector">${sec.join("　")}</span>
+        </div>
+        <div class="ss-bot">${buyTxt}${sellTxt ? "　" + sellTxt : ""}${gradeTxt}${peTxt ? "　" + peTxt : ""}</div>
+      </div>`;
+    }).join("");
+    // 绑定：优选点击加自选；自选点击移除
+    el.querySelectorAll(".ss-add").forEach(b =>
+      b.addEventListener("click", async (e) => {
         e.stopPropagation();
-        state.watchlist = state.watchlist.filter(w => w.code !== el.dataset.code);
-        delete state.watchMeta[el.dataset.code];
-        await saveWatchlist(); renderWatchlist();
+        await addToWatch(b.dataset.code, b.dataset.name, b.dataset.price || null, b.dataset.buy || null);
       }));
+    el.querySelectorAll(".ss-del").forEach(b =>
+      b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        state.watchlist = state.watchlist.filter(w => w.code !== b.dataset.code);
+        delete state.watchMeta[b.dataset.code];
+        await saveWatchlist(); renderSelfStocks();
+      }));
+    el.querySelectorAll(".ss-row").forEach(row =>
+      row.addEventListener("click", () => {
+        if (row.querySelector(".ss-add, .ss-del")) return;
+        openStock(row.dataset.code, row.dataset.name);
+      }));
+  }
+
+  // 自动优选：触发候选扫描（不点扫描也自动跑），轮询进度并渲染
+  async function autoScan() {
+    const scope = $("#scopeSelect") ? $("#scopeSelect").value : "candidate";
+    const strategy = $("#strategySelect") ? $("#strategySelect").value : "composite";
+    try {
+      await api("GET", "/api/screener?scope=" + scope + "&strategy=" + strategy + "&limit=120");
+    } catch (e) { /* ignore */ }
+    pollSelfScan(strategy);
+  }
+  async function pollSelfScan(strategy) {
+    try {
+      const st = await api("GET", "/api/scan_status");
+      if (st && st.results && st.results.length) {
+        state.candidates = st.results;
+        renderSelfStocks();
+      }
+      if (st && st.running) setTimeout(() => pollSelfScan(strategy), 2000);
+    } catch (e) { /* ignore */ }
   }
 
   async function addCurrentToWatch() {
@@ -893,7 +991,7 @@
       return;
     }
     if (scope === "candidate") {
-      const cap = $("#availCapital").value || 100000;
+      const cap = 100000;
       el.innerHTML = `<div class="scan-progress"><div class="bar"><i id="scanBar"></i></div>
         <div class="sub" id="scanMsg">正在扫描十五五成长池（纯主板，约 1 分钟：拉行情→算技术面+基本面+赛道趋势）…</div></div>`;
       await api("GET", "/api/screener?scope=candidate&strategy=" + strategy + "&limit=120&capital=" + cap);
@@ -1355,14 +1453,15 @@
           const qty = s.qty ? '×' + s.qty + '股' : (ac === '买入' ? '资金不足1手' : '');
           const actionLabel = ac === '买入' ? '强烈购买' : ac === '减仓' ? '减仓' : ac === '卖出' ? '止盈/止损' : ac === '持有' ? '持有' : ac;
           return '<tr><td><b>' + (s.name || s.code) + '</b><span style="color:#999;font-size:10px"> ' + s.code + '</span></td>' +
+            '<td style="text-align:center;font-weight:700;font-variant-numeric:tabular-nums">¥' + (s.price != null ? s.price : '--') + '</td>' +
+            '<td style="text-align:center;font-weight:800;color:#2b8a3e;font-variant-numeric:tabular-nums">' + (s.best_buy != null ? s.best_buy : '--') + '</td>' +
             '<td style="text-align:center;color:' + _dsColor(ac) + ';font-weight:700">' + actionLabel + '</td>' +
             '<td style="text-align:center;font-weight:800;color:' + scoreColor + '">' + (score>0?'+':'') + score + fcTxt + '</td>' +
-            '<td style="text-align:right;font-weight:700">¥' + (s.price != null ? s.price : '--') + '</td>' +
             '<td style="text-align:right;color:#495057">' + qty + '</td></tr>';
         }).join('');
         const suggTable = rows
           ? '<table class="ds-table">' +
-              '<thead><tr><th>股票</th><th style="text-align:center">建议</th><th style="text-align:center">评分/预估</th><th style="text-align:right">价格</th><th style="text-align:right">数量</th></tr></thead>' +
+              '<thead><tr><th>股票</th><th style="text-align:center">当前价</th><th style="text-align:center">最佳买价</th><th style="text-align:center">建议</th><th style="text-align:center">评分/预估</th><th style="text-align:right">数量</th></tr></thead>' +
               '<tbody>' + rows + '</tbody></table>'
           : '<span class="sub" style="color:var(--muted)">无明确建议</span>';
         openEl.innerHTML = '<div style="margin:4px 0 6px"><b style="color:' + trColor + ';font-size:14px">' + tr + '</b> <span class="sub">置信度 ' + op.confidence + '%</span></div>' +
@@ -1450,60 +1549,63 @@
       const cal = (review && review.calibration) || {};
       const tipsHtml = (cal.tips || []).map(t => `<li>${t}</li>`).join("");
       const calHtml = tipsHtml ? `<details class="rev-cal" open><summary>🎯 下次如何改进（自动校准）</summary><ul class="rev-cal-tips">${tipsHtml}</ul></details>` : "";
-      // 3) 四时点详细对比表
+      // 3) 开盘判断 / 四时点 详细对比表（含非持仓候选股：开盘推荐买价 vs 尾盘收盘，是否盈利）
       const timeLabels = ["09:30", "10:00", "10:30", "13:00", "14:00"];
       const detailRows = [];
       if (open && open.suggestions) {
         open.suggestions.forEach(s => {
-          if (s.role !== "holding") return;
-          detailRows.push({src: "开盘判断", code: s.code, name: s.name,
-                           action: s.action, price: s.price, qty: s.qty});
+          detailRows.push({src: "开盘判断", role: s.role || "holding", code: s.code, name: s.name,
+                           action: s.action, price: s.price, best_buy: s.best_buy, qty: s.qty});
         });
       }
       timeLabels.forEach(t => {
         const snap = snaps[t];
         if (snap && snap.rows) {
           snap.rows.forEach(s => {
-            if (s.role !== "holding") return;
-            detailRows.push({src: t, code: s.code, name: s.name,
-                             action: s.action, price: s.price, qty: s.qty});
+            detailRows.push({src: t, role: s.role || "holding", code: s.code, name: s.name,
+                             action: s.action, price: s.price, best_buy: s.best_buy, qty: s.qty});
           });
         }
       });
-      // 与实际 high/low/close 比对
+      // 与实际 high/low/close 比对（复盘重点：开盘推荐买价 vs 尾盘收盘，是否盈利）
       const reviewMap = {};
       (review && review.rows || []).forEach(r => {
         reviewMap[`${r.code}|${r.source}`] = r;
       });
       const tableRows = detailRows.map(dr => {
         const rev = reviewMap[`${dr.code}|${dr.src}`] || {};
-        const ca = rev.correct == null ? "—" : (rev.correct ? "✅对" : "❌错");
-        const caColor = rev.correct == null ? "#868e96" : (rev.correct ? "#2b8a3e" : "#c92a2a");
+        const recBuy = rev.rec_buy != null ? rev.rec_buy : (dr.best_buy != null ? dr.best_buy : dr.price);
+        const cl = rev.close != null ? rev.close : null;
+        // 是否盈利：买入类按「开盘推荐买价 → 尾盘收盘」；其余沿用对错判断
+        const profit = rev.profit;
+        const profitTxt = profit == null ? "—" : (profit ? "✅盈利" : "❌亏损");
+        const profitColor = profit == null ? "#868e96" : (profit ? "#2b8a3e" : "#c92a2a");
         const pnl = rev.pnl != null ? `${rev.pnl >= 0 ? '+' : ''}${rev.pnl.toFixed(0)}` : "—";
         const pnlColor = rev.pnl == null ? '#868e96' : (rev.pnl >= 0 ? '#2b8a3e' : '#c92a2a');
-        const hi = rev.high != null ? rev.high.toFixed(2) : "—";
-        const lo = rev.low != null ? rev.low.toFixed(2) : "—";
-        const cl = rev.close != null ? rev.close.toFixed(2) : "—";
-        const devClose = rev.dev_close_pct != null ? ` <span style="color:#868e96;font-size:10px">(${rev.dev_close_pct >= 0 ? '+' : ''}${rev.dev_close_pct.toFixed(1)}% vs 收盘)</span>` : "";
-        const actColor = dr.action === "买入" ? "#2b8a3e" : dr.action === "卖出" ? "#c92a2a" : "#495057";
+        const ca = rev.correct == null ? "—" : (rev.correct ? "✅对" : "❌错");
+        const caColor = rev.correct == null ? "#868e96" : (rev.correct ? "#2b8a3e" : "#c92a2a");
+        const recBuyTxt = recBuy != null ? Number(recBuy).toFixed(2) : "—";
+        const clTxt = cl != null ? cl.toFixed(2) : "—";
+        const roleTag = dr.role === "candidate" ? '<span class="rev-tag tag-候选">候选</span>' : (dr.role === "holding" ? '<span class="rev-tag tag-持仓">持仓</span>' : "");
+        const actColor = (dr.action === "买入" || dr.action === "强烈买入") ? "#2b8a3e" : (dr.action === "卖出" || dr.action === "减仓") ? "#c92a2a" : "#495057";
+        const profitCol = profit == null ? `<span style="color:${caColor}">${ca}</span>` : `<span style="color:${profitColor};font-weight:700">${profitTxt}</span>`;
         return `<tr>
           <td>${dr.src}</td>
-          <td>${dr.name || dr.code}</td>
+          <td>${dr.name || dr.code} ${roleTag}</td>
           <td style="color:${actColor};font-weight:600">${dr.action || '—'}</td>
-          <td>${dr.price != null ? dr.price.toFixed(2) : '—'}</td>
-          <td>${hi}</td>
-          <td>${lo}</td>
-          <td>${cl}${devClose}</td>
-          <td style="color:${caColor}">${ca}</td>
+          <td>${recBuyTxt}</td>
+          <td>${clTxt}</td>
+          <td style="color:${profitColor};font-weight:700">${profitCol}</td>
           <td style="color:${pnlColor};font-weight:600">${pnl}</td>
         </tr>`;
       }).join("");
-      const tableHtml = tableRows ? `<details class="rev-detail" open><summary>📋 四时点建议 vs 实际（点击折叠）</summary>
+      const tableHtml = tableRows ? `<details class="rev-detail" open><summary>📋 开盘推荐价 vs 尾盘收盘 · 是否盈利（点击折叠）</summary>
+        <div style="font-size:10.5px;color:var(--muted);margin:2px 0 4px">盈利 = 尾盘收盘价 &gt; 开盘推荐买价（按推荐价买入的模拟收益，仅供复盘参考）</div>
         <table class="rev-table">
-          <thead><tr><th>时点</th><th>股票</th><th>动作</th><th>建议价</th><th>最高</th><th>最低</th><th>收盘</th><th>判断</th><th>做T盈亏</th></tr></thead>
+          <thead><tr><th>时点</th><th>股票</th><th>动作</th><th>开盘推荐买价</th><th>尾盘收</th><th>是否盈利</th><th>盈亏额(元)</th></tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
-      </details>` : `<div style="color:var(--muted);font-size:11px">暂无四时点数据</div>`;
+      </details>` : `<div style="color:var(--muted);font-size:11px">暂无对比数据（收盘后自动生成）</div>`;
       el.innerHTML = summaryHtml + calHtml + tableHtml;
     } catch (e) { /* ignore */ }
   }
