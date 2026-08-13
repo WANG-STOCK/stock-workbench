@@ -30,7 +30,7 @@
       <span class="status">
         <span class="badge" id="marketBadge">A股 · 沪深</span>
         <span class="badge" id="tdxStatus">数据源：检测中…</span>
-        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-12-r9</span>
+        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r10</span>
         <span class="badge clock" id="clock">--:--:--</span>
       </span>
     </div>
@@ -102,12 +102,19 @@
               <option value="buy">买入</option>
               <option value="sell">卖出</option>
             </select>
-            <input id="tradeQty" class="input small" type="number" placeholder="数量">
-            <input id="tradePrice" class="input small" type="number" placeholder="价格">
+          </div>
+          <div class="row te-row">
+            <button class="btn qty-step" data-delta="-500" type="button">−500</button>
+            <button class="btn qty-step" data-delta="-100" type="button">−100</button>
+            <input id="tradeQty" class="input small qty-input" type="number" placeholder="数量" min="0" step="100">
+            <button class="btn qty-step" data-delta="100" type="button">+100</button>
+            <button class="btn qty-step" data-delta="500" type="button">+500</button>
+            <input id="tradePrice" class="input small" type="number" placeholder="价格" step="0.01">
             <button id="tradeBtn" class="btn">记录</button>
           </div>
           <div class="sub" style="font-size:11px;color:var(--muted);margin-top:2px">
-            买入：股数↑、成本按均价重算、现金↓；卖出：股数↓、现金↑。每天开盘上传持仓截图即作为当日基准，之后这里记的买卖会算成真实盈亏。
+            数量：点 <b>+100 / +500</b> 一键加 100/500 股（不够 1 手自动按整手算），
+            点 <b>−100 / −500</b> 减；数量不小于 0。买入：股数↑、成本按均价重算、现金↓；卖出：股数↓、现金↑。
           </div>
         </div>
       </section>
@@ -168,8 +175,8 @@
       <section class="panel panel-aiadvice">
         <div class="panel-title">
           <span class="dot dot-blue"></span>
-          <span>🤖 AI 建议（今日预估含板块涨跌/资金 + 做T方案）</span>
-          <span class="sub">每 10 秒刷新 · 强烈买入置顶</span>
+          <span>🤖 AI 建议 · 操作建议（紧凑买卖价 + 盘中实时动态）</span>
+          <span class="sub">每 5 秒刷新 · ⚡基于盘中分时 + 板块资金</span>
         </div>
         <div id="aiAdviceBody" class="ai-cards">
           <div class="ai-empty">加载 AI 建议中…</div>

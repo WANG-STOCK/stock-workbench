@@ -29,6 +29,7 @@ _EASTMONEY_KEYWORDS = {
 
 _lock = threading.Lock()
 _cache = {"ts": 0.0, "strength": {}}
+_computing = False  # 标记是否已有线程在后台重算，避免并发请求一起卡在冷启动
 _TTL = 60  # 行业强度缓存 60 秒，避免重复拉行情
 
 
@@ -137,15 +138,27 @@ def _compute_strength():
 
 
 def sector_strength(key=None):
-    """返回赛道/大类强度。key 优先按 track 匹配，否则按大类 sector 聚合。"""
+    """返回赛道/大类强度。key 优先按 track 匹配，否则按大类 sector 聚合。
+
+    非阻塞（单一写者模型）：
+    - 缓存新鲜 → 直接返回；
+    - 缓存过期/为空但后台预热线程(_computing)正在重算 → 立即返回上一次结果（或空），绝不等待；
+    - 请求线程【永不】自行触发 30s+ 的冷重算，重算只由后台预热线程负责。
+    这样无论何时刷新页面，请求都不会卡在板块冷启动上（首屏由前端缓存预渲染兜底）。
+    """
+    global _computing
     with _lock:
         now = time.time()
-        if now - _cache["ts"] < _TTL and _cache["strength"]:
+        fresh = (now - _cache["ts"] < _TTL) and bool(_cache["strength"])
+        if fresh:
             cache = _cache["strength"]
+        elif _computing:
+            # 后台正在重算：直接返回旧值（可能为空），不阻塞
+            cache = _cache["strength"] or {}
         else:
-            cache = _compute_strength()
-            _cache["ts"] = now
-            _cache["strength"] = cache
+            # 没有新鲜缓存、也没有线程在计算（极端：预热线程尚未启动/异常）。
+            # 请求线程不自行重算（避免卡 30s），返回空，由预热线程补齐。
+            cache = _cache["strength"] or {}
     if key:
         if key in cache:
             return cache[key]
@@ -162,6 +175,23 @@ def sector_strength(key=None):
         return {"track": key, "sector": key, "trend_pct": 0.0,
                 "up_ratio": 0.0, "fund_net": None, "fund_proxy": True, "score": 50.0}
     return cache
+
+
+def _refresh_strength():
+    """后台预热线程调用：在锁外执行真正的重算并写回缓存。"""
+    global _computing
+    with _lock:
+        if _computing:
+            return  # 已有线程在算，跳过
+        _computing = True
+    try:
+        res = _compute_strength()
+    except Exception:
+        res = {}
+    with _lock:
+        _cache["ts"] = time.time()
+        _cache["strength"] = res
+        _computing = False
 
 
 def all_sector_strength():

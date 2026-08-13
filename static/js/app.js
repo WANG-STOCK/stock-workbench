@@ -54,7 +54,14 @@
   // 渲染持仓表、渲染 AI 建议卡片、回填当日交易录入的代码下拉。
   async function renderAccount() {
     try {
+      // 提速：先显示缓存，再用最新结果覆盖；避免冷启动时 sector_strength/K线拉取阻塞页面
+      if (state.posAdvice && state.posAdvice.length) {
+        renderPosTable(state.posAdvice);
+        renderAiAdvice(state.posAdvice);
+      }
+      const t0 = Date.now();
       const d = await api("GET", "/api/positions_advice");
+      const took = Date.now() - t0;
       if (!d || !d.ok) return;
       const positions = d.positions || [];
       state.posAdvice = positions;
@@ -97,6 +104,11 @@
       renderPosTable(positions);
       renderAiAdvice(positions);
       computeSignalsForWatchlist();   // 自选股也注入当日行业资金流
+      // 调试：把首次大开销暴露给用户，提示自动被后续覆盖
+      if (took > 3000 && !state._slowNoticeShown) {
+        state._slowNoticeShown = true;
+        toast("首次加载 " + took + "ms（板块+指标冷启），后续 5s 缓存秒回", true);
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -221,6 +233,75 @@
     return head + (plan.basis ? '<div class="tp-basis">' + plan.basis + '</div>' : '');
   }
 
+  // 操作建议（紧凑三档：买/卖/止损&止盈）—— 拒绝"回踩 MA5 附近不破就买"这种术语，只给数字
+  // 数据源：p.tight（后端 _tight_levels 计算：现价×0.992/1.008/0.97/1.03）
+  function _opHtml(p) {
+    const tight = p.tight || {};
+    const price = p.price;
+    const buy = tight.buy;
+    const sell = tight.sell;
+    const sl = tight.stop_loss;
+    const tp = tight.take_profit;
+    const band = tight.band || "现价 ±0.8%";
+    const act = (p.action || "").toLowerCase();
+    if (!price || (!buy && !sell && !sl && !tp)) {
+      // 数据不足时回退做T方案
+      const plan = _tpPlan(p, "");
+      return _tpHtml(plan);
+    }
+    const pct = (v) => v == null ? "—" : ((v - price) / price * 100).toFixed(1) + "%";
+    const clsBuy = act.includes("买") || act.includes("加仓") ? "op-on" : "";
+    const clsSell = act.includes("卖") || act.includes("减仓") ? "op-on" : "";
+    return '<div class="op-grid">' +
+        '<div class="op-row ' + clsBuy + '">' +
+          '<span class="op-tag buy">买</span>' +
+          '<span class="op-price">' + fmt(buy, 2) + '</span>' +
+          '<span class="op-pct">' + (tight.buy_pct != null ? signed(tight.buy_pct, 1) + "%" : pct(buy)) + '</span>' +
+        '</div>' +
+        '<div class="op-row ' + clsSell + '">' +
+          '<span class="op-tag sell">卖</span>' +
+          '<span class="op-price">' + fmt(sell, 2) + '</span>' +
+          '<span class="op-pct">' + (tight.sell_pct != null ? "+" + tight.sell_pct.toFixed(1) + "%" : pct(sell)) + '</span>' +
+        '</div>' +
+        '<div class="op-row op-stop">' +
+          '<span class="op-tag stop">止损</span>' +
+          '<span class="op-price">' + fmt(sl, 2) + '</span>' +
+          '<span class="op-pct">' + pct(sl) + '</span>' +
+          '<span class="op-tag tp">止盈</span>' +
+          '<span class="op-price">' + fmt(tp, 2) + '</span>' +
+          '<span class="op-pct">' + pct(tp) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="op-band">' + band +
+        (tight.support ? ' · 支撑 ' + fmt(tight.support, 2) : '') +
+        (tight.resist ? ' · 阻力 ' + fmt(tight.resist, 2) : '') +
+      '</div>';
+  }
+
+  // 实时动态建议（盘中 1min 分时 + 现价 + 资金）→ 闪烁标签
+  // 数据源：p.intraday（后端 _intraday_for）含 scenario/action/target_price/stop_loss/basis
+  function _liveHint(p) {
+    const it = p.intraday || {};
+    const scene = it.scenario || "";
+    const act = it.action || "";
+    if (!act && !scene) return '<span class="ai-live idle" title="无实时数据">⚡—</span>';
+    let hint = "", cls = "wait";
+    if (act.includes("买") || act.includes("加仓") || act.includes("低吸")) {
+      hint = "⚡实时：建议立即买入"; cls = "buy";
+    } else if (act.includes("卖") || act.includes("止盈") || act.includes("减仓")) {
+      hint = "⚡实时：建议立即卖出"; cls = "sell";
+    } else if (scene && scene.includes("突破")) {
+      hint = "⚡实时：放量突破"; cls = "buy";
+    } else if (scene && (scene.includes("弱势") || scene.includes("风险"))) {
+      hint = "⚡实时：弱势震荡"; cls = "warn";
+    } else if (act.includes("持有") || scene.includes("持有") || scene.includes("震荡")) {
+      hint = "⚡实时：观望持有"; cls = "wait";
+    } else {
+      hint = "⚡实时：" + (scene || act || "—"); cls = "wait";
+    }
+    return '<span class="ai-live ' + cls + '" title="' + (it.basis || scene || "") + '">' + hint + '</span>';
+  }
+
   // -------------------------------------------
   // AI 建议列表（每只持仓一行，七列；用 <table> 严格列对齐）
   // -------------------------------------------
@@ -271,19 +352,22 @@
         '<div class="sec-row2">' + secFundTxt + (secFundTxt && upRatioTxt ? '　' : '') + upRatioTxt + '</div>' +
       '</div>';
 
-    // 做T方案（按 forecast.trend 严格分三态）
-    const plan = _tpPlan(p, fcTrend);
-    const tpHtml = _tpHtml(plan);
+    // 操作建议（紧凑三档：买/卖/止损&止盈）—— 不再做"回踩 MA5 附近不破就买"这种术语，直接给数字
+    const opHtml = _opHtml(p);
+
+    // 实时动态建议（基于盘中 1min 分时 + 当前价 + 板块资金）：闪烁标签
+    const liveHtml = _liveHint(p);
 
     return '<div class="ai-card ' + cls + (strong ? ' ai-strong' : '') + '">' +
       '<div class="ai-card-head">' +
         '<span class="ai-card-name"><b>' + (p.name || p.code) + '</b><i class="code-mini">' + p.code + '</i></span>' +
         '<span class="ai-score-badge ' + cls + '">' + (score > 0 ? '+' : '') + score + '</span>' +
         '<span class="ai-action-pill ' + cls + '">' + label + '</span>' +
+        liveHtml +
       '</div>' +
       '<div class="ai-card-price">' + priceHtml + '</div>' +
       '<div class="ai-card-fc"><span class="fc-trend ' + fcCls + '">' + fcTrend + ' ' + fcPct + '</span><ul class="fc-basis">' + basisHtml + '</ul>' + secBlock + '</div>' +
-      '<div class="ai-card-tp">' + tpHtml + '</div>' +
+      '<div class="ai-card-op">' + opHtml + '</div>' +
     '</div>';
   }
 
@@ -326,9 +410,10 @@
         : "填好后，选股下拉选「通达信全市场」即可扫描全部 A 股日线（需先在通达信下载日线数据）。";
     } catch (e) {}
     startClock();
-    // 账户 + 持仓 + AI 建议（每 8 秒刷一次）
-    try { await renderAccount(); } catch (e) { console.warn("账户刷新失败：", e); }
-    state.timers.push(setInterval(renderAccount, 8000));
+    // 账户 + 持仓 + AI 建议：首次后台加载（不等它完成，立即让页面其它东西先出来）
+    renderAccount().catch(e => console.warn("账户刷新失败：", e));
+    // 之后每 5 秒刷新一次（更紧的实时节奏，配合盘中实时建议闪烁）
+    state.timers.push(setInterval(renderAccount, 5000));
     // 尾盘策略：30 秒刷新（低频，尾盘汇总减仓/埋伏结论）
     try { loadTailStrategy(); } catch (e) {}
     state.timers.push(setInterval(loadTailStrategy, 30000));
@@ -350,8 +435,10 @@
     // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
     try { loadReview(); } catch (e) {}
     state.timers.push(setInterval(loadReview, 60000));
-    // 自动优选：进入即扫描成长池（无需手动点扫描），并每 10 分钟自动刷新
-    try { autoScan(); } catch (e) { console.warn("自动优选启动失败：", e); }
+    // 自动优选：3 秒后异步触发，不阻塞首屏（再每 10 分钟重扫）
+    setTimeout(() => {
+      autoScan().catch(e => console.warn("自动优选启动失败：", e));
+    }, 3000);
     state.timers.push(setInterval(autoScan, 10 * 60 * 1000));
   }
 
@@ -503,6 +590,19 @@
         btn.disabled = false; btn.textContent = old;
       }
     });
+    // 数量快速加减（±100 / ±500）
+    document.querySelectorAll(".qty-step").forEach(b =>
+      b.addEventListener("click", () => {
+        const inp = document.getElementById("tradeQty");
+        const cur = parseInt(inp.value || "0", 10);
+        const delta = parseInt(b.dataset.delta || "0", 10);
+        let next = cur + delta;
+        if (next < 0) next = 0;
+        // A 股 1 手 = 100 股，不足 1 手按 1 手算
+        if (next > 0 && next % 100 !== 0) next = Math.ceil(next / 100) * 100;
+        inp.value = next;
+        inp.focus();
+      }));
   }
 
   function toggleOpts() {

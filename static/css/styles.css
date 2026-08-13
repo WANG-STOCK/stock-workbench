@@ -196,6 +196,9 @@ body {
 .trade-entry #tradePrice { flex: 0 0 72px; }
 .trade-entry #tradeBtn { flex: 0 0 auto; background: var(--orange); }
 .trade-entry #tradeBtn:hover { background: #d9480f; }
+.trade-entry .qty-step { padding: 3px 6px; font-size: 11px; font-weight: 700; min-width: 30px; background: #fff; color: var(--accent); border: 1px solid var(--line); border-radius: 5px; }
+.trade-entry .qty-step:hover { background: #f1f5f9; color: var(--orange); border-color: var(--orange); }
+.trade-entry .qty-input { font-size: 14px; font-weight: 700; text-align: center; }
 
 /* ---------- AI 建议（真 <table>，table-layout:fixed 保证列宽严格对齐，整行底色更醒目） ---------- */
 .panel-aiadvice { background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%); border-color: #74c0fc; }
@@ -379,6 +382,33 @@ body {
 .ai-card-tp .tp-qty { color: #495057; font-size: 10.5px; font-weight: 700; }
 .ai-card-tp .tp-when { color: #212529; font-size: 10.5px; flex: 1 1 auto; min-width: 100px; }
 .ai-card-tp .tp-basis { color: #6d4c00; font-size: 10.5px; margin-top: 4px; padding: 3px 6px; background: #fff8e1; border-radius: 3px; border-left: 3px solid #f59f00; }
+
+/* 操作建议（紧凑三档：买/卖/止损&止盈）—— 直接数字，去掉术语 */
+.ai-card-op { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(73,80,87,0.2); display: flex; flex-direction: column; gap: 6px; }
+.ai-card-op .op-grid { display: flex; flex-direction: column; gap: 5px; }
+.ai-card-op .op-row { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: rgba(241,243,245,0.55); border: 1px solid transparent; }
+.ai-card-op .op-row.op-on { background: #fff8e1; border-color: #f59f00; box-shadow: 0 0 0 1px rgba(245,159,0,0.12); }
+.ai-card-op .op-row.op-stop { background: rgba(73,80,87,0.06); }
+.ai-card-op .op-tag { font-size: 10.5px; padding: 2px 8px; border-radius: 4px; font-weight: 800; min-width: 36px; text-align: center; color: #fff; }
+.ai-card-op .op-tag.buy  { background: #2b8a3e; }
+.ai-card-op .op-tag.sell { background: #c92a2a; }
+.ai-card-op .op-tag.stop { background: #495057; }
+.ai-card-op .op-tag.tp   { background: #1971c2; margin-left: 8px; }
+.ai-card-op .op-price { font-weight: 800; font-variant-numeric: tabular-nums; padding: 0 4px; font-size: 14px; color: #212529; min-width: 60px; }
+.ai-card-op .op-row.op-on .op-price { color: #b75309; }
+.ai-card-op .op-pct { color: #495057; font-size: 11px; font-variant-numeric: tabular-nums; min-width: 56px; }
+.ai-card-op .op-band { color: #6d4c00; font-size: 10.5px; margin-top: 2px; padding: 3px 8px; background: #fff8e1; border-radius: 4px; border-left: 3px solid #f59f00; }
+
+/* ⚡ 实时动态建议（闪烁标签）*/
+.ai-live { margin-left: 8px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; display: inline-block; }
+.ai-live.idle  { background: #f1f3f5; color: #868e96; }
+.ai-live.wait  { background: #e7f5ff; color: #1971c2; animation: blink-bg 2.4s ease-in-out infinite; }
+.ai-live.buy   { background: #2b8a3e; color: #fff; animation: blink-buy 1.2s ease-in-out infinite; }
+.ai-live.sell  { background: #c92a2a; color: #fff; animation: blink-sell 1.2s ease-in-out infinite; }
+.ai-live.warn  { background: #f59f00; color: #fff; animation: blink-bg 1.6s ease-in-out infinite; }
+@keyframes blink-buy  { 0%,100%{ box-shadow: 0 0 0 0 rgba(43,138,62,0.55); } 50% { box-shadow: 0 0 0 6px rgba(43,138,62,0); } }
+@keyframes blink-sell { 0%,100%{ box-shadow: 0 0 0 0 rgba(201,42,42,0.55); } 50% { box-shadow: 0 0 0 6px rgba(201,42,42,0); } }
+@keyframes blink-bg   { 0%,100%{ opacity: 0.85; } 50% { opacity: 0.5; } }
 
 /* ---------- 自选股票（自动优选） ---------- */
 .self-head { display: flex; align-items: center; gap: 8px; margin: 8px 2px 4px; }

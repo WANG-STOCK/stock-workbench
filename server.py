@@ -209,16 +209,30 @@ def _sync_watchlist(items):
 
 # ---------- 个股基本面/预期事实缓存（PE + 机构目标价 + 新闻，best-effort） ----------
 _FACTS_CACHE = {}
+_FACTS_PENDING = set()
 _FACTS_LOCK = threading.Lock()
 
 
 def _stock_facts(code, ttl=300):
-    """返回 {pe, pb, target, target_upside, news_score}；任何缺失均 None。带 5 分钟缓存。"""
+    """返回 {pe, pb, target, target_upside, news_score}；任何缺失均 None。
+
+    非阻塞：缓存命中直接返回；未命中时立即返回 None（不阻塞请求），
+    并在后台线程异步补抓，下一次刷新（5s）即拿到真实基本面。
+    避免首屏因 5 只持仓 × 3 次网页抓取（估值/目标价/新闻）卡 20~30s。
+    """
     now = time.time()
     with _FACTS_LOCK:
         c = _FACTS_CACHE.get(code)
         if c and now - c[0] < ttl:
             return c[1]
+        if code not in _FACTS_PENDING:   # 防止并发重复触发后台抓取
+            _FACTS_PENDING.add(code)
+            threading.Thread(target=_fetch_facts_bg, args=(code,), daemon=True).start()
+    return None
+
+
+def _fetch_facts_bg(code):
+    """后台补抓单只个股基本面并写入缓存。"""
     try:
         val = fm.batch_valuation([code]) or {}
         v = val.get(code) or {}
@@ -243,9 +257,10 @@ def _stock_facts(code, ttl=300):
     except Exception:
         facts = {"pe": None, "pb": None, "target": None,
                  "target_upside": None, "news_score": 0}
-    with _FACTS_LOCK:
-        _FACTS_CACHE[code] = (now, facts)
-    return facts
+    finally:
+        with _FACTS_LOCK:
+            _FACTS_CACHE[code] = (time.time(), facts)
+            _FACTS_PENDING.discard(code)
 
 
 # ---------- 每日复盘：按日期记录开盘建议/最高/收盘，复盘准确率 ----------
@@ -580,12 +595,14 @@ def _build_technical(a, tl, pl, price):
     }
 
 
-def _advise_position(code, capital):
+def _advise_position(code, capital, rt_price=None, rt_prev=None):
     """为单只持仓计算完整操作建议：买/卖/不动 + 操作价 + 操作量 + 行业强弱。
 
     综合：当天 KDJ/量/资金/MACD 等技术面 + 行业资金流入流出与龙头走势
     （sector_strength）+ 用户可用资金/持仓（position_advice 算量）。
     返回 dict；K线不足时返回 {ok:False}。
+    rt_price / rt_prev：调用方（持仓建议接口）传入的实时价/昨收，
+    若提供则全程以实时价作为"当前价"，保证操作建议/紧凑买卖价贴合实时行情。
     """
     period, limit = "daily", 120
     bars = _cache_get(code, period, limit) or ds.get_kline(code, period, limit, _tdx_path or None)
@@ -601,6 +618,12 @@ def _advise_position(code, capital):
         _fp, _ss = {}, None
     price = a.get("price")
     prev_close = a.get("prev_close")
+    # 若调用方传入实时价/昨收，则全程以实时价作为"当前价"（建议应反映实时行情，
+    # 否则 tight/intraday 会基于日线收盘价算出偏离实际现价 5%+ 的买卖价）。
+    if rt_price is not None:
+        price = rt_price
+    if rt_prev is not None:
+        prev_close = rt_prev
     regime = None
     if _ss:
         regime = {"track": _ss.get("track"), "sector": _ss.get("sector"),
@@ -655,6 +678,9 @@ def _advise_position(code, capital):
         action, op_qty = "不动", 0
     # 盘中实时建议（5min 分时级别，看一眼该买/卖/等的瞬时判断）
     intraday = _intraday_for(code, price, prev_close)
+    # 实时动态价位（贴在现价 ±0.8% 的紧凑区间，替代原本宽达 ±3% 的做T价）
+    # 既保留 dynamic_levels 的支撑/阻力参考，又贴现价给出"立刻能挂的限价"。
+    tight = _tight_levels(price, intraday, tl)
     # ===== 加减分评估：技术面 + 板块资金净流 + 当日赛道涨跌 → 输出 -100~+100 =====
     #    +100 必加仓、-100 必减仓、0 持平持有
     if action == "买入":
@@ -710,9 +736,60 @@ def _advise_position(code, capital):
         "industry_today": industry_today,
         "indicators": a.get("indicators"),
         "intraday": intraday,
+        "tight": tight,                       # 紧凑买卖价（贴在现价附近 ±0.8%）
         "forecast": forecast,
         "sector_detail": sector_detail,
         "technical": technical,
+    }
+
+
+# 紧凑买卖价：贴现价 ±0.8% 以内，给"立刻能挂的限价"。
+# 若有支撑/阻力且与现价 <2%，则就近吸附到支撑/阻力（避免脱离实际支撑位的"橡皮筋价"）。
+def _tight_levels(price, intraday, tl):
+    if not price:
+        return None
+    buy = round(price * 0.992, 2)
+    sell = round(price * 1.008, 2)
+    stop_loss = round(price * 0.97, 2)
+    take_profit = round(price * 1.03, 2)
+    band = "±0.8%"
+    # 若 intraday 已给出更窄的目标价/止损，优先采用
+    if isinstance(intraday, dict):
+        tp = intraday.get("target_price")
+        sl = intraday.get("stop_loss")
+        # target_price 通常是"如果回踩到此位就买"或"如果涨到此位就卖"——采用作为提醒
+        basis_note = intraday.get("basis") or intraday.get("scenario") or ""
+        # 量化操作
+        action_hint = intraday.get("action") or intraday.get("scenario") or ""
+        # 若实时判定"建议立即卖出"，把 sell 收紧到现价 +0.5%（落袋为安）
+        if "卖" in action_hint or "止盈" in action_hint:
+            sell = min(sell, round(price * 1.005, 2))
+            band = "现价 +0.5%（实时：见好就收）"
+        # 若实时判定"建议立即买入/低吸"，把 buy 收紧到现价 -0.4%（不踏空）
+        elif "买" in action_hint or "低吸" in action_hint or "加仓" in action_hint:
+            buy = max(buy, round(price * 0.996, 2))
+            band = "现价 -0.4%（实时：快速跟入）"
+    # 若 tl 给出的低吸位靠近现价 < 2%，吸附到那个支撑；卖位同理
+    if tl:
+        d_buy = tl.get("buy")
+        if d_buy and abs(d_buy - price) / max(price, 1) <= 0.025:
+            buy = min(buy, round(d_buy, 2))   # 取较紧的（不让用户被错误低价买入）
+        d_sell = tl.get("sell")
+        if d_sell and abs(d_sell - price) / max(price, 1) <= 0.025:
+            sell = max(sell, round(d_sell, 2)) # 取较宽的（不让用户被错位卖飞）
+    # 距离百分比
+    def _pct(v):
+        return round((v - price) / price * 100, 2) if v else None
+    return {
+        "buy": buy,
+        "sell": sell,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "buy_pct": _pct(buy),
+        "sell_pct": _pct(sell),
+        "band": band,
+        "support": round(tl.get("buy"), 2) if tl and tl.get("buy") else None,
+        "resist": round(tl.get("sell"), 2) if tl and tl.get("sell") else None,
     }
 
 
@@ -1057,8 +1134,10 @@ class Handler(BaseHTTPRequestHandler):
             total_value = 0.0
             for p in positions:
                 code = p.get("code")
-                adv = _advise_position(code, capital)
-                price = (rt.get(code) or {}).get("price")
+                _rt = rt.get(code) or {}
+                adv = _advise_position(code, capital, _rt.get("price"), _rt.get("prev_close"))
+                price = _rt.get("price")
+                change_pct = _rt.get("change_pct")
                 change_pct = (rt.get(code) or {}).get("change_pct")
                 shares = int(p.get("shares", 0) or 0)
                 cost = float(p.get("cost", 0) or 0)
@@ -2058,6 +2137,21 @@ def main():
     print(f"通达信数据源： {'已启用 ' + _tdx_path if _tdx_available else '未配置（使用在线行情）'}")
     # 后台预生成全 A 股代码池，使首次「在线全市场」扫描即时可用
     threading.Thread(target=_get_universe, daemon=True).start()
+
+    # 板块强弱预热的守护线程：启动时先拉一次（避免首屏 30s 冷启），
+    # 之后在交易时段每 50s 续热（略低于 60s TTL，保证不回冷），非交易时段 5min 一次。
+    def _sector_warmer():
+        while True:
+            try:
+                sf._refresh_strength()   # 后台唯一写者：重算并写入 60s 缓存，不阻塞请求
+            except Exception:
+                pass
+            h = time.localtime().tm_hour
+            if 9 <= h < 15 or (h == 15 and time.localtime().tm_min <= 10):
+                time.sleep(50)
+            else:
+                time.sleep(300)
+    threading.Thread(target=_sector_warmer, daemon=True).start()
 
     # 服务端后台调度：自动生成开盘判断 + 四时点快照 + 收盘复盘（不依赖浏览器是否打开）
     # 交易时段(9:00-15:10)每分钟检查一次；其余时间 5 分钟一次，省资源
