@@ -1,4 +1,9 @@
 /* 股票工作台前端控制器 */
+/* 版本自检：刷新时第一行打印当前是 r24-4ed57be，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
+console.log('%c[wb] app.js r24-4ed57be loaded (TDZ-safe, function api + window.onerror fallback)','color:#2ecc71;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r24-4ed57be') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r24-4ed57be。请强制刷新或清缓存。');
+}
 (function () {
   const $ = (s) => document.querySelector(s);
   let API_BASE = localStorage.getItem("wb_api_base") || "";
