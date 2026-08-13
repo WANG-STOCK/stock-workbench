@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>婷婷量化AI · 金融K线AI工作台</title>
-  <link rel="stylesheet" href="/static/css/styles.css?v=r21">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r22">
 </head>
 <body class="theme-dark">
   <!-- 顶部品牌条 -->
@@ -12,10 +12,10 @@
     <div class="brand-v3">
       <span class="logo-v3">📈</span>
       <span>婷婷量化AI · 金融K线AI工作台</span>
-      <span class="brand-tag">v2026-08-13-r21</span>
+      <span class="brand-tag">v2026-08-13-r22</span>
     </div>
     <div class="topbar-meta-v3">
-      <span class="badge" id="buildTag">v2026-08-13-r21</span>
+      <span class="badge" id="buildTag">v2026-08-13-r22</span>
       <span class="badge" id="marketBadge">A股 · 沪深</span>
       <span class="badge" id="tdxStatus">数据源：检测中…</span>
       <span class="badge clock" id="clock">--:--:--</span>
@@ -139,7 +139,7 @@
             <input id="tradePrice" class="input" type="number" placeholder="价格" step="0.01">
             <button id="tradeBtn" class="btn">记录</button>
           </div>
-          <details class="trade-log" id="tradeLogDetails">
+          <details class="trade-log" id="tradeLogDetails" open>
             <summary>📜 今日已成交 · <span id="tlSummary">--</span></summary>
             <table class="tl-table" id="tradeLogTable">
               <thead><tr><th>时间</th><th>代码</th><th>买/卖</th><th class="r">数量</th><th class="r">价格</th><th class="r">金额</th><th class="r">现金结余</th></tr></thead>
@@ -178,7 +178,7 @@
               </div>
             </div>
           </details>
-          <details class="fold-box" id="foldReview">
+          <details class="fold-box" id="foldReview" open>
             <summary>📊 每日复盘</summary>
             <div class="fold-body"><div id="reviewBox">加载中…</div></div>
           </details>
@@ -227,6 +227,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/static/js/app.js?v=r21"></script>
+  <script src="/static/js/app.js?v=r22"></script>
 </body>
 </html>

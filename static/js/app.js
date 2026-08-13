@@ -649,6 +649,8 @@ function renderAiAdvice(positions) {
     // 任何一步失败都不影响其余渲染（避免整页白屏）
     try { await loadWatchlist(); } catch (e) { console.warn("自选加载失败：", e); }
     try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
+    // 让真实持仓立即出现在行情看板左侧（无需等自动优选扫描）
+    try { if ((!state.view || state.view === "dashboard") && typeof renderSelfStocks === "function") renderSelfStocks(); } catch (e) {}
     try { setupWeights(cfg); } catch (e) {}
     try {
       $("#apiBase").value = API_BASE;
@@ -933,6 +935,29 @@ function renderAiAdvice(positions) {
         fund_grade: m.fund_grade, pe: m.pe,
         tech_score: m.tech_score, sector_score: m.sector_score, val_score: m.val_score, mom_score: m.mom_score,
         watch: w,
+      });
+    });
+    // 用户真实持仓（来自 /api/positions）：行情看板左侧也要能直接看到自己的股票，点开即看详情
+    (state.positions || []).forEach(p => {
+      const code = p.code || "";
+      if (out.some(o => _normCode(o.code) === _normCode(code))) return; // 去重：候选/自选里已有时不重复
+      const m = state.watchMeta[code] || {};
+      out.push({
+        origin: "持仓",
+        code: code, name: p.name || m.name || code,
+        action: p.action || m.action || "",
+        score: p.score != null ? p.score : (m.score != null ? m.score : null),
+        price: p.price != null ? p.price : (m.price != null ? m.price : null),
+        change_pct: p.change_pct != null ? p.change_pct : m.change_pct,
+        buy_price: p.buy_price != null ? p.buy_price : m.buy_price,
+        sell_price: p.sell_price != null ? p.sell_price : m.sell_price,
+        track: p.track || m.track,
+        sector_trend: p.sector_trend != null ? p.sector_trend : m.sector_trend,
+        sector_fund: p.sector_fund != null ? p.sector_fund : m.sector_fund,
+        fund_grade: p.fund_grade || m.fund_grade,
+        pe: p.pe != null ? p.pe : m.pe,
+        tech_score: p.tech_score, sector_score: p.sector_score, val_score: p.val_score, mom_score: p.mom_score,
+        position: p,
       });
     });
     // 排序：强买>买入>持有>减仓>卖出；同档按综合分/评分降序
