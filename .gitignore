@@ -6,6 +6,9 @@ data/universe.txt
 data/positions.json
 data/watchlist.json
 data/review.json
+data/account.json
+static/positions.json
+static/account.json
 .vscode/
 .workbuddy/
 _srv.err
