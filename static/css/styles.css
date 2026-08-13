@@ -970,6 +970,21 @@ button.mini:hover { background: #dde7f0; }
 .rev-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11px; }
 .rev-table th, .rev-table td { padding: 4px 6px; border-bottom: 1px solid #e9ecef; text-align: right; font-variant-numeric: tabular-nums; }
 .rev-table th { background: #e9ecef; font-weight: 700; color: #495057; }
+
+/* 深色模式下复盘区域用深色而不是默认白底 */
+.theme-dark .review-box { background: #161616; border-color: var(--line); }
+.theme-dark .review-box > summary { color: var(--ink); }
+.theme-dark .rev-summary .rev-sum-item { background: #1a1a1a; border-color: var(--line); }
+.theme-dark .rev-summary .rev-sum-label { color: var(--muted); }
+.theme-dark .rev-summary .rev-sum-val { color: var(--ink); }
+.theme-dark .rev-cal { background: #2a1f0a; border-color: #876200; }
+.theme-dark .rev-cal > summary { color: #f59f00; }
+.theme-dark .rev-cal-tips { color: var(--ink); }
+.theme-dark .rev-detail { background: #161616; border-color: var(--line); }
+.theme-dark .rev-detail > summary { color: var(--ink); }
+.theme-dark .rev-table th { background: #1a1a1a; color: var(--muted); border-bottom-color: var(--line); }
+.theme-dark .rev-table td { color: var(--ink); border-bottom-color: var(--line); }
+.theme-dark .rev-row { color: var(--ink); border-bottom-color: var(--line); }
 .rev-table th:nth-child(2), .rev-table td:nth-child(2) { text-align: left; }
 
 /* ============== r16 AI 卡片极简布局（仿参考截图1：4列紧凑横向 + 白底 + 技术细节行） ============== */
@@ -1354,21 +1369,26 @@ body.theme-dark { background: var(--bg); }
 .scan-col { background: #141414; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 .scan-col-title { font-size: 13px; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
 .scan-col-title .count { color: var(--muted); font-size: 11px; margin-left: 4px; }
-.scan-list { display: flex; flex-direction: column; gap: 6px; }
-.scan-row {
-  display: grid; grid-template-columns: 1.4fr 0.7fr 0.5fr 60px; gap: 8px;
-  padding: 10px 12px; background: #1a1a1a; border-radius: 6px;
-  align-items: center; cursor: pointer; transition: background .15s;
+.scan-list { display: flex; flex-direction: column; gap: 3px; max-height: 720px; overflow-y: auto; padding-right: 4px; }
+.scan-header, .scan-row {
+  display: grid; grid-template-columns: 32px 1.2fr 1fr 60px 60px 44px; gap: 8px;
+  padding: 6px 10px; border-radius: 4px; align-items: center;
 }
+.scan-header { color: var(--muted); font-size: 10.5px; padding: 4px 10px; background: transparent; font-weight: 600; border-bottom: 1px solid var(--line); border-radius: 0; }
+.scan-row { background: #1a1a1a; cursor: pointer; transition: background .15s; }
 .scan-row:hover { background: #222; }
-.scan-row .sr-name { font-size: 13px; color: #fff; font-weight: 600; }
-.scan-row .sr-code { font-size: 10px; color: var(--muted); margin-left: 4px; }
-.scan-row .sr-price { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.scan-row .sr-idx { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.scan-row .sr-name { font-size: 12px; color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scan-row .sr-code { font-size: 10px; color: var(--muted); font-family: monospace; }
+.scan-row .sr-price { font-size: 11.5px; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
 .scan-row .sr-time { font-size: 10px; color: var(--muted); }
-.scan-row .sr-chg { font-size: 12px; text-align: right; }
-.scan-row .sr-score { font-size: 22px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.scan-row .sr-chg { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.scan-row .sr-score { font-size: 13px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .scan-col.buy .scan-row .sr-score { color: #e74c3c; }
 .scan-col.sell .scan-row .sr-score { color: #2ecc71; }
+/* 滚动条美化 */
+.scan-list::-webkit-scrollbar { width: 6px; }
+.scan-list::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
 /* 持仓与仓位 v3 表格 */
 .pos-table-v3 { width: 100%; border-collapse: collapse; }
@@ -1396,11 +1416,28 @@ body.theme-dark { background: var(--bg); }
 .theme-dark .btn#tradeBtn { background: #e74c3c; color: #fff; border-color: #e74c3c; }
 .theme-dark .btn#tradeBtn:hover { background: #c0392b; }
 .theme-dark .trade-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.theme-dark .trade-log { margin-top: 10px; }
-.theme-dark .trade-log summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 6px 0; list-style: none; }
+.theme-dark .trade-log { margin-top: 10px; background: #1a1a1a; border-color: var(--line); }
+.theme-dark .trade-log summary { cursor: pointer; color: var(--ink); font-size: 12px; padding: 6px 10px; list-style: none; background: #1a1a1a; border-radius: 6px; }
+.theme-dark .trade-log summary:hover { background: #222; }
+.theme-dark .trade-log[open] { background: #1a1a1a; border-color: var(--line); }
+.theme-dark .trade-log[open] > summary { background: #222; color: var(--ink); }
 .theme-dark .tl-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-.theme-dark .tl-table th, .theme-dark .tl-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--ink); }
+.theme-dark .tl-table th, .theme-dark .tl-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--ink); background: transparent; }
 .theme-dark .tl-table th { color: var(--muted); font-weight: 400; background: #141414; }
+.theme-dark .tl-table .muted-cell { color: var(--muted); }
+.theme-dark .trade-log .tl-table thead th { background: #141414; color: var(--muted); border-bottom-color: var(--line); }
+
+/* 深色模式下覆盖浅色 details 渐变（避免刺眼白底） */
+.theme-dark .fold-box { background: #161616; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; padding: 10px; }
+.theme-dark .fold-box > summary { cursor: pointer; font-size: 13px; color: var(--ink); padding: 4px 0; list-style: none; }
+.theme-dark .fold-box > summary:hover { color: #fff; }
+.theme-dark .fold-box[id="foldDaily"][open] { background: #161616; border-color: var(--line); }
+.theme-dark .fold-box[id="foldDaily"][open] > summary { color: #74c0fc; }
+.theme-dark .fold-box[id="foldTail"][open] { background: #161616; border-color: var(--line); }
+.theme-dark .fold-box[id="foldTail"][open] > summary { color: #b197fc; }
+.theme-dark .fold-box[id="foldReview"][open] { background: #161616; border-color: var(--line); }
+.theme-dark details summary::-webkit-details-marker { display: none; }
+.theme-dark details summary::before { color: var(--muted); }
 .theme-dark .review-box-body { background: #141414; border: 1px solid var(--line); border-radius: 4px; padding: 10px; color: var(--ink); font-size: 12px; }
 
 /* AI 建议（持仓与仓位下方）深色适配 */

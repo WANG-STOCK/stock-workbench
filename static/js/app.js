@@ -2229,6 +2229,18 @@ function renderAiAdvice(positions) {
       try { renderSelfStocks(); } catch (e) {}
     } else if (name === 'scan') {
       try { renderScanView(); } catch (e) {}
+    } else if (name === 'positions') {
+      // 进入持仓与仓位视图时，主动刷新一次持仓表/AI 建议（防止打开后空白）
+      try {
+        if (state.posAdvice && state.posAdvice.length) {
+          renderPosTable(state.posAdvice);
+          renderAiAdvice(state.posAdvice);
+          renderHoldingsBoard(state.posAdvice);
+        } else {
+          // 数据尚未到达，主动拉一次
+          renderAccount();
+        }
+      } catch (e) { console.warn('positions 视图刷新失败：', e); }
     }
   }
 
@@ -2250,28 +2262,38 @@ function renderAiAdvice(positions) {
     paint('加载中…');
     fetch('/api/scan_status').then(r => r.json()).then(data => {
       const results = (data && data.results) || [];
-      const buy  = results.filter(r => {
+      const MAX = 100;  // 买入/卖出各最多展示 100 条，三百多条全显示（原 r20 限 5 条太少了）
+      const buyAll = results.filter(r => {
         const a = (r.action || '').toLowerCase();
         return a.includes('buy') || a.includes('买入') || a.includes('加仓');
-      }).slice(0, 5);
-      const sell = results.filter(r => {
+      });
+      const sellAll = results.filter(r => {
         const a = (r.action || '').toLowerCase();
         return a.includes('sell') || a.includes('卖出') || a.includes('减仓');
-      }).slice(0, 5);
-      const rowHtml = (r) => {
+      });
+      // 按综合分降序
+      buyAll.sort((a, b) => (b.combined ?? b.score ?? 0) - (a.combined ?? a.score ?? 0));
+      sellAll.sort((a, b) => (b.combined ?? b.score ?? 0) - (a.combined ?? a.score ?? 0));
+      const buy  = buyAll.slice(0, MAX);
+      const sell = sellAll.slice(0, MAX);
+      const rowHtml = (r, idx) => {
         const px  = r.price != null ? r.price.toFixed(2) : '--';
         const chg = r.change_pct != null ? (r.change_pct >= 0 ? '+' : '') + r.change_pct.toFixed(2) + '%' : '';
         const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
-        const sc  = r.score != null ? r.score : (r.advice_score != null ? r.advice_score : 0);
+        const sc  = r.score != null ? r.score : (r.advice_score != null ? r.advice_score : (r.combined != null ? r.combined : 0));
+        const track = r.track ? `<span class="sr-track">${r.track}</span>` : '';
         return `<div class="scan-row" data-code="${r.code || ''}">
-          <div><span class="sr-name">${r.name || r.code || '--'}</span><span class="sr-code">${r.code || ''}</span><div class="sr-price">¥${px}</div></div>
-          <div class="sr-chg ${chgCls}">${chg}</div>
-          <div class="sr-time">${r.time || ''}</div>
-          <div class="sr-score">${sc}</div>
+          <span class="sr-idx">${idx + 1}</span>
+          <span class="sr-name">${r.name || r.code || '--'}</span>
+          <span class="sr-code">${r.code || ''}</span>
+          <span class="sr-price">¥${px}</span>
+          <span class="sr-chg ${chgCls}">${chg}</span>
+          <span class="sr-score">${sc}</span>
         </div>`;
       };
-      buyEl.innerHTML  = buy.length  ? buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>';
-      sellEl.innerHTML = sell.length ? sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>';
+      const headerHtml = (total) => `<div class="scan-header"><span>#</span><span>名称</span><span>代码</span><span class="r">现价</span><span class="r">涨跌</span><span class="r">评分</span></div>`;
+      buyEl.innerHTML  = (buy.length  ? headerHtml(buyAll.length) + buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>');
+      sellEl.innerHTML = (sell.length ? headerHtml(sellAll.length) + sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>');
     }).catch(e => paint('信号扫描失败：' + (e.message || e)));
   }
 
