@@ -1,11 +1,32 @@
 /* 股票工作台前端控制器 */
-/* 版本自检：刷新时第一行打印当前是 r24-4ed57be，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
-console.log('%c[wb] app.js r24-4ed57be loaded (TDZ-safe, function api + window.onerror fallback)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r24-4ed57be') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r24-4ed57be。请强制刷新或清缓存。');
+/* 版本自检：刷新时第一行打印当前是 r26-stub，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
+console.log('%c[wb] app.js r26-stub loaded ($() stub-sentinel + errToast + window.onerror)','color:#2ecc71;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r26-stub') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r26-stub。请强制刷新或清缓存。');
 }
 (function () {
-  const $ = (s) => document.querySelector(s);
+  /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
+     兜底——任何 $("#nonexistent").addEventListener 都变成 no-op，不再 throw 让整页 init 中断 */
+  const _docQuery = (s) => { try { return document.querySelector(s); } catch (e) { return null; } };
+  let _stubEl = null;
+  function $(s) {
+    const el = _docQuery(s);
+    if (el) return el;
+    if (!_stubEl) _stubEl = document.createElement('div');
+    return _stubEl;
+  }
+  /* 把启动期错误抛到页面顶部红条（不用开 F12 也能看到） */
+  function _showErrAtTop(label, info) {
+    try {
+      const bar = document.getElementById('errToast');
+      if (!bar) return;
+      bar.style.display = 'block';
+      const txt = (info && info.stack) ? info.stack : String(info || '');
+      bar.textContent += '[' + label + '] ' + txt.slice(0, 1500) + '\n---\n';
+    } catch (e) { /* ignore */ }
+  }
+  window.addEventListener('error', (ev) => _showErrAtTop('onerror @ ' + (ev.filename||'?') + ':' + (ev.lineno||'?') + ':' + (ev.colno||'?'), ev.error || ev.message));
+  window.addEventListener('unhandledrejection', (ev) => _showErrAtTop('unhandledrejection', ev.reason));
   let API_BASE = localStorage.getItem("wb_api_base") || "";
   /* 用函数声明(而非 const=箭头函数)避免 TDZ：函数声明+初始化同步完成，任何调用点都不会触发
      "Can't access lexical declaration 'api' before initialization" */
