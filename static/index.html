@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>婷婷量化AI</title>
-  <link rel="stylesheet" href="/static/css/styles.css?v=r16">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r17">
 </head>
 <body>
   <header class="topbar">
@@ -30,7 +30,7 @@
       <span class="status">
         <span class="badge" id="marketBadge">A股 · 沪深</span>
         <span class="badge" id="tdxStatus">数据源：检测中…</span>
-        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r16</span>
+        <span class="badge" id="buildTag" style="background:#fff3bf;color:#876200">v2026-08-13-r17</span>
         <span class="badge clock" id="clock">--:--:--</span>
       </span>
     </div>
@@ -203,7 +203,7 @@
       <section class="panel panel-self">
         <div class="panel-title">
           <span class="dot dot-blue"></span>
-          <span>📋 自选股票 · 自动优选</span>
+          <span>📊 持仓看板</span>
           <span class="panel-actions">
             <button id="refreshSelf" class="mini" title="立即重新扫描成长池">刷新优选</button>
             <button id="refreshSignals" class="mini" title="刷新自选股信号">刷信号</button>
@@ -252,22 +252,30 @@
           </span>
         </div>
 
-        <input id="searchInput" class="input" placeholder="代码/名称/拼音（用来加入自选）">
-        <div id="searchResults" class="search-results"></div>
-
         <div class="self-head">
-          <span id="selfCount" class="self-count"></span>
-          <span class="sub" style="font-size:11px;color:var(--muted)">优选 + 自选 · 自动更新</span>
+          <span id="hbCount" class="self-count"></span>
+          <span class="sub" style="font-size:11px;color:var(--muted)">持仓实时看板 · 每 5 秒刷新</span>
         </div>
-        <div id="selfStocks" class="self-stocks">
-          <div class="signal-empty">自动优选中…（首次约 1 分钟扫描成长池）</div>
+        <div id="holdingsBoard" class="holdings-board">
+          <div class="signal-empty">加载持仓看板…</div>
         </div>
+
+        <details class="note-box cand-fold">
+          <summary>📎 候选优选（自选扫描）</summary>
+          <input id="searchInput" class="input" placeholder="代码/名称/拼音（用来加入自选）">
+          <div id="searchResults" class="search-results"></div>
+          <div class="self-head">
+            <span id="selfCount" class="self-count"></span>
+            <span class="sub" style="font-size:11px;color:var(--muted)">优选 + 自选 · 自动更新</span>
+          </div>
+          <div id="selfStocks" class="self-stocks"></div>
+        </details>
       </section>
     </aside>
   </div>
 
   <div id="toast" class="toast"></div>
 
-  <script src="/static/js/app.js?v=r16"></script>
+  <script src="/static/js/app.js?v=r17"></script>
 </body>
 </html>

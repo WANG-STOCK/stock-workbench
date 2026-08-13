@@ -117,6 +117,7 @@
 
       renderPosTable(positions);
       renderAiAdvice(positions);
+      renderHoldingsBoard(positions);  // 右侧持仓看板（r17：行情看板→持仓看板）
       computeSignalsForWatchlist();   // 自选股也注入当日行业资金流
       // 同时刷新今日已成交明细（不让"刚录入的记录"看起来消失）
       loadTradeLog();
@@ -935,6 +936,63 @@ function renderAiAdvice(positions) {
       return sb - sa;
     });
     return out;
+  }
+
+  // ---------- 持仓看板（r17：行情看板→持仓看板） ----------
+  // 用 /api/positions_advice 的实时字段渲染持仓股卡片网格，直接驱动实时建议
+  function renderHoldingsBoard(positions) {
+    const el = document.getElementById("holdingsBoard");
+    if (!el) return;
+    const cnt = document.getElementById("hbCount");
+    if (cnt) cnt.textContent = `共 ${positions.length} 只`;
+    if (!positions || !positions.length) {
+      el.innerHTML = '<div class="signal-empty">暂无持仓，添加一行后这里会出现持仓看板。</div>';
+      return;
+    }
+    // 按评分绝对值降序：信号最强的排最上
+    const sorted = positions.slice().sort((a, b) => Math.abs(+(b.advice_score || 0)) - Math.abs(+(a.advice_score || 0)));
+    el.innerHTML = sorted.map(hbCardHtml).join("");
+  }
+  function hbCardHtml(p) {
+    const action = p.action || "不动";
+    const label = p.action_label || (action === "买入" ? "加仓" : action === "卖出" ? "减仓" : "持有");
+    const cls = action === "买入" || action === "强烈买入" ? "buy" :
+                action === "卖出" ? "sell" : "hold";
+    const color = cls === "buy" ? "#2b8a3e" : cls === "sell" ? "#c92a2a" : "#f59f00";
+    const px = p.price != null ? fmt(p.price, 2) : "--";
+    const chg = p.change_pct != null ? (p.change_pct >= 0 ? "+" : "") + p.change_pct.toFixed(2) + "%" : "";
+    const chgCls = p.change_pct == null ? "" : (p.change_pct >= 0 ? "up" : "down");
+    const ts = p.tech_short || {};
+    const kdj = ts.kdj_j != null
+      ? `KDJ J=${ts.kdj_j}${ts.kdj_status ? "·" + ts.kdj_status : ""}${ts.kdj_turn && ts.kdj_turn !== "平稳" ? "·" + ts.kdj_turn : ""}`
+      : "";
+    const macd = ts.macd_status ? `MACD ${ts.macd_status}` : "";
+    const vol = ts.vol_ratio != null ? `量比 ${ts.vol_ratio}` : "";
+    const rsi = ts.rsi != null ? `RSI ${ts.rsi}` : "";
+    const techLine = [kdj, macd, vol, rsi].filter(Boolean).join("　") || "—";
+    const tl = p.tight || {};
+    const buy = tl.buy != null ? fmt(tl.buy, 2) : "--";
+    const sell = tl.sell != null ? fmt(tl.sell, 2) : "--";
+    const sl = tl.stop_loss != null ? fmt(tl.stop_loss, 2) : "--";
+    const tp = tl.take_profit != null ? fmt(tl.take_profit, 2) : "--";
+    const score = p.advice_score != null ? p.advice_score : 0;
+    const scoreColor = score > 0 ? "#2b8a3e" : score < 0 ? "#c92a2a" : "#868e96";
+    const shares = p.shares != null ? p.shares + "股" : "";
+    return `<div class="hb-card ${cls}" style="border-left-color:${color}">
+      <div class="hb-head">
+        <span class="hb-name"><b>${p.name || p.code}</b><i>${p.code}</i><em class="hb-shares">${shares}</em></span>
+        <span class="hb-px"><b>${px}</b> <span class="${chgCls}">${chg}</span></span>
+      </div>
+      <div class="hb-tech">${techLine}</div>
+      <div class="hb-advice">
+        <span class="hb-act" style="color:${color}">${label}</span>
+        <span class="hb-bp">买 ${buy}</span>
+        <span class="hb-sp">卖 ${sell}</span>
+        <span class="hb-sl">止损 ${sl}</span>
+        <span class="hb-tp">止盈 ${tp}</span>
+        <span class="hb-score" style="color:${scoreColor}">评分 ${score > 0 ? "+" : ""}${score}</span>
+      </div>
+    </div>`;
   }
 
   function renderSelfStocks() {

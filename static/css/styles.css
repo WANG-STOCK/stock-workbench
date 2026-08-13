@@ -1075,3 +1075,53 @@ button.mini:hover { background: #dde7f0; }
 .ai-tech-detail .vol-dn { color: #1971c2; font-weight: 700; }
 .ai-tech-detail .vol-mid { color: #495057; }
 
+/* ============== r17 持仓看板（行情看板→持仓看板：卡片网格） ============== */
+.holdings-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.hb-card {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-left: 4px solid #868e96;
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+.hb-card.buy  { border-left-color: #2b8a3e; }
+.hb-card.sell { border-left-color: #c92a2a; }
+.hb-card.hold { border-left-color: #f59f00; }
+.hb-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.hb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hb-name { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+.hb-name b { font-size: 13.5px; color: #212529; font-weight: 800; }
+.hb-name i { font-style: normal; color: #868e96; font-size: 10.5px; font-weight: 500; }
+.hb-name .hb-shares { font-style: normal; color: #495057; font-size: 10.5px; background: #f1f3f5; border-radius: 4px; padding: 0 5px; margin-left: 2px; }
+.hb-px { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hb-px b { font-size: 15px; color: #212529; font-weight: 900; }
+.hb-px .up { color: #c92a2a; font-weight: 800; font-size: 12px; }
+.hb-px .down { color: #2b8a3e; font-weight: 800; font-size: 12px; }
+.hb-tech {
+  font-size: 11px; color: #495057; line-height: 1.5; margin: 5px 0 6px;
+  padding: 4px 7px; background: #f8fbfd; border-radius: 5px; border: 1px solid #e7f0f7;
+  font-variant-numeric: tabular-nums;
+}
+.hb-advice {
+  display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: baseline;
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
+}
+.hb-advice .hb-act { font-weight: 800; font-size: 12.5px; }
+.hb-advice .hb-bp, .hb-advice .hb-sp { color: #495057; }
+.hb-advice .hb-bp b, .hb-advice .hb-sp b { color: #212529; font-weight: 800; }
+.hb-advice .hb-sl { color: #868e96; }
+.hb-advice .hb-sl b { color: #495057; font-weight: 700; }
+.hb-advice .hb-tp { color: #1971c2; }
+.hb-advice .hb-tp b { color: #1971c2; font-weight: 800; }
+.hb-advice .hb-score { margin-left: auto; font-weight: 800; font-size: 12px; }
+/* 候选优选折叠（原自选扫描降级到此） */
+.cand-fold { margin-top: 6px; }
+.cand-fold > summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #495057; padding: 4px 2px; }
+.cand-fold .input { margin: 6px 0 4px; }
+
