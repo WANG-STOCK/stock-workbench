@@ -397,9 +397,8 @@ function renderAiAdvice(positions) {
       '<thead><tr>' +
         '<th class="ai-c-name" style="min-width:115px">股票</th>' +
         '<th class="ai-c-score" style="width:60px">评分</th>' +
-        '<th class="ai-c-action" style="width:60px">操作</th>' +
-        '<th class="ai-c-fc" style="min-width:230px">今日预估 + 板块</th>' +
-        '<th class="ai-c-tp" style="min-width:240px">偏T方案（实时）</th>' +
+        '<th class="ai-c-fc" style="min-width:300px">今日预估 + 板块</th>' +
+        '<th class="ai-c-tp" style="min-width:290px">实时建议</th>' +
       '</tr></thead>' +
       '<tbody>' + sorted.map(_aiCardHtml).join("") + '</tbody>' +
       '</table>';
@@ -433,7 +432,8 @@ function renderAiAdvice(positions) {
     const fcPct = fc.pct != null ? fc.pct : 0;
     const fcHi = fc.forecast_high;
     const fcLo = fc.forecast_low;
-    const basisHtml = (fc.basis || []).filter(Boolean).slice(0, 4)
+    // r15: 资金净流入这条信息由下方板块块承载，此处与板块块重复，不再渲染
+    const basisHtml = (fc.basis || []).filter(b => b && !/资金净流入|净流入/.test(b)).slice(0, 5)
       .map(b => '<li>' + b + '</li>').join("");
 
     // 板块（合并到今日预估下方）
@@ -463,13 +463,7 @@ function renderAiAdvice(positions) {
       '</td>' +
       // ② 评分
       '<td class="ai-c-score ' + cls + '">' + (score > 0 ? '+' : '') + score + '</td>' +
-      // ③ 操作
-      '<td class="ai-c-action">' +
-        '<span class="ai-action-pill ' + cls + '">' + label + '</span>' +
-        (p.op_qty && p.op_qty > 0 ? '<div class="op-qty-mini"><b>' + p.op_qty + '</b>股</div>' : '') +
-        (p.op_price ? '<div class="op-price-mini">' + fmt(p.op_price, 2) + '</div>' : '') +
-      '</td>' +
-      // ④ 今日预估 + 板块
+      // ③ 今日预估 + 板块（r15: 板块块在最下方，资金净流入由它承担；上方不再重复）
       '<td class="ai-c-fc">' +
         '<div class="fc-head"><span class="fc-trend ' + fcCls + '">' + fcTrend + ' </span>' +
           '<span class="fc-pct ' + fcCls + '">' + (fcPct >= 0 ? '+' : '') + fcPct.toFixed(2) + '%</span></div>' +
@@ -482,13 +476,13 @@ function renderAiAdvice(positions) {
             '<span class="fc-band-lo" title="预估今天能买到的最低价">低 <b>' + (fcLo ? fmt(fcLo, 2) : '—') + '</b></span>' +
           '</div>'
         ) : '') +
-        // 板块块（合并到今日预估下方）
+        // 板块块（合并到今日预估下方，含板块资金流入）
         '<div class="ai-sec-block">' +
           '<div class="sec-row1"><span class="sec-name">' + secName + '</span><span class="sec-pct ' + secPctCls + '">' + secPctTxt + '</span></div>' +
           '<div class="sec-row2">' + secFundTxt + (secFundTxt && upRatioTxt ? '　' : '') + upRatioTxt + '</div>' +
         '</div>' +
       '</td>' +
-      // ⑤ 偏T方案（实时 ATR 宽度）
+      // ④ 实时建议（r15: 原偏T方案，跟实盘走 + ATR 实时价位）
       '<td class="ai-c-tp">' + _tpHtml(tpPlan) + '</td>' +
     '</tr>';
   }

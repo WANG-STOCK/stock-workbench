@@ -247,8 +247,8 @@ body {
 }
 .ai-table thead th.r { text-align: center; }
 .ai-table tbody td {
-  padding: 8px 10px; vertical-align: top; border: 1px solid transparent;
-  font-size: 12px; background: rgba(255,255,255,0.6);
+  padding: 8px 10px; vertical-align: middle; border: 1px solid transparent;
+  font-size: 12px; background: #ffffff;
   text-align: center;   /* 整表居中，看着更整齐 */
 }
 .ai-table tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
@@ -256,10 +256,11 @@ body {
 /* 股票列也居中；名字/代码/现价竖向堆叠并居中 */
 .ai-table td.ai-c-name { text-align: center; }
 
-/* 行底色（<tr> class 直接吃）：买入=绿、卖出=红、持有=黄灰，整个单元格都被染色 */
-.ai-table tbody tr.ai-row-buy td   { background: linear-gradient(135deg, #d3f9d8 0%, #b2f2bb 100%); border-color: #2b8a3e; }
-.ai-table tbody tr.ai-row-sell td  { background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%); border-color: #c92a2a; }
-.ai-table tbody tr.ai-row-hold td  { background: linear-gradient(135deg, #fff9db 0%, #fff3bf 100%); border-color: #f59f00; }
+/* 行底色（r15：白底 + 左侧 4px 色条：买入=绿、卖出=红、持有=黄灰，不再整行染色，看着不刺眼） */
+.ai-table tbody tr.ai-row-buy td   { background: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #2b8a3e; }
+.ai-table tbody tr.ai-row-sell td  { background: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #c92a2a; }
+.ai-table tbody tr.ai-row-hold td  { background: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #f59f00; }
+.ai-table tbody tr.ai-strong td    { font-weight: 700; }   /* 强烈买入行：白底 + 加粗（不另染深色） */
 .ai-table tbody tr:hover td { filter: brightness(0.97); }
 
 .ai-table .ai-empty { text-align: center; color: var(--muted); padding: 20px; font-size: 12px; }
