@@ -407,8 +407,15 @@ def _build_position(analysis, qs, code=None):
     return pos
 
 
-def _build_forecast(a, regime, outlook, prev_close, action):
-    """今日预估：综合开盘价/集合竞价/板块涨跌/资金净流/均线方向，给出 (trend, pct, basis[])。"""
+def _build_forecast(a, regime, outlook, prev_close, action, intraday=None, tl=None):
+    """今日预估：综合开盘价/集合竞价/板块涨跌/资金净流/均线方向，给出 (trend, pct, basis[], forecast_high, forecast_low)。
+
+    forecast_high/low —— "利润最大化"用：整天预估最高/最低价，让用户卖在最高价附近、买在最低价附近。
+    算法：
+      - 高点 = max(当日已实现 high × 1.005, 现价 × (1 + pct_band), 阻力 × 1.005)
+      - 低点 = min(当日已实现 low × 0.995,  现价 × (1 - pct_band), 支撑 × 0.995)
+      - pct_band = max(2.5, |pct| × 0.7)（保守下限 2.5%）
+    """
     ind = (a or {}).get("indicators") or {}
     macd = ind.get("macd") or {}
     kdj = ind.get("kdj") or {}
@@ -494,10 +501,42 @@ def _build_forecast(a, regime, outlook, prev_close, action):
         trend = "震荡"
     if outlook and outlook.get("trend"):
         trend = outlook["trend"]   # 以 sig.day_outlook 的定性为准（已综合技术+资金）
+
+    # 利润最大化：整天预估最高/最低（卖给最高、买给最低）
+    forecast_high = forecast_low = None
+    pct_band = max(2.5, abs(pct) * 0.7)  # 预估价区间，保守 2.5%
+    day_high = (intraday or {}).get("high")
+    day_low = (intraday or {}).get("low")
+    support = (tl or {}).get("buy")
+    resist = (tl or {}).get("sell")
+    if price and price > 0:
+        ups = []
+        if day_high and day_high > 0:
+            ups.append(round(day_high * 1.005, 2))
+        ups.append(round(price * (1 + pct_band / 100), 2))
+        if resist and resist > 0 and abs(resist - price) / price <= 0.05:
+            ups.append(round(resist * 1.005, 2))
+        forecast_high = max(ups) if ups else round(price * (1 + pct_band / 100), 2)
+        # 上限：防极端
+        forecast_high = min(forecast_high, round(price * 1.12, 2))
+
+        lows = []
+        if day_low and day_low > 0:
+            lows.append(round(day_low * 0.995, 2))
+        lows.append(round(price * (1 - pct_band / 100), 2))
+        if support and support > 0 and abs(support - price) / price <= 0.05:
+            lows.append(round(support * 0.995, 2))
+        forecast_low = min(lows) if lows else round(price * (1 - pct_band / 100), 2)
+        # 下限：防极端
+        forecast_low = max(forecast_low, round(price * 0.88, 2))
+
     return {
         "trend": trend,
         "pct": round(pct, 2),
         "basis": basis[:6],         # 最多 6 条
+        "forecast_high": forecast_high,
+        "forecast_low": forecast_low,
+        "pct_band": round(pct_band, 2),
     }
 
 
@@ -673,12 +712,25 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
         op_price = (tl or {}).get("sell") or pl.get("sell")
     else:
         op_price = None
+    # 操作价放宽：旧版 ±3% 截断在强势日让用户"卖飞/买陡"。
+    # 新版：用 forecast_high（卖→给高位）+ forecast_low（买→给低位），不再钉死在 ±3% 内；
+    # 同时 forecast_high/low 已在 _build_forecast 钳制到 ±12%，不会突破涨停。
+    forecast = _build_forecast(a, regime, outlook, prev_close, action, intraday=intraday, tl=tl)
+    fc_hi = forecast.get("forecast_high")
+    fc_lo = forecast.get("forecast_low")
     if op_price and price:
-        # 卖出不能高于现价 +3%（否则永远到不了），买入不能低于现价 -3%（追跌不接飞刀）
-        if action == "卖出" and op_price > price * 1.03:
-            op_price = round(price * 1.015, 2)  # 弱市/超买保守一点
-        elif action == "买入" and op_price < price * 0.97:
-            op_price = round(price * 0.985, 2)
+        if action == "卖出":
+            # 允许操作价 ≤ forecast_high（甚至更高 0.5%）—— 保证"卖在最高附近"
+            hi_cap = max(price * 1.005, (fc_hi or price * 1.03) * 0.998)
+            if op_price > price * 1.005 and op_price < (fc_hi or op_price):
+                pass  # 高位价 + 不超 forecast_high → 接受
+            op_price = min(op_price, round(hi_cap, 2))
+        elif action == "买入":
+            # 允许操作价 ≥ forecast_low（甚至更低 0.5%）—— 保证"买在最低附近"
+            lo_cap = min(price * 0.995, (fc_lo or price * 0.97) * 1.002)
+            if op_price < price * 0.995 and op_price > (fc_lo or op_price):
+                pass
+            op_price = max(op_price, round(lo_cap, 2))
     # 操作量：买=加仓股数，卖=减仓股数（不超持仓），不动=0
     delta = int(pos.get("delta_shares") or 0)
     if action == "买入":
@@ -726,8 +778,8 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
             "fund_proxy": regime.get("fund_proxy", False),  # True=本地估算(东财不可用时)
             "up_ratio": regime.get("up_ratio"),         # 赛道成分股上涨占比（0~1）
         }
-    # ===== 今日预估（涨/跌/震荡 + pct + 依据）=====
-    forecast = _build_forecast(a, regime, outlook, prev_close, action)
+    # ===== 今日预估（涨/跌/震荡 + pct + 依据 + 利润最大化的 forecast_high/low）=====
+    # 注意：forecast 已在 op_price 收敛阶段提前算过（带 intraday+tl）—— 这里直接复用
     # ===== 板块详情（涨跌幅 + 资金净流入 + 上涨占比）=====
     sector_detail = _build_sector_detail(regime)
     # ===== 技术面（MA + MACD + KDJ + BOLL + 关键支撑压力位）=====
@@ -757,54 +809,143 @@ def _advise_position(code, capital, rt_price=None, rt_prev=None):
     }
 
 
-# 紧凑买卖价：贴现价 ±0.8% 以内，给"立刻能挂的限价"。
-# 若有支撑/阻力且与现价 <2%，则就近吸附到支撑/阻力（避免脱离实际支撑位的"橡皮筋价"）。
+# 实时买/卖/止损/止盈：ATR/分时波动驱动 + "利润最大化"spread
+# —— 旧版固定 ±0.8% 太窄，强反转日会让用户"卖飞/买陡"；改为跟实盘波动走。
+# 核心：
+#   1) band 至少 2.5%（最小利润空间）
+#   2) 实时扩张：当日已实现 high-low 跨度的 70%（覆盖日内波动 → 卖在最高附近、买在最低附近）
+#   3) intaday 已给出 target_price/stop_loss → 优先吸附到该价位
+#   4) dynamic_levels 给出的支撑/阻力 → 在 ±5% 范围内吸附
+#   5) 反向钳制：buy 不能低于当日 low×0.995、sell 不能高于当日 high×1.005（避免"橡皮筋价"）
 def _tight_levels(price, intraday, tl):
     if not price:
         return None
-    buy = round(price * 0.992, 2)
-    sell = round(price * 1.008, 2)
-    stop_loss = round(price * 0.97, 2)
-    take_profit = round(price * 1.03, 2)
-    band = "±0.8%"
-    # 若 intraday 已给出更窄的目标价/止损，优先采用
+
+    # 1) 计算 band_pct（实时动态）
+    band_pct = 0.025  # 下限：±2.5%
+    day_high = (intraday or {}).get("high")
+    day_low = (intraday or {}).get("low")
+    if day_high and day_low and day_high > day_low and price > 0:
+        day_band = (day_high - day_low) / price
+        # 让 band 至少覆盖日内波幅的 70%——给利润最大化留空间
+        band_pct = max(band_pct, day_band * 0.7)
+    # 防极端：单日波幅超过 12% 时收紧到 8%（涨停/跌停日的"全波幅"不可执行）
+    band_pct = min(band_pct, 0.08)
+
+    band_label = f"±{band_pct*100:.1f}%（实时已实现 {((day_high or price)-(day_low or price))/max(price,1)*100:.1f}%）".replace("实时已实现 0.0%", "实时已实现 ~")
+
+    # 2) 买/卖基础价（band 区间）
+    buy = round(price * (1 - band_pct), 2)
+    sell = round(price * (1 + band_pct), 2)
+    stop_loss = round(price * (1 - band_pct * 1.5), 2)
+    take_profit = round(price * (1 + band_pct * 1.5), 2)
+
+    intraday_action = (intraday or {}).get("action") or (intraday or {}).get("scenario") or ""
+
+    # 3) intraday target_price / stop_loss 优先
     if isinstance(intraday, dict):
         tp = intraday.get("target_price")
         sl = intraday.get("stop_loss")
-        # target_price 通常是"如果回踩到此位就买"或"如果涨到此位就卖"——采用作为提醒
-        basis_note = intraday.get("basis") or intraday.get("scenario") or ""
-        # 量化操作
-        action_hint = intraday.get("action") or intraday.get("scenario") or ""
-        # 若实时判定"建议立即卖出"，把 sell 收紧到现价 +0.5%（落袋为安）
-        if "卖" in action_hint or "止盈" in action_hint:
-            sell = min(sell, round(price * 1.005, 2))
-            band = "现价 +0.5%（实时：见好就收）"
-        # 若实时判定"建议立即买入/低吸"，把 buy 收紧到现价 -0.4%（不踏空）
-        elif "买" in action_hint or "低吸" in action_hint or "加仓" in action_hint:
-            buy = max(buy, round(price * 0.996, 2))
-            band = "现价 -0.4%（实时：快速跟入）"
-    # 若 tl 给出的低吸位靠近现价 < 2%，吸附到那个支撑；卖位同理
+        if tp and tp > 0:
+            if "卖" in intraday_action or "止盈" in intraday_action:
+                sell = max(sell, round(tp, 2))
+                band_label += " · 实盘目标价" + f" → 上调到 {tp}"
+            elif "买" in intraday_action or "低吸" in intraday_action or "加仓" in intraday_action:
+                buy = min(buy, round(tp, 2))
+                band_label += " · 实盘目标价" + f" → 下调到 {tp}"
+        if sl and sl > 0:
+            stop_loss = round(sl, 2)
+
+    # 4) dynamic_levels 支撑/阻力吸附（离现价 < 5% 才吸附，避免跨日价干扰）
+    support = resist = None
     if tl:
         d_buy = tl.get("buy")
-        if d_buy and abs(d_buy - price) / max(price, 1) <= 0.025:
-            buy = min(buy, round(d_buy, 2))   # 取较紧的（不让用户被错误低价买入）
+        if d_buy and abs(d_buy - price) / max(price, 1) <= 0.05:
+            buy = round(d_buy, 2)
+            support = round(d_buy, 2)
         d_sell = tl.get("sell")
-        if d_sell and abs(d_sell - price) / max(price, 1) <= 0.025:
-            sell = max(sell, round(d_sell, 2)) # 取较宽的（不让用户被错位卖飞）
-    # 距离百分比
-    def _pct(v):
-        return round((v - price) / price * 100, 2) if v else None
+        if d_sell and abs(d_sell - price) / max(price, 1) <= 0.05:
+            sell = max(sell, round(d_sell, 2))
+            resist = round(d_sell, 2)
+        else:
+            support = round(tl.get("buy"), 2) if tl.get("buy") else None
+            resist = round(tl.get("sell"), 2) if tl.get("sell") else None
+
+    # 5) 当日 high/low 反向钳制（卖不超过当日高点×1.005、买不低于当日低点×0.995）
+    if day_high and sell > day_high * 1.005:
+        sell = round(day_high * 1.005, 2)
+    if day_low and buy < day_low * 0.995:
+        buy = round(day_low * 0.995, 2)
+
+    band_label = band_label.replace(" · 实盘目标价 → ", " · 实盘目标 → ")
+
     return {
         "buy": buy,
         "sell": sell,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
-        "buy_pct": _pct(buy),
-        "sell_pct": _pct(sell),
-        "band": band,
-        "support": round(tl.get("buy"), 2) if tl and tl.get("buy") else None,
-        "resist": round(tl.get("sell"), 2) if tl and tl.get("sell") else None,
+        "buy_pct": round((buy - price) / price * 100, 2),
+        "sell_pct": round((sell - price) / price * 100, 2),
+        "band": band_label,
+        "band_pct": round(band_pct, 4),
+        "support": support,
+        "resist": resist,
+        "day_high": round(day_high, 2) if day_high else None,
+        "day_low": round(day_low, 2) if day_low else None,
     }
+
+
+# ---------- 自选股票实时重锚（/api/scan_status 返回前调用，避免 buy_price 锁死） ----------
+def _refresh_scan_realtime(results, max_codes=200):
+    """用当前实时价重锚每只候选股的 price/buy_price/sell_price。
+
+    用户反馈"推荐我买药明康德 159.04，但现价已经 163" → scan_results 冻结时算的
+    buy_price 一直显示。本函数在 /api/scan_status 返回前用 ds.fetch_realtime 重锚：
+      - price = 实时价
+      - band_pct 至少 2.5%（与持仓 tight 同款）
+      - buy_price = price × (1 - band_pct), sell_price = price × (1 + band_pct)
+      - 标记 rt_refreshed=True 与 rt_refreshed_at 时间戳
+    max_codes 上限保护：避免一次扫 600+ 自选股拖慢轮询。
+    """
+    if not results:
+        return 0
+    sub = results[:max_codes]
+    codes = [r.get("code") for r in sub if r.get("code")]
+    if not codes:
+        return 0
+    try:
+        rt = ds.fetch_realtime(codes) or {}
+    except Exception:
+        rt = {}
+    n = 0
+    for r in sub:
+        code = r.get("code")
+        quote = rt.get(code) or {}
+        new_price = quote.get("price")
+        if not new_price:
+            continue
+        day_high = quote.get("high")
+        day_low = quote.get("low")
+        # 实时动态 band_pct：至少 2.5%，按当日已实现波动扩张
+        band_pct = 0.025
+        if day_high and day_low and day_high > day_low and new_price > 0:
+            day_band = (day_high - day_low) / new_price
+            band_pct = max(band_pct, day_band * 0.7)
+        band_pct = min(band_pct, 0.08)
+        r["price"] = new_price
+        r["change_pct"] = quote.get("change_pct") if quote.get("change_pct") is not None else r.get("change_pct")
+        r["buy_price"] = round(new_price * (1 - band_pct), 2)
+        r["sell_price"] = round(new_price * (1 + band_pct), 2)
+        r["rt_band_pct"] = round(band_pct, 4)
+        if day_high:
+            r["today_high"] = round(day_high, 2)
+        if day_low:
+            r["today_low"] = round(day_low, 2)
+        r["rt_refreshed"] = True
+        n += 1
+    if n:
+        results[:max_codes] = sub  # 写回（如有切片）
+    return n
 
 
 # ---------- 盘中实时建议（高频刷新，按分时判断该不该买/卖） ----------
@@ -1377,10 +1518,28 @@ class Handler(BaseHTTPRequestHandler):
                              "count": len(codes), "results": result})
             return
         if route == "/api/scan_status":
+            refreshed = _refresh_scan_realtime(_scan["results"])
             self._send(200, {"running": _scan["running"], "total": _scan["total"],
                              "done": _scan["done"], "results": _scan["results"][:200],
                              "error": _scan["error"], "scope": _scan["scope"],
-                             "strategy": _scan["strategy"]})
+                             "strategy": _scan["strategy"],
+                             "rt_refreshed": refreshed,
+                             "rt_refreshed_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+            return
+        if route == "/api/trade_log":
+            # 今日成交明细（刷新不丢）。可选参数：?date=YYYY-MM-DD；不传则返回今天。
+            # 修复：r11 之前误放在 do_POST 里，前端 GET 永远 404 → 移到 do_GET
+            log = _load_json(TRADE_LOG, []) or []
+            qd = (qs.get("date") or [None])[0]
+            if not qd:
+                qd = time.strftime("%Y-%m-%d")
+            rows = [r for r in log if r.get("date") == qd]
+            # 同时给今日的现金流（买入支出/卖出收入）
+            buy_amt = round(sum(r["amount"] for r in rows if r["side"] == "buy"), 2)
+            sell_amt = round(sum(r["amount"] for r in rows if r["side"] == "sell"), 2)
+            self._send(200, {"ok": True, "date": qd, "rows": rows,
+                             "buy_amt": buy_amt, "sell_amt": sell_amt,
+                             "net": round(sell_amt - buy_amt, 2)})
             return
         if route == "/api/build_universe":
             u = os.path.join(DATA_DIR, "universe.txt")
@@ -1698,20 +1857,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"ok": True, "cash": acct["cash"],
                              "positions": positions,
                              "log_id": int(time.time() * 1000)})
-            return
-        if route == "/api/trade_log":
-            # 今日成交明细（刷新不丢）。可选参数：?date=YYYY-MM-DD；不传则返回今天。
-            log = _load_json(TRADE_LOG, []) or []
-            qd = (qs.get("date") or [None])[0]
-            if not qd:
-                qd = time.strftime("%Y-%m-%d")
-            rows = [r for r in log if r.get("date") == qd]
-            # 同时给今日的现金流（买入支出/卖出收入）
-            buy_amt = round(sum(r["amount"] for r in rows if r["side"] == "buy"), 2)
-            sell_amt = round(sum(r["amount"] for r in rows if r["side"] == "sell"), 2)
-            self._send(200, {"ok": True, "date": qd, "rows": rows,
-                             "buy_amt": buy_amt, "sell_amt": sell_amt,
-                             "net": round(sell_amt - buy_amt, 2)})
             return
         if route == "/api/account":
             # 持仓截图同步：由 AI 解析图片后调用，整体覆盖现金 + 持仓，

@@ -439,6 +439,10 @@ def intraday_advice(quote: Dict, bars_5m: List[Dict], prev_close: Optional[float
         "price": cur,
         "prev_close": pc,
         "ts": quote.get("time"),
+        # 利润最大化用：当日已实现 high/low/open，让后端能算 forecast_high/low
+        "high": quote.get("high"),
+        "low": quote.get("low"),
+        "open": quote.get("open"),
     }
 
 

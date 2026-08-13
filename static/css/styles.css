@@ -209,6 +209,24 @@ body {
 .trade-entry .qty-step:hover { background: #f1f5f9; color: var(--orange); border-color: var(--orange); }
 .trade-entry .qty-input { font-size: 14px; font-weight: 700; text-align: center; }
 
+/* 今日成交折叠窗口型（默认折叠，点开才看明细） */
+.trade-log { margin-top: 8px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.trade-log > summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #495057; padding: 7px 11px; list-style: none; display: flex; align-items: center; gap: 6px; border-radius: 7px; user-select: none; }
+.trade-log > summary:hover { background: #fff8e1; color: var(--orange); }
+.trade-log > summary::-webkit-details-marker { display: none; }
+.trade-log > summary::before { content: "▶"; font-size: 9px; color: var(--muted); transition: transform 0.2s; }
+.trade-log[open] > summary::before { transform: rotate(90deg); color: var(--orange); }
+.trade-log[open] { background: linear-gradient(135deg, #fff9db 0%, #fff3bf 100%); border-color: #f59f00; }
+.trade-log .tl-toggle-hint { font-size: 10.5px; color: var(--muted); margin-left: auto; font-weight: 500; }
+.trade-log[open] .tl-toggle-hint::before { content: "点击收起"; }
+.trade-log[open] .tl-toggle-hint { font-size: 0; }
+.trade-log[open] .tl-toggle-hint::before { font-size: 10.5px; color: var(--orange); }
+.trade-log .tl-table { width: 100%; border-collapse: collapse; margin-top: 6px; padding: 0 8px; font-size: 11.5px; }
+.trade-log .tl-table thead th { background: rgba(255,255,255,0.7); padding: 5px 8px; font-size: 11px; color: #495057; font-weight: 700; text-align: center; border-bottom: 1.5px solid #f59f00; }
+.trade-log .tl-table tbody td { padding: 5px 8px; border-bottom: 1px dashed #e9ecef; text-align: center; color: #212529; }
+.trade-log .tl-table tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
+.trade-log .tl-table .muted-cell { color: var(--muted); padding: 12px; text-align: center; }
+
 /* ---------- AI 建议（真 <table>，table-layout:fixed 保证列宽严格对齐，整行底色更醒目） ---------- */
 .panel-aiadvice { background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%); border-color: #74c0fc; }
 .ai-table-wrap {
@@ -247,8 +265,22 @@ body {
 .ai-table .ai-empty { text-align: center; color: var(--muted); padding: 20px; font-size: 12px; }
 
 /* 列内子元素样式（保留所有原来 cell 内的视觉） */
-.ai-c-name b { font-size: 13px; color: #212529; display: block; }
-.ai-c-name .code-mini { font-size: 10.5px; color: #6c757d; }
+.ai-c-name .name-line { line-height: 1.3; margin-bottom: 2px; }
+.ai-c-name .name-line b { font-size: 13px; color: #212529; display: inline-block; }
+.ai-c-name .code-mini { font-size: 10.5px; color: #6c757d; font-style: normal; margin-left: 3px; }
+.ai-c-name .price-line { font-size: 11.5px; line-height: 1.4; }
+.ai-c-name .price-line .ss-px b { font-size: 13.5px; color: #212529; font-weight: 800; }
+.ai-c-action .op-qty-mini { font-size: 10.5px; color: #495057; margin-top: 2px; }
+.ai-c-action .op-qty-mini b { color: #1b5e20; font-size: 11.5px; }
+.ai-c-action .op-price-mini { font-size: 11px; color: #6d4c00; font-weight: 800; margin-top: 1px; font-variant-numeric: tabular-nums; }
+
+/* 利润最大化：整天预估最高/最低（卖在最高、买在最低） */
+.ai-c-fc .fc-band { display: flex; gap: 4px; justify-content: center; align-items: center; margin-top: 5px; padding: 4px 6px; border-radius: 4px; background: rgba(255,255,255,0.55); font-size: 11px; line-height: 1.4; }
+.ai-c-fc .fc-band-hi { color: #c92a2a; font-weight: 700; }
+.ai-c-fc .fc-band-hi b { color: #fff; background: #c92a2a; padding: 1px 5px; border-radius: 3px; font-size: 11.5px; margin-left: 2px; font-variant-numeric: tabular-nums; }
+.ai-c-fc .fc-band-mid { color: #adb5bd; }
+.ai-c-fc .fc-band-lo { color: #2b8a3e; font-weight: 700; }
+.ai-c-fc .fc-band-lo b { color: #fff; background: #2b8a3e; padding: 1px 5px; border-radius: 3px; font-size: 11.5px; margin-left: 2px; font-variant-numeric: tabular-nums; }
 .ai-c-name .ai-c-price { font-size: 11px; color: #495057; margin-top: 2px; }
 
 .ai-c-score { font-size: 18px; font-weight: 800; }
