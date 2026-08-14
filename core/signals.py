@@ -259,7 +259,49 @@ def analyze(bars, weights=None):
         },
         "price_levels": price_levels(bars),
         "bars_count": len(bars),
+        # 副图所需的 series：compute_all 完整序列，压缩去前缀 None（节省 JSON 体积）
+        "series": _strip_series_for_payload(ind),
     }
+
+
+def _strip_series_for_payload(ind):
+    """把 compute_all() 的 series 去掉前置 None 之前的部分，压缩成 list-of-floats。
+    前端只需画最近若干根，前 N 个 None 完全不画，从而 JSON 体大幅瘦身。
+    """
+    if not ind:
+        return None
+    def _trim(seq):
+        if not seq:
+            return []
+        # 找到第一个非 None 的索引作为起点
+        start = 0
+        for i, v in enumerate(seq):
+            if v is not None:
+                start = i
+                break
+        # 列表里 None -> None，数字 -> 保留两位
+        out = []
+        for i in range(start, len(seq)):
+            v = seq[i]
+            out.append(None if v is None else round(float(v), 4))
+        return out
+
+    ma_block = ind.get("ma", {}) if isinstance(ind.get("ma"), dict) else {}
+    out = {
+        "ma5": _trim(ma_block.get("ma5")) if ma_block.get("ma5") else _trim(ind.get("ma5") or []),
+        "ma10": _trim(ind.get("ma10") or []),
+        "ma20": _trim(ind.get("ma20") or []),
+        "macd_dif": _trim((ind.get("macd") or {}).get("dif") or []),
+        "macd_dea": _trim((ind.get("macd") or {}).get("dea") or []),
+        "macd_hist": _trim((ind.get("macd") or {}).get("hist") or []),
+        "kdj_k": _trim((ind.get("kdj") or {}).get("k") or []),
+        "kdj_d": _trim((ind.get("kdj") or {}).get("d") or []),
+        "kdj_j": _trim((ind.get("kdj") or {}).get("j") or []),
+        "boll_mid": _trim((ind.get("boll") or {}).get("mid") or []),
+        "boll_up": _trim((ind.get("boll") or {}).get("upper") or []),
+        "boll_low": _trim((ind.get("boll") or {}).get("lower") or []),
+    }
+    return out
 
 
 def price_levels(bars):

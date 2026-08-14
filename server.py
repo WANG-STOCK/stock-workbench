@@ -2037,7 +2037,21 @@ class Handler(BaseHTTPRequestHandler):
                 bars = ds.get_kline(code, period, limit, _tdx_path or None)
                 _cache_set(code, period, limit, bars)
             ind = compute_all(bars) if bars else None
-            self._send(200, {"code": code, "period": period, "bars": bars, "indicators": ind})
+            series = sig._strip_series_for_payload(ind) if ind else None
+            # only last indicator value, 用于 KPI 紧凑显示
+            indicators_lite = None
+            if ind and bars:
+                _last = lambda arr: arr[-1] if arr and arr[-1] is not None else None
+                indicators_lite = {
+                    "ma5": _last(ind["ma5"]), "ma10": _last(ind["ma10"]), "ma20": _last(ind["ma20"]),
+                    "kdj_k": _last(ind["kdj"]["k"]), "kdj_d": _last(ind["kdj"]["d"]), "kdj_j": _last(ind["kdj"]["j"]),
+                    "macd_dif": _last(ind["macd"]["dif"]), "macd_dea": _last(ind["macd"]["dea"]), "macd_hist": _last(ind["macd"]["hist"]),
+                    "rsi6": _last(ind["rsi"]["rsi6"]), "rsi12": _last(ind["rsi"]["rsi12"]), "rsi24": _last(ind["rsi"]["rsi24"]),
+                    "boll_up": _last(ind["boll"]["upper"]), "boll_low": _last(ind["boll"]["lower"]), "boll_mid": _last(ind["boll"]["mid"]),
+                }
+            self._send(200, {"code": code, "period": period, "bars": bars,
+                              "indicators": ind, "indicators_lite": indicators_lite,
+                              "series": series})
             return
         if route == "/api/quotes":
             codes = qs.get("codes", [""])[0].replace(" ", ",").split(",")

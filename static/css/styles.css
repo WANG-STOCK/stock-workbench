@@ -2018,12 +2018,24 @@ body.theme-dark { background: var(--bg); }
 .badge.clock { color: #fff; font-variant-numeric: tabular-nums; }
 .tb-theme { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: #11151b; cursor: pointer; font-size: 15px; }
 
-/* ---- 视图容器 + 四宫格 ---- */
+/* ---- 视图容器 + 左右两列布局（K线+AI 决策 / 账号+扫描） ---- */
 .views { flex: 1; min-height: 0; overflow: auto; padding: 10px; }
 .view[hidden] { display: none !important; }
+/* 旧四宫格保留兼容（不再使用，但旧类名让 CSS 仍然有效）*/
 .grid4 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px; height: 100%; min-height: 0; }
 .gcell { min-height: 0; min-width: 0; overflow: hidden; display: flex; }
 .gcell > .panel { flex: 1; min-height: 0; }
+/* r35：左右两列布局，左=K线+AI决策，右=账户+扫描 */
+.split2 { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; }
+.col { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.col > .panel { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+/* 左列内 K线面板在不放大的情况下尽量高，AI决策补齐剩余 */
+.col-left > .g-kline { flex: 1 1 60%; min-height: 380px; }
+.col-left > .g-decision { flex: 1 1 40%; min-height: 320px; }
+/* 右列内 账号面板与扫描面板均衡 */
+.col-right > .g-account { flex: 0 1 auto; min-height: 220px; max-height: 60%; }
+.col-right > .g-scan { flex: 1 1 40%; min-height: 280px; }
+@media (max-width: 1280px) { .split2 { grid-template-columns: 1fr; } }
 .kline-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex: none; }
 .kline-name { display: flex; align-items: baseline; gap: 6px; }
 .kline-name b { font-size: 16px; }
