@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* 版本自检：刷新时第一行打印当前是 r34-restyle，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
-console.log('%c[wb] app.js r34-restyle loaded (四宫格 + 五档评级 + 多维共振 + 大盘情绪 + 控制栏交互)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r34-restyle') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r34-restyle。请强制刷新或清缓存。');
+/* 版本自检：刷新时第一行打印当前是 r35-2col-chart，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
+console.log('%c[wb] app.js r35-2col-chart loaded (左 K线+量能/KDJ/MACD 副图 / 下 AI决策; 右 账号+持仓 / 扫描)','color:#2ecc71;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r35-2col-chart') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r35-2col-chart。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
