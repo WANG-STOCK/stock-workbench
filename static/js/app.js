@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* r37 版本自检：r37 重做 K 线图（深色专业风：主图+区域填充+MA5黄/MA10紫/MA20蓝，仅保留量能副图，去掉 KDJ/MACD 副图与左下/右下角时间）；板块扫描加刷新按钮；删除账户总资金输入区 */
-console.log('%c[wb] app.js r37-chart-redesign loaded (K线图按截图重画 + 板块扫描刷新按钮 + 删账户总览输入区)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r37-chart') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r37-chart。请强制刷新或清缓存。');
+/* r37b 版本自检：K 线图按截图2 加粗 + 字号加大（价格线 2.6px，Y 轴 13px 加粗） */
+console.log('%c[wb] app.js r37b loaded (K线图按截图2 加粗+字号加大)','color:#22c55e;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r37b') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r37b。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -1749,18 +1749,18 @@ function renderAiAdvice(positions) {
     const toPathMain = (arr) => seriesPath(arr, pyMain);
     // 价格折线（A 股：涨绿跌红，颜色加深；末根相对首根的方向决定颜色）
     const isUp = bars[N - 1].close >= bars[0].close;
-    const priceColor = isUp ? "#10b981" : "#ef4444";
-    const fillColor  = isUp ? "rgba(16,185,129,0.35)" : "rgba(239,68,68,0.32)";
+    const priceColor = isUp ? "#22c55e" : "#ef4444";
+    const fillColor  = isUp ? "rgba(34,197,94,0.42)" : "rgba(239,68,68,0.38)";
     let pricePath = "";
     for (let i = 0; i < N; i++) pricePath += (i === 0 ? "M" : "L") + px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
     const areaPath = `M${px(0)},${pyMain(bars[0].close)} ` + bars.map((b, i) => `L${px(i)},${pyMain(b.close)}`).join(" ")
                     + ` L${px(N - 1)},${regMain.bot} L${px(0)},${regMain.bot} Z`;
 
     // ====== 横向虚线网格（主图：4 条）======
-    let gridLines = "";
+        let gridLines = "";
     for (let i = 0; i <= 3; i++) {
       const y = regMain.top + (i / 3) * mainH;
-      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#1e293b" stroke-dasharray="2 4"/>`;
+      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#2a3640" stroke-dasharray="3 5"/>`;
     }
 
     // ====== 量能（r37：柱体更粗，涨绿跌红；副图占比加大）======
@@ -1783,15 +1783,15 @@ function renderAiAdvice(positions) {
       <line x1="${x0}" y1="${regMain.bot}" x2="${x0+w}" y2="${regMain.bot}" stroke="#1e293b" stroke-width="1"/>
     `;
 
-    // ====== Y 轴刻度（主图左侧 4 个价格 + 量能最大值）======
+    // ====== Y 轴刻度（主图左侧 4 个价格 + 量能最大值，r37：字号加大加粗）======
     let yLabels = "";
     for (let i = 0; i <= 3; i++) {
       const v = loMain + (hiMain - loMain) * (i / 3);
       const y = pyMain(v);
-      yLabels += `<text x="${x0-5}" y="${y+3}" text-anchor="end" fill="#94a3b8" font-size="10">${v.toFixed(2)}</text>`;
+      yLabels += `<text x="${x0-6}" y="${y+4}" text-anchor="end" fill="#cbd5e1" font-size="13" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">${v.toFixed(2)}</text>`;
     }
     // 量能最大值（左侧上方）
-    yLabels += `<text x="${x0-5}" y="${regVol.top+10}" text-anchor="end" fill="#94a3b8" font-size="9">量 ${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
+    yLabels += `<text x="${x0-6}" y="${regVol.top+11}" text-anchor="end" fill="#94a3b8" font-size="10" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">量 ${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
 
     // ====== X 轴（r37：去掉左下/右下角的日期）======
     const xLabels = "";
@@ -1803,10 +1803,10 @@ function renderAiAdvice(positions) {
       ${separators}
       ${gridLines}
       <path d="${areaPath}" fill="${fillColor}"/>
-      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="${toPathMain(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="${toPathMain(aMa10)}" fill="none" stroke="#a78bfa" stroke-width="1.3" stroke-linejoin="round"/>
-      <path d="${toPathMain(aMa20)}" fill="none" stroke="#60a5fa" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${toPathMain(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${toPathMain(aMa10)}" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${toPathMain(aMa20)}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
       ${volBars}
       ${yLabels}
       ${xLabels}
@@ -1842,19 +1842,19 @@ function renderAiAdvice(positions) {
       const tip = document.getElementById("tpChartTip");
       if (!tip) return;
       const rect = svg.getBoundingClientRect();
-      const color = b.close >= b.open ? "#10b981" : "#ef4444";
+      const color = b.close >= b.open ? "#22c55e" : "#ef4444";
       const f = (v, n = 2) => v == null ? "--" : (+v).toFixed(n);
-      tip.innerHTML = `<div><b style="color:#cbd5e1">${b.date || ""}</b></div>
-        <div>开 ${f(b.open)} · 收 <b style="color:${color}">${f(b.close)}</b></div>
-        <div>高 ${f(b.high)} · 低 ${f(b.low)}</div>
-        <div>量 ${b.volume != null ? (+b.volume).toLocaleString("zh-CN") : "--"}</div>
-        <div style="color:#94a3b8;font-size:10px;margin-top:3px;border-top:1px solid #334155;padding-top:3px">
+      tip.innerHTML = `<div style="font-size:12px"><b style="color:#e2e8f0">${b.date || ""}</b></div>
+        <div style="font-size:12px;margin-top:2px">开 ${f(b.open)} · 收 <b style="color:${color};font-weight:700">${f(b.close)}</b></div>
+        <div style="font-size:12px">高 ${f(b.high)} · 低 ${f(b.low)}</div>
+        <div style="font-size:12px">量 ${b.volume != null ? (+b.volume).toLocaleString("zh-CN") : "--"}</div>
+        <div style="color:#cbd5e1;font-size:11px;margin-top:4px;border-top:1px solid #334155;padding-top:4px">
           MA5 ${f(indNow.ma5)} · MA10 ${f(indNow.ma10)} · MA20 ${f(indNow.ma20)}</div>`;
       tip.style.display = "block";
-      const x = ev.clientX - rect.left + 8;
-      const y = ev.clientY - rect.top + 8;
-      tip.style.left = Math.min(rect.width - 200, x) + "px";
-      tip.style.top  = Math.min(rect.height - 90, y) + "px";
+      const x = ev.clientX - rect.left + 10;
+      const y = ev.clientY - rect.top + 10;
+      tip.style.left = Math.min(rect.width - 220, x) + "px";
+      tip.style.top  = Math.min(rect.height - 110, y) + "px";
     }
     function hideTip() {
       const tip = document.getElementById("tpChartTip");
