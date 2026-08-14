@@ -51,7 +51,7 @@ STATIC_TRADE_LOG = os.path.join(BASE, "static", "trade_log.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # ---------- 配置 ----------
-_config = {"tdx_path": "", "kline_ttl": {"5m": 30, "15m": 60, "30m": 120, "60m": 300,
+_config = {"tdx_path": "", "kline_ttl": {"1m": 15, "5m": 30, "15m": 60, "30m": 120, "60m": 300,
                                          "daily": 300, "weekly": 600},
           "weights": {}, "position": {"capital": 100000, "max_single": 0.25, "lot": 100},
           "monitor": {"scope": "watchlist", "strategy": "composite", "top_n": 10},

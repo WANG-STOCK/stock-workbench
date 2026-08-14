@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* r38 版本自检：K线图按截图4（茅台600519）1:1复刻——纯黑背景+涨红跌绿；短线策略/扫描加缓存+spinner；手动刷新按钮视觉反馈 */
-console.log('%c[wb] app.js r38 loaded (K线图按截图4 涨红跌绿纯黑 + 短线策略60s缓存 + 扫描手动刷新spinner)','color:#ef4444;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r38') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r38。请强制刷新或清缓存。');
+/* r39 版本自检：K线图 1:1 复刻参考图3（背景 #121214 + 涨红 #ff4c4c 跌绿 #36d170 + 单根金黄 MA #ffc120 1.8px + 区域渐变填充 + 量能颜色跟随 + Inter 12px）+ 6档周期切换（分时/5分/15分/30分/日/周，默认5分）+ 自动刷新默认5s开启 + 三层缓存（实时秒出） */
+console.log('%c[wb] app.js r39 loaded (K线1:1复刻 + 默认5分+自动刷新5s + 6档切换 + 三层缓存)','color:#ef4444;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r39') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r39。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -55,7 +55,7 @@ if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r38') {
     "强烈买入": "#c92a2a", "买入": "#e03131", "持有": "#868e96",
     "减仓": "#2f9e44", "卖出": "#2b8a3e",
   };
-  const PERIOD_LABEL = { "5m": "5分", "15m": "15分", "30m": "30分", "60m": "60分", "daily": "日线", "weekly": "周线" };
+  const PERIOD_LABEL = { "1m": "分时", "5m": "5分", "15m": "15分", "30m": "30分", "60m": "60分", "daily": "日线", "weekly": "周线" };
 
   const state = {
     current: { code: "", name: "", period: "daily" },
@@ -1337,7 +1337,7 @@ function renderAiAdvice(positions) {
   async function openStock(code, name) {
     // r28：不再自动加入自选。持仓股就是持仓股，不应被点击"变成自选股"。
     // 自选股应只来自信号扫描结果（state.candidates）或用户主动「加自选」按钮。
-    state.current = { code, name: name || code, period: state.current.period || "daily" };
+    state.current = { code, name: name || code, period: state.current.period || "5m" };
     // r29：刷新右上方个股详情与交易计划
     renderStockDetail(code, name || code);
   }
@@ -1346,7 +1346,7 @@ function renderAiAdvice(positions) {
   // 点击自选/搜索/持仓股时，拉实时行情 + 技术面分析，渲染评分圆环 + 2×2 技术进度条 + 三档价位
   // r29：完全照参考图重做。拉 /api/signal，里面已有 indicators + tight + tech_short
   // 直接映射到 UI：头部价 / SVG折线 / 指标横排 / 评分 / 6 维 / 三框 / 参数 / 按钮
-  let __tpCurrent = { code: null, name: null, period: "daily", buy: null, stop: null, tgt: null, price: null };
+  let __tpCurrent = { code: null, name: null, period: "5m", buy: null, stop: null, tgt: null, price: null };
 
   // /api/signal 里的 indicators.* 已经是最后一个值的 float，直接返回即可
   function lastNonNull(v) {
@@ -1374,6 +1374,8 @@ function renderAiAdvice(positions) {
 
   // r37：K线缓存（按 code 缓存最近一次信号返回的 bars/series），切换股票秒出图
   const _klineCache = Object.create(null);
+  // r39：按 (code + period) 缓存最近一次拉到的 K 线，周期切换 / 同股票不同周期 复用
+  const _klineCachePeriod = Object.create(null);
 
   async function renderStockDetail(code, name) {
     __tpCurrent.code = code;
@@ -1432,6 +1434,8 @@ function renderAiAdvice(positions) {
       catch (e) {
         if (tsBody) tsBody.innerHTML = '<div class="tp-strategy-hint">短线策略加载失败：' + (e && e.message || e) + '</div>';
       }
+      // r39：按当前周期（默认 5m）拉 /api/kline 重绘
+      try { await renderKlineAtPeriod(); } catch (e) { console.warn('[wb] kline period:', e && e.message); }
       if (meta) meta.textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", {hour12: false});
     } catch (e) {
       if (meta) meta.textContent = "加载失败：" + (e && e.message || e);
@@ -1567,8 +1571,8 @@ function renderAiAdvice(positions) {
 
     // r37：删除 _computeSuggestedPosition（账户总资金/单笔风险 输入区已删）
 
-    // SVG K 线图（r37：仅主图+量能，series 来自后端 compute_all 压缩）
-    _drawTpChart(sig.bars || [], sig.series || {});
+    // r39：K 线图改为按当前 __tpCurrent.period 拉取（默认 5m），这里不再直接画 sig.bars 的日线
+    // 由 renderStockDetail 在 _renderTradePlan 之后调 renderKlineAtPeriod() 完成
   }
 
   // 五档评级 + 多维共振依据
@@ -1718,121 +1722,173 @@ function renderAiAdvice(positions) {
     const svg = document.getElementById("tpChart");
     if (!svg) return;
     if (!bars || bars.length === 0) {
-      svg.innerHTML = `<rect x="0" y="0" width="600" height="320" fill="#000000"/><text x="300" y="160" text-anchor="middle" fill="#6b7280" font-size="14">暂无 K 线数据</text>`;
+      svg.innerHTML = `<rect x="0" y="0" width="600" height="320" fill="#121214"/><text x="300" y="160" text-anchor="middle" fill="#aaaaaa" font-size="13" font-family="Inter,'PingFang SC',-apple-system,sans-serif">暂无 K 线数据</text>`;
       return;
     }
-    // ====== 画布布局（r37：viewBox 600×320，主图+量能，去掉 KDJ/MACD 副图） ======
+    // ====================== r39: 严格复刻参考图3 的视觉规格 ======================
+    // 背景 #121214；折/K线主体 涨红 #ff4c4c 跌绿 #36d170；
+    // 单根金黄 MA #ffc120 1.8px 平滑曲线；渐变区域填充；
+    // 量能柱颜色跟随；网格 #3a3a3f 极细虚线；字体 Inter 12px。
     const W = 600, H = 320;
-    const PAD_L = 50, PAD_R = 8;
+    const PAD_L = 48, PAD_R = 8, PAD_T = 4, PAD_B = 4;
     const x0 = PAD_L, w = W - PAD_L - PAD_R;
     const N = bars.length;
     const px = (i) => x0 + (i / Math.max(1, N - 1)) * w;
+    // 主图 + 量能 布局（量能高度加大 更醒目）
     const mainH = 220, gap = 4;
-    const volH  = 96;
-    let yCursor = 2;
+    const volH  = 92;
+    let yCursor = PAD_T;
     const regMain = { top: yCursor, bot: yCursor + mainH };             yCursor = regMain.bot + gap;
     const regVol  = { top: yCursor, bot: yCursor + volH  };
     const pyV = (v, reg, lo, hi) => reg.top + (reg.bot - reg.top) * (1 - (v - lo) / (hi - lo || 1));
 
-    // ====== 主图：价格 + MA5/10/20 + 区域填充（r37：专业深色风，更明显） ======
-    const closes = bars.map(b => b.close);
-    const highs = bars.map(b => b.high);
-    const lows = bars.map(b => b.low);
+    // 取值
+    const closes = bars.map(b => +b.close);
+    const opens  = bars.map(b => +b.open);
+    const highs  = bars.map(b => +b.high);
+    const lows   = bars.map(b => +b.low);
     const minC = Math.min.apply(null, lows.concat(closes));
     const maxC = Math.max.apply(null, highs.concat(closes));
     const padC = (maxC - minC) * 0.05 || 0.05;
     const loMain = minC - padC, hiMain = maxC + padC;
     const pyMain = (v) => pyV(v, regMain, loMain, hiMain);
+
+    // 整体颜色：首根 close → 末根 close 决定主色（涨 vs 跌）
+    const isUpAll = closes[N - 1] >= closes[0];
+    const UP = "#ff4c4c";          // 涨红
+    const DN = "#36d170";          // 跌绿
+    const mainColor = isUpAll ? UP : DN;
+    const gradUpId = "tpGradUp";
+    const gradDnId = "tpGradDn";
+
+    // 单根 MA：金黄色 #ffc120（按用户规格：仅此一根均线，平滑曲线 1.8px）
     const alignSeries = (arr) => {
       const len = arr.length;
       if (len === N) return arr;
       if (len < N) return new Array(N - len).concat(arr);
       return arr.slice(arr.length - N);
     };
-    const aMa5  = alignSeries(series.ma5  || []);
-    const aMa10 = alignSeries(series.ma10 || []);
-    const aMa20 = alignSeries(series.ma20 || []);
-    function seriesPath(arr, pyFn) {
-      let p = "";
+    const aMa5 = alignSeries(series.ma5 || []);
+    // 平滑曲线（Catmull-Rom → 三次贝塞尔）——视觉更顺
+    function smoothPath(arr, pyFn) {
+      // 把 (x,y) 序列转为带 Catmull-Rom 张力的 cubic bezier
+      const pts = [];
       for (let i = 0; i < N; i++) {
         const v = arr[i];
         if (v == null) continue;
-        p += (p === "" ? "M" : "L") + px(i).toFixed(1) + "," + pyFn(v).toFixed(1) + " ";
+        pts.push([px(i), pyFn(v)]);
       }
-      return p;
+      if (pts.length === 0) return "";
+      let d = "M" + pts[0][0].toFixed(1) + "," + pts[0][1].toFixed(1);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i - 1] || pts[i];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2] || p2;
+        const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+        const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+        const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+        const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+        d += " C" + c1x.toFixed(1) + "," + c1y.toFixed(1)
+           + " " + c2x.toFixed(1) + "," + c2y.toFixed(1)
+           + " " + p2[0].toFixed(1) + "," + p2[1].toFixed(1);
+      }
+      return d;
     }
-    const toPathMain = (arr) => seriesPath(arr, pyMain);
-    // 价格折线（A 股：涨绿跌红，颜色加深；末根相对首根的方向决定颜色）
-    const isUp = bars[N - 1].close >= bars[0].close;
-    // r38：A 股传统配色——涨红 #ef4444，跌绿 #10b981（按截图4 茅台 600519 复刻）
-    const priceColor = isUp ? "#ef4444" : "#10b981";
-    const fillColor  = isUp ? "rgba(239,68,68,0.42)" : "rgba(16,185,129,0.42)";
-    let pricePath = "";
-    for (let i = 0; i < N; i++) pricePath += (i === 0 ? "M" : "L") + px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
-    const areaPath = `M${px(0)},${pyMain(bars[0].close)} ` + bars.map((b, i) => `L${px(i)},${pyMain(b.close)}`).join(" ")
-                    + ` L${px(N - 1)},${regMain.bot} L${px(0)},${regMain.bot} Z`;
 
-    // ====== 横向虚线网格（主图：4 条）======
-        let gridLines = "";
+    // 价格折线 polyline points
+    let pricePts = "";
+    for (let i = 0; i < N; i++) pricePts += px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
+    // 区域填充 path：折线 + 底部闭合
+    const areaPathD = "M" + px(0).toFixed(1) + "," + pyMain(bars[0].close).toFixed(1)
+      + " " + bars.map((b, i) => "L" + px(i).toFixed(1) + "," + pyMain(b.close).toFixed(1)).join(" ")
+      + " L" + px(N - 1).toFixed(1) + "," + regMain.bot.toFixed(1)
+      + " L" + px(0).toFixed(1) + "," + regMain.bot.toFixed(1) + " Z";
+
+    // 横向网格（极细浅灰虚线；r39 规格 #3a3a3f dasharray 2 4）
+    let gridLines = "";
     for (let i = 0; i <= 3; i++) {
       const y = regMain.top + (i / 3) * mainH;
-      // r38：截图4 网格颜色偏暗、点划线更密
-      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#1f2730" stroke-dasharray="3 4"/>`;
+      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#3a3a3f" stroke-dasharray="2 4" stroke-width="0.6"/>`;
     }
 
-    // ====== 量能（r38：A 股配色，涨红跌绿；柱体加粗，alpha 提升）======
+    // 蜡烛 OHLC（按用户截图 涨红跌绿）
+    let candles = "";
+    const cw = Math.max(1, (w / N) * 0.62);
+    for (let i = 0; i < N; i++) {
+      const o = opens[i], c = closes[i], h = highs[i], l = lows[i];
+      if (o == null || c == null) continue;
+      const up = c >= o;
+      const col = up ? UP : DN;
+      const xc = px(i);
+      // 影线
+      candles += `<line x1="${xc.toFixed(1)}" y1="${pyMain(h).toFixed(1)}" x2="${xc.toFixed(1)}" y2="${pyMain(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+      // 实体
+      const top = pyMain(Math.max(o, c));
+      const bot = pyMain(Math.min(o, c));
+      const bodyH = Math.max(1, bot - top);
+      candles += `<rect x="${(xc - cw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" opacity="0.95"/>`;
+    }
+
+    // 金黄 MA 平滑曲线
+    const maPathD = smoothPath(aMa5, pyMain);
+
+    // 量能柱
     const vols = bars.map(b => +b.volume || 0);
     const maxV = Math.max.apply(null, vols);
     const yVolBase = regVol.bot;
     let volBars = "";
+    const vw = Math.max(1, (w / N) * 0.62);
     for (let i = 0; i < N; i++) {
-      const up = bars[i].close >= (bars[i].open != null ? bars[i].open : bars[i].close);
-      const col = up ? "#ef4444" : "#10b981";
+      const up = closes[i] >= opens[i];
+      const col = up ? UP : DN;
       const h = (vols[i] / (maxV || 1)) * (regVol.bot - regVol.top - 2);
-      const x = px(i) - (w / N) * 0.45;
-      const bw = Math.max(1.2, (w / N) * 0.9);
+      const xc = px(i);
       const y = yVolBase - h;
-      volBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.92"/>`;
+      volBars += `<rect x="${(xc - vw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${vw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.85"/>`;
     }
 
-    // ====== 区域分隔线 =======
-    const separators = `
-      <line x1="${x0}" y1="${regMain.bot}" x2="${x0+w}" y2="${regMain.bot}" stroke="#1e293b" stroke-width="1"/>
-    `;
-
-    // ====== Y 轴刻度（主图左侧 4 个价格 + 量能最大值，r38：按截图4 浅灰12px）======
+    // Y 轴价格标签（r39：#aaaaaa 12px Inter 字族）
     let yLabels = "";
     for (let i = 0; i <= 3; i++) {
       const v = loMain + (hiMain - loMain) * (i / 3);
       const y = pyMain(v);
-      yLabels += `<text x="${x0-6}" y="${y+4}" text-anchor="end" fill="#9ca3af" font-size="12" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">${v.toFixed(2)}</text>`;
+      yLabels += `<text x="${x0-6}" y="${y+4}" text-anchor="end" fill="#aaaaaa" font-size="12" font-family="Inter,'PingFang SC',-apple-system,sans-serif">${v.toFixed(2)}</text>`;
     }
-    // 量能最大值（左侧上方）
-    yLabels += `<text x="${x0-6}" y="${regVol.top+11}" text-anchor="end" fill="#6b7280" font-size="10" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">量 ${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
+    // 量能最大值
+    yLabels += `<text x="${x0-6}" y="${regVol.top+11}" text-anchor="end" fill="#7a7a85" font-size="10" font-family="Inter,'PingFang SC',-apple-system,sans-serif">量 ${maxV ? (maxV/1e4).toFixed(0)+"万" : "—"}</text>`;
 
-    // ====== X 轴（r37：去掉左下/右下角的日期）======
-    const xLabels = "";
+    // 主图与量能分隔线
+    const separatorLine = `<line x1="${x0}" y1="${regMain.bot}" x2="${x0+w}" y2="${regMain.bot}" stroke="#2a2a30" stroke-width="1"/>`;
 
-    // ====== 十字光标线（空白态隐藏，鼠标移动时定位）======
-    const crosshair = `<line id="tpChartCross" x1="0" y1="0" x2="0" y2="0" stroke="#475569" stroke-dasharray="2 3" style="display:none"/>`;
+    // 十字光标
+    const crosshair = `<line id="tpChartCross" x1="0" y1="0" x2="0" y2="0" stroke="#5a5a60" stroke-dasharray="2 3" stroke-width="0.8" style="display:none"/>`;
 
-    // ====== r38：截图4 风格——纯黑背景 + 紧凑样式 ======
+    // ====================== 组装 SVG ======================
+    // 渐变定义：涨红 60% → 2%；跌绿 60% → 2%（按用户规格）
     svg.innerHTML = `
-      <rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>
-      ${separators}
+      <defs>
+        <linearGradient id="${gradUpId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ff4c4c" stop-opacity="0.60"/>
+          <stop offset="100%" stop-color="#ff4c4c" stop-opacity="0.02"/>
+        </linearGradient>
+        <linearGradient id="${gradDnId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#36d170" stop-opacity="0.60"/>
+          <stop offset="100%" stop-color="#36d170" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="${W}" height="${H}" fill="#121214"/>
+      ${separatorLine}
       ${gridLines}
-      <path d="${areaPath}" fill="${fillColor}"/>
-      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${toPathMain(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${toPathMain(aMa10)}" fill="none" stroke="#ef4444" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${toPathMain(aMa20)}" fill="none" stroke="#60a5fa" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${areaPathD}" fill="${isUpAll ? "url(#" + gradUpId + ")" : "url(#" + gradDnId + ")"}"/>
+      ${candles}
+      <path d="${maPathD}" fill="none" stroke="#ffc120" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
       ${volBars}
       ${yLabels}
-      ${xLabels}
       ${crosshair}
     `;
 
-    // ====== 鼠标十字光标 + 数据 tooltip ======
+    // ====================== 鼠标十字光标 + Tooltip ======================
     if (!svg.__tpBound) {
       svg.__tpBound = true;
       svg.addEventListener("mousemove", (ev) => {
@@ -1848,7 +1904,7 @@ function renderAiAdvice(positions) {
           cross.setAttribute("y1", 0);      cross.setAttribute("y2", H);
           cross.style.display = "";
         }
-        showTip(ev, b, idx, { ma5: aMa5[idx], ma10: aMa10[idx], ma20: aMa20[idx], vol: b.volume });
+        showTip(ev, b, idx, { ma5: aMa5[idx], vol: b.volume, opens: opens[idx] });
       });
       svg.addEventListener("mouseleave", () => {
         hideTip();
@@ -1856,20 +1912,18 @@ function renderAiAdvice(positions) {
         if (cross) cross.style.display = "none";
       });
     }
-
     function showTip(ev, b, i, indNow) {
       const tip = document.getElementById("tpChartTip");
       if (!tip) return;
       const rect = svg.getBoundingClientRect();
-      // r38：A 股配色——涨红跌绿
-      const color = b.close >= b.open ? "#ef4444" : "#10b981";
+      const upCol = b.close >= b.open;
+      const color = upCol ? UP : DN;
       const f = (v, n = 2) => v == null ? "--" : (+v).toFixed(n);
       tip.innerHTML = `<div style="font-size:12px"><b style="color:#f3f4f6">${b.date || ""}</b></div>
         <div style="font-size:12px;margin-top:2px">开 ${f(b.open)} · 收 <b style="color:${color};font-weight:700">${f(b.close)}</b></div>
         <div style="font-size:12px">高 ${f(b.high)} · 低 ${f(b.low)}</div>
         <div style="font-size:12px">量 ${b.volume != null ? (+b.volume).toLocaleString("zh-CN") : "--"}</div>
-        <div style="color:#d1d5db;font-size:11px;margin-top:4px;border-top:1px solid #374151;padding-top:4px">
-          MA5 ${f(indNow.ma5)} · MA10 ${f(indNow.ma10)} · MA20 ${f(indNow.ma20)}</div>`;
+        <div style="color:#d1d5db;font-size:11px;margin-top:4px;border-top:1px solid #2a2a30;padding-top:4px">MA5 ${f(indNow.ma5)}</div>`;
       tip.style.display = "block";
       const x = ev.clientX - rect.left + 10;
       const y = ev.clientY - rect.top + 10;
@@ -2795,6 +2849,34 @@ function renderAiAdvice(positions) {
     }
   }
 
+  // r39：按 (code + period) 拉 K 线（顶层函数，被 renderStockDetail 与周期切换共用）
+  async function renderKlineAtPeriod() {
+    const code = __tpCurrent.code;
+    if (!code) return;
+    const p = __tpCurrent.period || "5m";
+    // 不同周期拉不同长度：分时 240 根够看一天；30分/60分 80 根；日/周 180 根
+    let limit = 120;
+    if (p === "1m") limit = 240;
+    else if (p === "30m" || p === "60m") limit = 80;
+    else if (p === "daily" || p === "weekly") limit = 180;
+    // 切股票时先查缓存（同 period）—— 立即出图
+    const cached = _klineCachePeriod[code + "|" + p];
+    if (cached && cached.bars && cached.bars.length) {
+      try { _drawTpChart(cached.bars, cached.series || {}); } catch (e) {}
+    }
+    try {
+      const r = await api("GET", "/api/kline?code=" + encodeURIComponent(code)
+                             + "&period=" + p + "&limit=" + limit);
+      if (r && r.bars && r.bars.length) {
+        _drawTpChart(r.bars, r.series || {});
+        // 按 period 缓存
+        _klineCachePeriod[code + "|" + p] = { bars: r.bars, series: r.series || {} };
+      }
+    } catch (e) { console.warn("[wb] kline period:", e && e.message); }
+    const title = document.getElementById("klineTitle");
+    if (title) title.textContent = "📉 K线图 · " + (PERIOD_LABEL[p] || p);
+  }
+
   function bindNav() {
     document.querySelectorAll('#sbNav li').forEach(li => {
       li.addEventListener('click', () => switchView(li.dataset.view));
@@ -2805,50 +2887,70 @@ function renderAiAdvice(positions) {
   function bindTopbar() {
     let autoTimer = null;  // 自动刷新定时器句柄
 
-    // 1) 周期切换：重拉对应周期 K 线并重绘（5分/15分/日/周）
-    async function renderKlineAtPeriod() {
-      const code = __tpCurrent.code;
-      if (!code) return;
-      const p = __tpCurrent.period || "daily";
-      const limit = (p === "daily" || p === "weekly") ? 180 : 120;
-      try {
-        const r = await api("GET", "/api/kline?code=" + encodeURIComponent(code)
-                               + "&period=" + p + "&limit=" + limit);
-        if (r && r.bars && r.bars.length) _drawTpChart(r.bars, r.series || {});
-      } catch (e) { console.warn("[wb] kline period:", e && e.message); }
-      const title = document.getElementById("klineTitle");
-      if (title) title.textContent = "📉 K线图 · " + (PERIOD_LABEL[p] || p);
-    }
+    // 顶部"周期"按钮（5m/15m/daily/weekly）
     document.querySelectorAll('#periodSwitch .tb-chip').forEach(b => {
       b.addEventListener('click', () => {
         document.querySelectorAll('#periodSwitch .tb-chip').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
-        __tpCurrent.period = b.dataset.period || "daily";
+        __tpCurrent.period = b.dataset.period || "5m";
+        // 同步更新 K 线区 tab
+        document.querySelectorAll('#klineTabs .tp-tab').forEach(x => {
+          x.classList.toggle('active', x.dataset.p === __tpCurrent.period);
+        });
         renderKlineAtPeriod();
       });
     });
 
-    // 2) 自动刷新：勾选后按间隔重拉股票详情 + 大盘情绪（保留当前周期 K 线）
+    // r39：K线区 tab 切换（分时/5分/15分/30分/日K/周K）
+    document.querySelectorAll('#klineTabs .tp-tab').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#klineTabs .tp-tab').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        const newP = b.dataset.p || "5m";
+        if (__tpCurrent.period === newP) {
+          // 同周期：强行刷新一次
+          renderKlineAtPeriod();
+          return;
+        }
+        __tpCurrent.period = newP;
+        // 同步更新顶部"周期"按钮
+        document.querySelectorAll('#periodSwitch .tb-chip').forEach(x => {
+          x.classList.toggle('active', x.dataset.period === newP);
+        });
+        renderKlineAtPeriod();
+      });
+    });
+
+    // 2) 自动刷新：勾选后按间隔重拉股票详情 + 大盘情绪（r39：默认开启，默认 5 秒）
     const arEl = document.getElementById('autoRefresh');
     const riEl = document.getElementById('refreshInterval');
     function applyAutoRefresh() {
       if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
       if (arEl && arEl.checked) {
-        const sec = Math.max(5, parseInt(riEl && riEl.value, 10) || 10);
-        autoTimer = setInterval(() => {
+        const sec = Math.max(5, parseInt(riEl && riEl.value, 10) || 5);
+        autoTimer = setInterval(async () => {
           if (__tpCurrent.code) {
             renderStockDetail(__tpCurrent.code, __tpCurrent.name);
-            renderKlineAtPeriod();
           }
-          loadMarketSentiment();
+          try { loadMarketSentiment(); } catch (e) {}
         }, sec * 1000);
-        toast('已开启自动刷新（每 ' + sec + ' 秒）');
-      } else {
-        toast('已关闭自动刷新');
+        // 默认静默开启，不弹 toast
       }
     }
-    if (arEl) arEl.addEventListener('change', applyAutoRefresh);
+    if (arEl) {
+      arEl.addEventListener('change', () => {
+        applyAutoRefresh();
+        if (arEl.checked) {
+          const sec = Math.max(5, parseInt(riEl && riEl.value, 10) || 5);
+          toast('已开启自动刷新（每 ' + sec + ' 秒）');
+        } else {
+          toast('已关闭自动刷新');
+        }
+      });
+    }
     if (riEl) riEl.addEventListener('change', () => { if (arEl && arEl.checked) applyAutoRefresh(); });
+    // r39：首屏自动开启（HTML 里 checkbox 已 checked）
+    applyAutoRefresh();
 
     // 3) 明暗主题切换（localStorage 持久化）
     const themeBtn = document.getElementById('themeToggle');
