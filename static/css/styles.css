@@ -1282,7 +1282,8 @@ body.theme-dark { background: var(--bg); }
 .view[hidden] { display: none; }
 
 .view-grid-2 {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  display: grid; grid-template-columns: minmax(420px, 38%) minmax(0, 1fr); gap: 10px;
+  align-items: stretch; min-height: 0;
 }
 
 /* Panel v3 通用 */
@@ -1575,12 +1576,32 @@ body.theme-dark { background: var(--bg); }
   .ds-table thead th { color: var(--muted) !important; background: #1a1a1a !important; }
 
 /* ========== r27 新模块：左侧拆两块 持仓监控 + 自选监控 ========== */
-  .dash-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
-  .dash-right { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  .panel-holdings-monitor, .panel-self-monitor { flex: 1 1 auto; min-height: 280px; }
+  .view-dashboard { display: flex; flex-direction: column; min-height: 0; }
+  .view-dashboard .view-grid-2 { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+  .dash-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; max-height: calc(100vh - 220px); }
+  .dash-right { display: flex; flex-direction: column; min-height: 0; overflow: hidden; max-height: calc(100vh - 220px); }
+  .panel-holdings-monitor, .panel-self-monitor { flex: 0 0 auto; min-height: 220px; }
   .panel-holdings-monitor { border-left: 3px solid #e74c3c; }
   .panel-self-monitor { border-left: 3px solid #f59e0b; }
-  .dash-monitor-list { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
+  /* r33：把 image#2「持仓与盈亏分析」详细表格搬到「持仓股实时监控」 */
+  .dash-monitor-list { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+  .hm-table { width: 100%; border-collapse: collapse; font-size: 11.5px; color: var(--ink); }
+  .hm-table thead th { position: sticky; top: 0; background: #0f1620; color: var(--muted);
+    font-weight: 600; text-align: left; padding: 6px 4px; border-bottom: 1px solid #1e293b; }
+  .hm-table th.r, .hm-table td.r { text-align: right; }
+  .hm-table tbody tr.hm-row { border-bottom: 1px solid #161b22; cursor: pointer;
+    transition: background .15s; }
+  .hm-table tbody tr.hm-row:hover { background: #1a2330; }
+  .hm-table tbody td { padding: 5px 4px; vertical-align: middle; }
+  .hm-table b { font-weight: 600; }
+  .hm-code { display: block; font-size: 10px; color: var(--muted); font-style: normal; }
+  .hm-act { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 6px;
+    border-radius: 4px; color: #fff; min-width: 28px; text-align: center; }
+  .hm-act.act-buy { background: #1f3a1f; color: #51cf66; border: 1px solid #2b8a3e; }
+  .hm-act.act-sell { background: #3a1f1f; color: #ff6b6b; border: 1px solid #c92a2a; }
+  .hm-act.act-hold { background: #1a2330; color: #ffd43b; border: 1px solid #f59e0b; }
+  .hm-op { display: block; font-size: 10px; color: var(--muted); font-style: normal; margin-top: 2px; }
+  .dash-monitor-empty { color: var(--muted); padding: 16px 8px; font-size: 12px; text-align: center; }
   .dm-row {
     display: grid; grid-template-columns: 50px 1fr 70px 70px 56px 70px; gap: 6px; align-items: center;
     background: #1a1a1a; border: 1px solid var(--line); border-left: 3px solid #868e96; border-radius: 6px;
@@ -1887,7 +1908,7 @@ body.theme-dark { background: var(--bg); }
                border: 1px solid #3b82f6; border-radius: 6px; padding: 5px 14px; font-size: 12px;
                font-weight: 600; cursor: pointer; transition: all .15s; }
   .tp-bt-btn:hover { filter: brightness(1.15); }
-  .tp-backtest-body { font-size: 12px; }
+  .tp-backtest-body { font-size: 12px; max-height: 320px; overflow-y: auto; }
   .bt-card { border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; background: #11161d; }
   .bt-card-title { font-size: 13px; font-weight: 700; color: #e2e8f0; margin-bottom: 4px; }
   .bt-sample { font-size: 11px; color: #64748b; margin-bottom: 6px; }
