@@ -9,32 +9,30 @@
   <meta http-equiv="Expires" content="0">
   <title>婷婷量化AI · 金融K线AI工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E📈%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/css/styles.css?v=r27-darkbuy">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r28-kline">
 </head>
 <body class="theme-dark">
   <!-- 启动期错误条：IIFE 或 init 抛错时实时显示在页面顶部，不用开 F12 -->
   <div id="errToast" style="display:none;position:fixed;left:0;top:0;right:0;z-index:999999;background:#7a1f1f;color:#fff;font:13px/1.5 monospace;padding:8px 14px;border-bottom:2px solid #ff5252;max-height:35vh;overflow:auto;white-space:pre-wrap;word-break:break-all;"></div>
-  <!-- 版本自检标记：王总刷新时控制台第一行就能看到当前是哪个版本（必须是 r27） -->
-  <script>window.__WB_VERSION__='r27-darkbuy';console.log('%c[wb] HTML r27-darkbuy loaded','color:#3b82f6;font-weight:bold');</script>
+  <!-- 版本自检标记：王总刷新时控制台第一行就能看到当前是哪个版本（必须是 r28） -->
+  <script>window.__WB_VERSION__='r28-kline';console.log('%c[wb] HTML r28-kline loaded','color:#3b82f6;font-weight:bold');</script>
   <!-- 顶部品牌条 -->
   <header class="topbar-v3">
     <div class="brand-v3">
       <span class="logo-v3">📈</span>
       <span>婷婷量化AI · 金融K线AI工作台</span>
-      <span class="brand-tag">v2026-08-14-r27-darkbuy</span>
+      <span class="brand-tag">v2026-08-14-r28-kline</span>
     </div>
     <div class="topbar-meta-v3">
-      <span class="badge" id="buildTag">v2026-08-14-r27-darkbuy</span>
+      <span class="badge" id="buildTag">v2026-08-14-r28-kline</span>
       <span class="badge" id="marketBadge">A股 · 沪深</span>
       <span class="badge" id="tdxStatus">数据源：检测中…</span>
       <span class="badge clock" id="clock">--:--:--</span>
     </div>
   </header>
 
-  <!-- 顶部黄色通知条 -->
-  <div class="notif-strip-v3">
-    🌟 <b>婷婷的战报</b> 推荐于模式策略盲从量化御疫·股人多买次次融资高斯棒读（仅折程）
-  </div>
+  <!-- 顶部黄色通知条（r28 删除：去掉战报/免责声明横幅） -->
+  <!-- <div class="notif-strip-v3">...</div> -->
 
   <div class="layout-v3">
     <!-- 左侧导航 -->
@@ -50,7 +48,8 @@
         <li data-view="positions"><span>💼 持仓与仓位</span></li>
         <li data-view="settings"><span>⚙ 设置</span></li>
       </ul>
-      <div class="sb-footer-v3">数据已同步至云端，可一键绑定账户查看全部持仓</div>
+      <!-- r28 删除：去掉底部"数据已同步至云端"说明 -->
+      <!-- <div class="sb-footer-v3">...</div> -->
     </nav>
 
     <!-- 主内容区 -->
@@ -84,6 +83,21 @@
             </div>
           </div>
           <div class="dash-right">
+            <div class="panel-v3 panel-kline">
+              <div class="panel-title-v3">
+                <span id="klineTitle">📈 短线 K 线 · 5 分钟</span>
+                <span class="panel-extra">
+                  <button class="btn-tiny kline-period active" data-p="5m">5分</button>
+                  <button class="btn-tiny kline-period" data-p="15m">15分</button>
+                  <button class="btn-tiny kline-period" data-p="30m">30分</button>
+                  <span id="klineMeta" class="kline-meta">加载中…</span>
+                </span>
+              </div>
+              <div class="kline-wrap">
+                <canvas id="klineCanvas"></canvas>
+                <div id="klineTooltip" class="kline-tooltip" style="display:none"></div>
+              </div>
+            </div>
             <div class="panel-v3">
               <div class="panel-title-v3">
                 <span id="stockDetailTitle">🔍 个股详情与交易分析</span>
@@ -106,11 +120,11 @@
           </div>
           <div class="scan-grid">
             <div class="scan-col buy">
-              <div class="scan-col-title">🔴 买入候选 <span class="count">5</span></div>
+              <div class="scan-col-title">🔴 买入候选 <span class="count" id="scanBuyCount">--</span></div>
               <div id="scanBuyList" class="scan-list"></div>
             </div>
             <div class="scan-col sell">
-              <div class="scan-col-title">🟢 卖出候选 <span class="count">5</span></div>
+              <div class="scan-col-title">🟢 卖出候选 <span class="count" id="scanSellCount">--</span></div>
               <div id="scanSellList" class="scan-list"></div>
             </div>
           </div>
@@ -300,6 +314,7 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/static/js/app.js?v=r27-darkbuy"></script>
+  <script src="/static/js/chart.js?v=r28-kline"></script>
+  <script src="/static/js/app.js?v=r28-kline"></script>
 </body>
 </html>

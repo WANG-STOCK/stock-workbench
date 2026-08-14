@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* 版本自检：刷新时第一行打印当前是 r27-darkbuy，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
-console.log('%c[wb] app.js r27-darkbuy loaded (split dashboard: 持仓/自选 + 尾盘买入法 + 复盘视图 + 全量深色)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r27-darkbuy') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r27-darkbuy。请强制刷新或清缓存。');
+/* 版本自检：刷新时第一行打印当前是 r28-kline，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
+console.log('%c[wb] app.js r28-kline loaded (K线图 + 删文字 + 持仓不自选 + 动态扫描计数)','color:#2ecc71;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r28-kline') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r28-kline。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -673,6 +673,7 @@ function renderAiAdvice(positions) {
 
     bindEvents();
     try { bindReviewButtons(); } catch (e) { console.warn('[wb] bindReviewButtons:', e && e.message); }
+    try { bindKline(); } catch (e) { console.warn('[wb] bindKline:', e && e.message); }
     // 任何一步失败都不影响其余渲染（避免整页白屏）
     try { await loadWatchlist(); } catch (e) { console.warn("自选加载失败：", e); }
     try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
@@ -1249,9 +1250,11 @@ function renderAiAdvice(positions) {
 
   // ---------- 打开股票 ----------
   async function openStock(code, name) {
-    // K线视图已移除，转为：加入自选 + 渲染右侧个股详情（v3.1 行情看板）
+    // r28：不再自动加入自选。持仓股就是持仓股，不应被点击"变成自选股"。
+    // 自选股应只来自信号扫描结果（state.candidates）或用户主动「加自选」按钮。
     state.current = { code, name: name || code, period: state.current.period || "daily" };
-    try { addToWatchFromSearch(code, name || code); } catch (e) {}
+    // 同时切换右上方 K 线图到该股
+    try { _klineShowForStock(code, name || code); } catch (e) {}
     renderStockDetail(code, name || code);
   }
 
@@ -2341,6 +2344,11 @@ function renderAiAdvice(positions) {
         </div>`;
       };
       const headerHtml = (total) => `<div class="scan-header"><span>#</span><span>名称</span><span>代码</span><span class="r">现价</span><span class="r">涨跌</span><span class="r">评分</span></div>`;
+      // r28：把头部"5"改成动态真实命中数
+      const buyCntEl  = document.getElementById('scanBuyCount');
+      const sellCntEl = document.getElementById('scanSellCount');
+      if (buyCntEl)  buyCntEl.textContent  = buyAll.length;
+      if (sellCntEl) sellCntEl.textContent = sellAll.length;
       buyEl.innerHTML  = (buy.length  ? headerHtml(buyAll.length) + buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>');
       sellEl.innerHTML = (sell.length ? headerHtml(sellAll.length) + sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>');
     }).catch(e => paint('信号扫描失败：' + (e.message || e)));
@@ -2557,6 +2565,77 @@ function renderAiAdvice(positions) {
       btnC.disabled = false; btnC.textContent = '核对今日实际';
     });
     if (refresh) refresh.addEventListener('click', () => renderTailBuy(true));
+  }
+
+  // ========== r28 行情看板·短线 K 线图 ==========
+  let _klineChart = null;       // StockChart 实例
+  let _klineState = { code: "", name: "", period: "5m", timer: null };
+
+  function bindKline() {
+    const cv = document.getElementById('klineCanvas');
+    const tip = document.getElementById('klineTooltip');
+    if (!cv) return;
+    try {
+      if (window.StockChart) _klineChart = new window.StockChart(cv, tip);
+    } catch (e) { console.warn('[wb] StockChart init:', e && e.message); return; }
+
+    // 周期按钮
+    document.querySelectorAll('.kline-period').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.kline-period').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        _klineState.period = b.dataset.p || "5m";
+        loadKline(_klineState.code, _klineState.name, _klineState.period);
+      });
+    });
+
+    // 默认显示第一个持仓股的 5 分钟 K 线
+    const first = (state.positions || [])[0];
+    if (first) {
+      loadKline(first.code, first.name, _klineState.period);
+    } else {
+      const meta = document.getElementById('klineMeta');
+      if (meta) meta.textContent = '暂无持仓';
+    }
+
+    // 30 秒自动刷新（短线操作要求及时）
+    if (_klineState.timer) clearInterval(_klineState.timer);
+    _klineState.timer = setInterval(() => {
+      if (_klineState.code) loadKline(_klineState.code, _klineState.name, _klineState.period, true);
+    }, 30000);
+  }
+
+  async function loadKline(code, name, period, isRefresh) {
+    if (!code || !window.StockChart || !_klineChart) return;
+    _klineState.code = code;
+    _klineState.name = name || code;
+    _klineState.period = period || "5m";
+    const meta = document.getElementById('klineMeta');
+    const title = document.getElementById('klineTitle');
+    if (title) title.textContent = `📈 短线 K 线 · ${_klineState.name} · ${period}`;
+    if (meta && !isRefresh) meta.textContent = '加载中…';
+    try {
+      const r = await api('GET', '/api/kline?code=' + encodeURIComponent(code) + '&period=' + _klineState.period + '&limit=120');
+      if (!r || !r.bars || !r.bars.length) {
+        if (meta) meta.textContent = '暂无数据';
+        return;
+      }
+      // 短线图：关闭 BOLL/KDJ/RSI，只显示 MA + 成交量 + MACD（缩短布局）
+      const opts = { showBoll: false, showKdj: false, showRsi: false, showMacd: true };
+      _klineChart.setData(r.bars, r.indicators || null, opts);
+      if (meta) {
+        const last = r.bars[r.bars.length - 1];
+        const chg = last && last.close ? ((last.close - last.open) / last.open * 100).toFixed(2) : '--';
+        meta.textContent = `共 ${r.bars.length} 根 · 最新 ${last && last.close ? last.close.toFixed(2) : '--'} (${chg}%) · ${new Date().toLocaleTimeString()}`;
+      }
+    } catch (e) {
+      if (meta) meta.textContent = '加载失败：' + (e && e.message || e);
+    }
+  }
+
+  // openStock 切换时同时切换 K 线图
+  function _klineShowForStock(code, name) {
+    if (_klineChart && code) loadKline(code, name || code, _klineState.period);
   }
 
   // 全局错误兜底：任何未捕获的报错都只在控制台警告，不阻塞后续流程（出现红屏空白就糟了）

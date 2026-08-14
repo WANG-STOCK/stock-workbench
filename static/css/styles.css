@@ -1723,3 +1723,25 @@ body.theme-dark { background: var(--bg); }
 /* 一些零碎清理 */
   .signal-empty { color: var(--muted); padding: 20px; text-align: center; font-size: 12px; }
 
+/* ====== r28 行情看板·短线 K 线面板 ====== */
+  .panel-kline { border-left: 3px solid #2f8a3e; }
+  .kline-meta { margin-left: 8px; color: var(--muted); font-size: 11px; }
+  .kline-period {
+    background: #1a1a1a; color: var(--ink); border: 1px solid var(--line);
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-left: 4px;
+  }
+  .kline-period.active { background: #2f8a3e; color: #fff; border-color: #2f8a3e; font-weight: 700; }
+  .kline-wrap {
+    position: relative; width: 100%; height: 360px;
+    background: #0f0f0f; border-radius: 6px; padding: 8px;
+    border: 1px solid var(--line);
+  }
+  .kline-wrap canvas { display: block; width: 100%; height: 100%; }
+  .kline-tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(20,20,20,0.95); color: #fff;
+    padding: 6px 10px; border-radius: 4px; font-size: 11px;
+    border: 1px solid #444; line-height: 1.5; z-index: 5;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+
