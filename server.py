@@ -105,6 +105,30 @@ def _klock_guard():
     return _kline_lock
 
 
+# ---------- r38 通用结果缓存（按 key 缓存任意 JSON 值，TTL 到期自动失效） ----------
+_strategy_cache = {}      # key=(code,mode) -> (ts, value)
+_screener_cache = {}      # key=(scope,strategy,limit) -> (ts, value)
+_signal_cache   = {}      # key=(code,period,limit) -> (ts, value)
+_strategy_lock  = threading.Lock()
+_screener_lock  = threading.Lock()
+_signal_lock    = threading.Lock()
+
+
+def _json_cache_get(store, lock, key, ttl):
+    with lock:
+        v = store.get(key)
+        if v:
+            ts, val = v
+            if time.time() - ts < ttl:
+                return val
+    return None
+
+
+def _json_cache_set(store, lock, key, val):
+    with lock:
+        store[key] = (time.time(), val)
+
+
 # ---------- 持久化 ----------
 def _load_json(path, default):
     if not os.path.isfile(path):
@@ -2073,6 +2097,15 @@ class Handler(BaseHTTPRequestHandler):
             if not code:
                 self._send(400, {"error": "code required"})
                 return
+            # r38：30 秒内同 code+period+limit 重复请求直接命中缓存
+            # 缓存键需要把 query string 中的 capital/current_shares 也带上（_build_position 会用）
+            _cap = qs.get("capital", [""])[0]
+            _hold = qs.get("current_shares", [""])[0]
+            cache_key = ("signal", code, period, limit, _cap, _hold)
+            cached = _json_cache_get(_signal_cache, _signal_lock, cache_key, 30)
+            if cached is not None:
+                self._send(200, cached)
+                return
             bars = _cache_get(code, period, limit) or ds.get_kline(code, period, limit, _tdx_path or None)
             _cache_set(code, period, limit, bars)
             a = sig.analyze(bars, _WEIGHTS)
@@ -2159,6 +2192,7 @@ class Handler(BaseHTTPRequestHandler):
                 a["bars"] = bars or []
             except Exception:
                 pass
+            _json_cache_set(_signal_cache, _signal_lock, cache_key, a)
             self._send(200, a)
             return
         if route == "/api/advice":
@@ -2373,6 +2407,12 @@ class Handler(BaseHTTPRequestHandler):
             if not code:
                 self._send(400, {"error": "code required"})
                 return
+            # r38：60 秒内同 code 重复请求直接命中缓存，避免每次都跑 30m/60m/实时价三步
+            cache_key = ("overnight", code)
+            cached = _json_cache_get(_strategy_cache, _strategy_lock, cache_key, 60)
+            if cached is not None:
+                self._send(200, cached)
+                return
             try:
                 bars_day = ds.get_kline(code, "daily", 120, _tdx_path or None)
                 bars_30m = ds.fetch_kline_em(code, "30m", 80)
@@ -2384,6 +2424,7 @@ class Handler(BaseHTTPRequestHandler):
                 r = strat.overnight_score(code, bars_day, bars_30m, bars_60m, price, prev_close, name)
             except Exception as e:
                 r = {"ok": False, "mode": "overnight", "msg": "计算失败：" + str(e)}
+            _json_cache_set(_strategy_cache, _strategy_lock, cache_key, r)
             self._send(200, r)
             return
         if route == "/api/strategy/intraday":
@@ -2395,6 +2436,12 @@ class Handler(BaseHTTPRequestHandler):
                 cost = None
             if not code:
                 self._send(400, {"error": "code required"})
+                return
+            # r38：60 秒内同 code 重复请求直接命中缓存
+            cache_key = ("intraday", code, cost)
+            cached = _json_cache_get(_strategy_cache, _strategy_lock, cache_key, 60)
+            if cached is not None:
+                self._send(200, cached)
                 return
             try:
                 bars_1m = ds.fetch_kline_em(code, "1m", 240)
@@ -2412,6 +2459,7 @@ class Handler(BaseHTTPRequestHandler):
                 r = strat.intraday_t_signal(code, bars_1m, bars_5m, cost, price, name, prev_close)
             except Exception as e:
                 r = {"ok": False, "mode": "intraday", "msg": "计算失败：" + str(e)}
+            _json_cache_set(_strategy_cache, _strategy_lock, cache_key, r)
             self._send(200, r)
             return
 

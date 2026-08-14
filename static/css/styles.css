@@ -2047,9 +2047,9 @@ body.theme-dark { background: var(--bg); }
 .kline-tabs { display: flex; gap: 4px; margin-left: 8px; }
 .tp-tab { border: 1px solid var(--line); background: #11151b; color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
 .tp-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.tp-chart-wrap { position: relative; flex: 1; min-height: 0; }
+.tp-chart-wrap { position: relative; flex: 1; min-height: 0; background: #000000; border-radius: 4px; overflow: hidden; }
 .tp-chart { width: 100%; height: 100%; display: block; }
-.tp-chart-tooltip { position: absolute; pointer-events: none; background: rgba(15,23,42,.96); border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #e2e8f0; line-height: 1.6; z-index: 5; box-shadow: 0 6px 16px rgba(0,0,0,0.45); }
+.tp-chart-tooltip { position: absolute; pointer-events: none; background: rgba(0,0,0,.92); border: 1px solid #374151; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #e5e7eb; line-height: 1.6; z-index: 5; box-shadow: 0 6px 16px rgba(0,0,0,0.6); }
 .tp-indicators { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; flex: none; }
 .tp-ind { font-size: 12px; color: var(--muted); }
 .tp-ind b { color: var(--ink); font-family: 'Consolas',monospace; margin-left: 3px; font-weight: 600; }
@@ -2062,11 +2062,15 @@ body.theme-dark { background: var(--bg); }
 .k4-val { font-size: 18px; font-weight: 700; font-family: 'Consolas',monospace; margin-top: 2px; }
 .k4-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
 /* r37：板块扫描区手动刷新按钮 + 状态 */
-.scan-fresh-btn { padding: 3px 10px; font-size: 12px; margin-right: 6px; }
+.scan-fresh-btn { padding: 3px 10px; font-size: 12px; margin-right: 6px; display: inline-flex; align-items: center; gap: 4px; }
+.scan-fresh-btn .scan-fresh-icon { display: inline-block; transition: transform .2s; }
+.scan-fresh-btn.loading .scan-fresh-icon { animation: spin 1s linear infinite; }
+.scan-fresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .scan-fresh-status { font-size: 11px; color: var(--muted); margin-left: 4px; }
 .scan-fresh-status.running { color: #fbbf24; }
 .scan-fresh-status.done    { color: #6ee7a8; }
 .scan-fresh-status.fail    { color: #fca5a5; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .pos-table-wrap { flex: 1; min-height: 0; overflow: auto; }
 .hm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .hm-table th { position: sticky; top: 0; background: #161b22; color: var(--muted); font-weight: 400; padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); z-index: 1; }
@@ -2147,10 +2151,13 @@ body.theme-dark { background: var(--bg); }
 .tp-strategy-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
 .tp-strategy-title { font-size: 12px; color: var(--muted); }
 .tp-strategy-tabs { display: flex; gap: 6px; }
-.tp-stab { border: 1px solid var(--line); background: #11151b; color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.tp-stab { border: 1px solid var(--line); background: #11151b; color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; transition: opacity .15s; }
 .tp-stab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tp-stab.loading { opacity: 0.6; cursor: wait; position: relative; }
+.tp-stab.loading::after { content: ""; position: absolute; right: 6px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
 .tp-strategy-body { font-size: 12px; }
-.tp-strategy-hint { font-size: 12px; color: var(--muted); padding: 8px; background: #11151b; border-radius: 6px; }
+.tp-strategy-hint { font-size: 12px; color: var(--muted); padding: 8px; background: #11151b; border-radius: 6px; display: flex; align-items: center; gap: 6px; }
+.tp-spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #64748b; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
 .tp-params { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; align-items: end; flex: none; }
 .tp-param { display: flex; flex-direction: column; gap: 3px; }
 .tp-param-lbl { font-size: 11px; color: var(--muted); }

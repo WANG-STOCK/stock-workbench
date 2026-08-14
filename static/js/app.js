@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* r37b 版本自检：K 线图按截图2 加粗 + 字号加大（价格线 2.6px，Y 轴 13px 加粗） */
-console.log('%c[wb] app.js r37b loaded (K线图按截图2 加粗+字号加大)','color:#22c55e;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r37b') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r37b。请强制刷新或清缓存。');
+/* r38 版本自检：K线图按截图4（茅台600519）1:1复刻——纯黑背景+涨红跌绿；短线策略/扫描加缓存+spinner；手动刷新按钮视觉反馈 */
+console.log('%c[wb] app.js r38 loaded (K线图按截图4 涨红跌绿纯黑 + 短线策略60s缓存 + 扫描手动刷新spinner)','color:#ef4444;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r38') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r38。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -1233,10 +1233,25 @@ function renderAiAdvice(positions) {
       if (cls) el.classList.add(cls);
     }
   }
+  // r38：扫描中按钮加 spinner 反馈
+  function _setScanBtnLoading(loading) {
+    const btn = document.getElementById("scanFreshBtn");
+    const lbl = document.getElementById("scanFreshBtnLabel");
+    const icn = btn && btn.querySelector(".scan-fresh-icon");
+    if (!btn) return;
+    btn.disabled = !!loading;
+    if (loading) {
+      btn.classList.add("loading");
+      if (lbl) lbl.textContent = "扫描中…";
+    } else {
+      btn.classList.remove("loading");
+      if (lbl) lbl.textContent = "刷新";
+    }
+  }
   async function manualScan() {
     if (_scanRunning) { _setScanStatus("扫描进行中，请稍候…", "running"); return; }
     const btn = document.getElementById("scanFreshBtn");
-    if (btn) btn.disabled = true;
+    _setScanBtnLoading(true);
     _scanRunning = true;
     _setScanStatus("扫描中…预计 10-30 秒", "running");
     try {
@@ -1246,7 +1261,7 @@ function renderAiAdvice(positions) {
       _setScanStatus("刷新失败：" + (e && e.message || e), "fail");
     } finally {
       _scanRunning = false;
-      if (btn) btn.disabled = false;
+      _setScanBtnLoading(false);
     }
   }
 
@@ -1703,7 +1718,7 @@ function renderAiAdvice(positions) {
     const svg = document.getElementById("tpChart");
     if (!svg) return;
     if (!bars || bars.length === 0) {
-      svg.innerHTML = `<text x="300" y="160" text-anchor="middle" fill="#64748b" font-size="14">暂无 K 线数据</text>`;
+      svg.innerHTML = `<rect x="0" y="0" width="600" height="320" fill="#000000"/><text x="300" y="160" text-anchor="middle" fill="#6b7280" font-size="14">暂无 K 线数据</text>`;
       return;
     }
     // ====== 画布布局（r37：viewBox 600×320，主图+量能，去掉 KDJ/MACD 副图） ======
@@ -1749,8 +1764,9 @@ function renderAiAdvice(positions) {
     const toPathMain = (arr) => seriesPath(arr, pyMain);
     // 价格折线（A 股：涨绿跌红，颜色加深；末根相对首根的方向决定颜色）
     const isUp = bars[N - 1].close >= bars[0].close;
-    const priceColor = isUp ? "#22c55e" : "#ef4444";
-    const fillColor  = isUp ? "rgba(34,197,94,0.42)" : "rgba(239,68,68,0.38)";
+    // r38：A 股传统配色——涨红 #ef4444，跌绿 #10b981（按截图4 茅台 600519 复刻）
+    const priceColor = isUp ? "#ef4444" : "#10b981";
+    const fillColor  = isUp ? "rgba(239,68,68,0.42)" : "rgba(16,185,129,0.42)";
     let pricePath = "";
     for (let i = 0; i < N; i++) pricePath += (i === 0 ? "M" : "L") + px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
     const areaPath = `M${px(0)},${pyMain(bars[0].close)} ` + bars.map((b, i) => `L${px(i)},${pyMain(b.close)}`).join(" ")
@@ -1760,22 +1776,23 @@ function renderAiAdvice(positions) {
         let gridLines = "";
     for (let i = 0; i <= 3; i++) {
       const y = regMain.top + (i / 3) * mainH;
-      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#2a3640" stroke-dasharray="3 5"/>`;
+      // r38：截图4 网格颜色偏暗、点划线更密
+      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#1f2730" stroke-dasharray="3 4"/>`;
     }
 
-    // ====== 量能（r37：柱体更粗，涨绿跌红；副图占比加大）======
+    // ====== 量能（r38：A 股配色，涨红跌绿；柱体加粗，alpha 提升）======
     const vols = bars.map(b => +b.volume || 0);
     const maxV = Math.max.apply(null, vols);
     const yVolBase = regVol.bot;
     let volBars = "";
     for (let i = 0; i < N; i++) {
       const up = bars[i].close >= (bars[i].open != null ? bars[i].open : bars[i].close);
-      const col = up ? "#10b981" : "#ef4444";
+      const col = up ? "#ef4444" : "#10b981";
       const h = (vols[i] / (maxV || 1)) * (regVol.bot - regVol.top - 2);
       const x = px(i) - (w / N) * 0.45;
       const bw = Math.max(1.2, (w / N) * 0.9);
       const y = yVolBase - h;
-      volBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.9"/>`;
+      volBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.92"/>`;
     }
 
     // ====== 区域分隔线 =======
@@ -1783,15 +1800,15 @@ function renderAiAdvice(positions) {
       <line x1="${x0}" y1="${regMain.bot}" x2="${x0+w}" y2="${regMain.bot}" stroke="#1e293b" stroke-width="1"/>
     `;
 
-    // ====== Y 轴刻度（主图左侧 4 个价格 + 量能最大值，r37：字号加大加粗）======
+    // ====== Y 轴刻度（主图左侧 4 个价格 + 量能最大值，r38：按截图4 浅灰12px）======
     let yLabels = "";
     for (let i = 0; i <= 3; i++) {
       const v = loMain + (hiMain - loMain) * (i / 3);
       const y = pyMain(v);
-      yLabels += `<text x="${x0-6}" y="${y+4}" text-anchor="end" fill="#cbd5e1" font-size="13" font-weight="600" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">${v.toFixed(2)}</text>`;
+      yLabels += `<text x="${x0-6}" y="${y+4}" text-anchor="end" fill="#9ca3af" font-size="12" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">${v.toFixed(2)}</text>`;
     }
     // 量能最大值（左侧上方）
-    yLabels += `<text x="${x0-6}" y="${regVol.top+11}" text-anchor="end" fill="#94a3b8" font-size="10" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">量 ${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
+    yLabels += `<text x="${x0-6}" y="${regVol.top+11}" text-anchor="end" fill="#6b7280" font-size="10" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">量 ${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
 
     // ====== X 轴（r37：去掉左下/右下角的日期）======
     const xLabels = "";
@@ -1799,14 +1816,16 @@ function renderAiAdvice(positions) {
     // ====== 十字光标线（空白态隐藏，鼠标移动时定位）======
     const crosshair = `<line id="tpChartCross" x1="0" y1="0" x2="0" y2="0" stroke="#475569" stroke-dasharray="2 3" style="display:none"/>`;
 
+    // ====== r38：截图4 风格——纯黑背景 + 紧凑样式 ======
     svg.innerHTML = `
+      <rect x="0" y="0" width="${W}" height="${H}" fill="#000000"/>
       ${separators}
       ${gridLines}
       <path d="${areaPath}" fill="${fillColor}"/>
-      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${toPathMain(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${toPathMain(aMa10)}" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="${toPathMain(aMa20)}" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${toPathMain(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${toPathMain(aMa10)}" fill="none" stroke="#ef4444" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${toPathMain(aMa20)}" fill="none" stroke="#60a5fa" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
       ${volBars}
       ${yLabels}
       ${xLabels}
@@ -1842,13 +1861,14 @@ function renderAiAdvice(positions) {
       const tip = document.getElementById("tpChartTip");
       if (!tip) return;
       const rect = svg.getBoundingClientRect();
-      const color = b.close >= b.open ? "#22c55e" : "#ef4444";
+      // r38：A 股配色——涨红跌绿
+      const color = b.close >= b.open ? "#ef4444" : "#10b981";
       const f = (v, n = 2) => v == null ? "--" : (+v).toFixed(n);
-      tip.innerHTML = `<div style="font-size:12px"><b style="color:#e2e8f0">${b.date || ""}</b></div>
+      tip.innerHTML = `<div style="font-size:12px"><b style="color:#f3f4f6">${b.date || ""}</b></div>
         <div style="font-size:12px;margin-top:2px">开 ${f(b.open)} · 收 <b style="color:${color};font-weight:700">${f(b.close)}</b></div>
         <div style="font-size:12px">高 ${f(b.high)} · 低 ${f(b.low)}</div>
         <div style="font-size:12px">量 ${b.volume != null ? (+b.volume).toLocaleString("zh-CN") : "--"}</div>
-        <div style="color:#cbd5e1;font-size:11px;margin-top:4px;border-top:1px solid #334155;padding-top:4px">
+        <div style="color:#d1d5db;font-size:11px;margin-top:4px;border-top:1px solid #374151;padding-top:4px">
           MA5 ${f(indNow.ma5)} · MA10 ${f(indNow.ma10)} · MA20 ${f(indNow.ma20)}</div>`;
       tip.style.display = "block";
       const x = ev.clientX - rect.left + 10;
@@ -3172,9 +3192,12 @@ function renderAiAdvice(positions) {
     // r31：短线策略模式切换（隔夜抢仓 / 日内做T）
     document.querySelectorAll('#tpStrategy .tp-stab').forEach(b => {
       b.addEventListener('click', () => {
+        // r38：防止用户连点造成并发请求（旧请求 cancel 掉）
+        if (_stratLoading) return;
         document.querySelectorAll('#tpStrategy .tp-stab').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
-        _loadStrategy(b.dataset.mode);
+        b.classList.add('loading');
+        _loadStrategy(b.dataset.mode, b);
       });
     });
     // r32：策略历史回测按钮
@@ -3184,16 +3207,21 @@ function renderAiAdvice(positions) {
   }
 
   // r31：短线策略模式：加载并渲染隔夜抢仓 / 日内做T 结果
-  async function _loadStrategy(mode) {
+  let _stratLoading = false;
+  async function _loadStrategy(mode, btn) {
     const code = __tpCurrent.code;
     if (!code) { toast('请先点左侧股票'); return; }
     const body = document.getElementById('tpStrategyBody');
-    if (body) body.innerHTML = '<div class="tp-strategy-hint">计算中…</div>';
+    if (body) body.innerHTML = '<div class="tp-strategy-hint"><span class="tp-spin"></span> 计算中…</div>';
+    _stratLoading = true;
     try {
       const r = await api('GET', '/api/strategy/' + mode + '?code=' + encodeURIComponent(code));
       _renderStrategyResult(mode, r);
     } catch (e) {
       if (body) body.innerHTML = '<div class="tp-strategy-hint">加载失败：' + (e && e.message || e) + '</div>';
+    } finally {
+      _stratLoading = false;
+      if (btn) btn.classList.remove('loading');
     }
   }
 
