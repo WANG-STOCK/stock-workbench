@@ -1745,3 +1745,123 @@ body.theme-dark { background: var(--bg); }
     box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   }
 
+
+  /* ============================================================
+   * r29：个股详情与交易计划（完整照参考图重做）
+   * ============================================================ */
+  .panel-tradeplan .tradeplan { padding: 16px 18px; }
+  .tp-head { display:flex; justify-content:space-between; align-items:flex-start;
+             padding-bottom: 10px; }
+  .tp-head-left .tp-name { font-size: 18px; font-weight: 700; color: #f1f5f9; }
+  .tp-head-left .tp-code { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+  .tp-head-right { text-align: right; }
+  .tp-head-right .tp-price { font-size: 26px; font-weight: 700; color: #10b981; line-height: 1.1; }
+  .tp-head-right .tp-price.tp-down { color: #ef4444; }
+  .tp-head-right .tp-chg { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+  .tp-head-right .tp-chg.tp-down { color: #ef4444; }
+
+  .tp-tabs { display:flex; gap:6px; margin: 8px 0 6px; }
+  .tp-tab { background: transparent; color: #94a3b8; border: 1px solid #2a2a2a;
+            padding: 4px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .tp-tab:hover { color: #f1f5f9; border-color: #3a3a3a; }
+  .tp-tab.active { background: #1e40af; color: #fff; border-color: #1e40af; }
+
+  .tp-chart-wrap { position: relative;
+                   background: linear-gradient(180deg, #0c0f1c 0%, #0a0e1a 100%);
+                   border: 1px solid #1e293b; border-radius: 6px;
+                   padding: 6px 8px 6px 50px; min-height: 280px; }
+  .tp-chart { width: 100%; height: 280px; display: block; cursor: crosshair; }
+  .tp-chart-tooltip { position: absolute; pointer-events: none;
+                      background: rgba(15,15,15,0.96); color: #fff;
+                      padding: 6px 10px; border-radius: 4px; font-size: 11px;
+                      border: 1px solid #444; line-height: 1.5; z-index: 5;
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.5); white-space: nowrap; }
+
+  .tp-indicators { display: flex; flex-wrap: wrap; gap: 6px;
+                   margin: 10px 0 12px; padding: 8px 10px;
+                   background: #0d1117; border-radius: 4px; }
+  .tp-indicators .tp-ind { font-size: 11px; color: #94a3b8; padding: 2px 8px;
+                            background: #1a1a1a; border-radius: 3px; border: 1px solid #1e293b; }
+  .tp-indicators .tp-ind b { color: #f1f5f9; font-weight: 600; margin-left: 4px; font-family: 'Consolas','Monaco',monospace; }
+
+  /* 量化评分 + 建议 */
+  .tp-score { display: flex; align-items: center; gap: 14px; margin: 14px 0 8px; }
+  .tp-score-num { width: 64px; height: 64px; border-radius: 50%;
+                  background: conic-gradient(#10b981 0deg, #10b981 var(--p, 33%), #1e293b var(--p, 33%));
+                  display: flex; align-items: center; justify-content: center;
+                  font-size: 22px; font-weight: 700; color: #f1f5f9;
+                  position: relative; flex-shrink: 0; }
+  .tp-score-num::after { content: ''; position: absolute; inset: 5px;
+                         background: #0d1117; border-radius: 50%; }
+  .tp-score-num span { position: relative; z-index: 1; }
+  .tp-score-info { flex: 1; min-width: 0; }
+  .tp-score-bar { display: flex; align-items: center; gap: 10px;
+                  background: linear-gradient(90deg, #064e3b 0%, #065f46 100%);
+                  padding: 6px 12px; border-radius: 4px; min-height: 28px; }
+  .tp-score-bar.tp-sell { background: linear-gradient(90deg, #7f1d1d 0%, #991b1b 100%); }
+  .tp-score-bar.tp-hold { background: linear-gradient(90deg, #1e3a8a 0%, #1e40af 100%); }
+  .tp-score-bar.tp-buy  { background: linear-gradient(90deg, #14532d 0%, #166534 100%); }
+  .tp-score-tag { color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .tp-score-note { color: rgba(255,255,255,0.85); font-size: 12px; }
+  .tp-score-sub { color: #64748b; font-size: 11px; margin-top: 4px; }
+
+  /* 6 维评分横条（-100..+100，0 在中间，正右偏多、负左偏空） */
+  .tp-radar { background: #0d1117; border-radius: 6px; padding: 12px 14px;
+              margin-bottom: 14px; }
+  .tp-radar-row { display: flex; align-items: center; gap: 10px;
+                  margin: 5px 0; font-size: 12px; color: #94a3b8; }
+  .tp-radar-lbl { width: 36px; flex-shrink: 0; }
+  .tp-radar-bar { flex: 1; height: 6px; background: #1e293b; border-radius: 3px;
+                  position: relative; overflow: hidden; }
+  .tp-radar-bar::before { content: ''; position: absolute; left: 50%; top: -2px;
+                          bottom: -2px; width: 1px; background: #475569; }
+  .tp-radar-fill { position: absolute; top: 0; bottom: 0;
+                   background: linear-gradient(90deg, #ef4444 0%, #10b981 100%);
+                   left: 50%; width: 0; transition: width 0.4s ease; }
+  .tp-radar-fill.tp-pos { background: #10b981; left: 50%; }
+  .tp-radar-fill.tp-neg { background: #ef4444; left: var(--w, 0); }
+  .tp-radar-val { width: 56px; flex-shrink: 0; text-align: right;
+                  font-family: 'Consolas','Monaco',monospace; font-size: 11px; }
+  .tp-radar-val.tp-pos { color: #10b981; }
+  .tp-radar-val.tp-neg { color: #ef4444; }
+
+  /* 三框：参考买点 / 止损价 / 目标价 */
+  .tp-boxes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+              margin-bottom: 14px; }
+  .tp-box { background: #0d1117; border-radius: 6px; padding: 10px 12px;
+            border: 1px solid #1e293b; }
+  .tp-box-label { color: #64748b; font-size: 11px; }
+  .tp-box-val { font-size: 18px; font-weight: 700; margin-top: 4px;
+                font-family: 'Consolas','Monaco',monospace; }
+  .tp-box-buy  { border-left: 3px solid #10b981; }
+  .tp-box-stop { border-left: 3px solid #ef4444; }
+  .tp-box-tgt  { border-left: 3px solid #3b82f6; }
+  .tp-box-buy  .tp-box-val { color: #10b981; }
+  .tp-box-stop .tp-box-val { color: #ef4444; }
+  .tp-box-tgt  .tp-box-val { color: #3b82f6; }
+
+  /* 交易参数 */
+  .tp-params { display: grid; grid-template-columns: 1fr 1fr 1fr;
+               gap: 10px; margin-bottom: 12px; }
+  .tp-param { background: #0d1117; border-radius: 6px; padding: 8px 10px;
+              border: 1px solid #1e293b; display: flex; flex-direction: column; }
+  .tp-param-lbl { color: #64748b; font-size: 11px; margin-bottom: 4px; }
+  .tp-input { background: #161b22; color: #f1f5f9; border: 1px solid #1e293b;
+              border-radius: 4px; padding: 6px 8px; font-size: 13px;
+              font-family: 'Consolas','Monaco',monospace; outline: none; }
+  .tp-input:focus { border-color: #3b82f6; }
+  .tp-param-result { justify-content: space-between; }
+  .tp-param-val { font-size: 14px; font-weight: 700; color: #10b981;
+                  font-family: 'Consolas','Monaco',monospace; margin-top: 4px; }
+
+  /* 底部按钮 */
+  .tp-btns { display: flex; gap: 10px; }
+  .tp-btn-primary { flex: 1; background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+                    color: #fff; border: none; padding: 10px 0; border-radius: 6px;
+                    font-size: 13px; font-weight: 600; cursor: pointer; }
+  .tp-btn-primary:hover { filter: brightness(1.15); }
+  .tp-btn-ghost { flex: 1; background: #161b22; color: #cbd5e1;
+                  border: 1px solid #1e293b; padding: 10px 0; border-radius: 6px;
+                  font-size: 13px; cursor: pointer; }
+  .tp-btn-ghost:hover { background: #1e293b; color: #fff; }
+

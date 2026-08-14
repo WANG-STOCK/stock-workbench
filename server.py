@@ -2054,6 +2054,11 @@ class Handler(BaseHTTPRequestHandler):
                     "stop_loss": round(_price * 0.95, 2) if _price else None,
                     "take_profit": _pl.get("sell") or (round(_price * 1.05, 2) if _price else None),
                 }
+            # r29：附加 bars（r29 交易计划面板需 SVG 自绘折线图）
+            try:
+                a["bars"] = bars or []
+            except Exception:
+                pass
             self._send(200, a)
             return
         if route == "/api/advice":

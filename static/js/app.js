@@ -1253,144 +1253,347 @@ function renderAiAdvice(positions) {
     // r28：不再自动加入自选。持仓股就是持仓股，不应被点击"变成自选股"。
     // 自选股应只来自信号扫描结果（state.candidates）或用户主动「加自选」按钮。
     state.current = { code, name: name || code, period: state.current.period || "daily" };
-    // 同时切换右上方 K 线图到该股
-    try { _klineShowForStock(code, name || code); } catch (e) {}
+    // r29：刷新右上方个股详情与交易计划
     renderStockDetail(code, name || code);
   }
 
   // ---------- 行情看板·个股详情（v3.1 右侧面板） ----------
   // 点击自选/搜索/持仓股时，拉实时行情 + 技术面分析，渲染评分圆环 + 2×2 技术进度条 + 三档价位
+  // r29：完全照参考图重做。拉 /api/signal，里面已有 indicators + tight + tech_short
+  // 直接映射到 UI：头部价 / SVG折线 / 指标横排 / 评分 / 6 维 / 三框 / 参数 / 按钮
+  let __tpCurrent = { code: null, name: null, period: "daily", buy: null, stop: null, tgt: null, price: null };
+
+  // /api/signal 里的 indicators.* 已经是最后一个值的 float，直接返回即可
+  function lastNonNull(v) {
+    if (v == null) return null;
+    if (typeof v === "number") return isFinite(v) ? v : null;
+    if (Array.isArray(v)) {
+      for (let i = v.length - 1; i >= 0; i--) if (v[i] != null) return v[i];
+      return null;
+    }
+    return null;
+  }
+
+  // r29：本地 SMA（前端从 K 线算 MA20 斜率用，避免对单值调 slice 报错）
+  function smaArr(values, n) {
+    const out = new Array(values.length).fill(null);
+    if (n <= 0 || values.length < n) return out;
+    let s = 0;
+    for (let i = 0; i < values.length; i++) {
+      s += values[i];
+      if (i >= n) s -= values[i - n];
+      if (i >= n - 1) out[i] = s / n;
+    }
+    return out;
+  }
+
   async function renderStockDetail(code, name) {
-    const body = document.getElementById("stockDetailBody");
-    const title = document.getElementById("stockDetailTitle");
-    const meta = document.getElementById("stockDetailMeta");
-    if (!body) return;
-    if (title) title.textContent = `🔍 ${name || code} · ${code}`;
-    if (meta) meta.textContent = "分析中…";
-    body.innerHTML = `<div class="sd-loading">正在拉取实时行情与技术面分析…</div>`;
+    __tpCurrent.code = code;
+    __tpCurrent.name = name || code;
+    const $ = (s) => document.getElementById(s);
+    const meta = $("tradePlanMeta");
+    if (meta) meta.textContent = "加载中…";
+
     try {
-      const [q, sig] = await Promise.all([
-        api("GET", "/api/quotes?codes=" + encodeURIComponent(code)).catch(() => null),
-        api("GET", "/api/signal?code=" + encodeURIComponent(code) + "&period=daily&limit=120").catch(() => null),
-      ]);
-      const rt = (q && q[code]) ? q[code] : null;
-      if (meta) meta.textContent = rt && rt.price != null
-        ? `${fmt(rt.price)}　${rt.change_pct != null ? (rt.change_pct >= 0 ? "+" : "") + fmt(rt.change_pct) + "%" : ""}`
-        : "点自选查看";
+      const sig = await api("GET", "/api/signal?code=" + encodeURIComponent(code)
+                            + "&period=daily&limit=180").catch(() => null);
       if (!sig || !sig.ok) {
-        body.innerHTML = `<div class="empty-v3">${sig ? (sig.msg || "暂无分析数据") : "行情/分析接口暂不可用"}<br><span style="font-size:11px">（A股代码需带交易所前缀，如 sh600000 / sz000001）</span></div>`;
+        if (meta) meta.textContent = "无数据";
         return;
       }
-      body.innerHTML = stockDetailHtml(sig, rt, name, code);
+      _renderTradePlan(sig, code, name);
+      if (meta) meta.textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", {hour12: false});
     } catch (e) {
-      body.innerHTML = `<div class="empty-v3">分析加载失败：${(e && e.message) || e}</div>`;
+      if (meta) meta.textContent = "失败：" + (e && e.message || e);
     }
   }
 
-  // 评分圆环（90×90 SVG）+ 2×2 技术进度条 + 三档价位，严格匹配 styles.css 的 .sd-* 结构
-  function stockDetailHtml(sig, rt, name, code) {
-    const action = sig.action || "持有";
-    const isBuy = action.includes("买入") || action.includes("加仓");
-    const isSell = action.includes("卖出") || action.includes("减仓");
-    const color = isBuy ? "#e74c3c" : isSell ? "#2ecc71" : "#f59f00";
+  function _renderTradePlan(sig, code, name) {
+    const $ = (s) => document.getElementById(s);
+    const price = sig.price;
+    const prev = sig.prev_close;
+    const chg = (price != null && prev != null && prev > 0) ? ((price - prev) / prev * 100) : null;
+    const chgAbs = (price != null && prev != null) ? (price - prev) : null;
+    const down = chg != null && chg < 0;
+    const up = chg != null && chg >= 0;
+
+    // 头部
+    $("tpName").textContent = name || sig.name || code;
+    $("tpCode").textContent = code;
+    const pEl = $("tpPrice"); pEl.textContent = price != null ? price.toFixed(2) : "--";
+    pEl.className = "tp-price" + (down ? " tp-down" : "");
+    const cEl = $("tpChg");
+    if (chg != null) {
+      cEl.textContent = `${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%${chgAbs != null ? " " + (chgAbs >= 0 ? "+" : "") + chgAbs.toFixed(2) : ""}`;
+      cEl.className = "tp-chg" + (down ? " tp-down" : "");
+    } else { cEl.textContent = "--"; cEl.className = "tp-chg"; }
+
+    // 指标横排
+    const ind = sig.indicators || {};
+    const ma5 = lastNonNull(ind.ma && ind.ma.ma5);
+    const ma10 = lastNonNull(ind.ma && ind.ma.ma10);
+    const ma20 = lastNonNull(ind.ma && ind.ma.ma20);
+    const macdDif = lastNonNull(ind.macd && ind.macd.dif);
+    const macdDea = lastNonNull(ind.macd && ind.macd.dea);
+    const kdjK = lastNonNull(ind.kdj && ind.kdj.k);
+    const kdjD = lastNonNull(ind.kdj && ind.kdj.d);
+    const kdjJ = lastNonNull(ind.kdj && ind.kdj.j);
+    const rsi12 = lastNonNull(ind.rsi && ind.rsi.rsi12);
+    const bollL = lastNonNull(ind.boll && ind.boll.lower);
+    const bollU = lastNonNull(ind.boll && ind.boll.upper);
+    const indEls = document.querySelectorAll("#tpIndicators .tp-ind b");
+    const indTxt = [
+      ma5 != null ? ma5.toFixed(2) : "--",
+      ma10 != null ? ma10.toFixed(2) : "--",
+      ma20 != null ? ma20.toFixed(2) : "--",
+      (macdDif != null && macdDea != null) ? `${macdDif.toFixed(2)}/${macdDea.toFixed(2)}` : "--",
+      (kdjK != null && kdjD != null && kdjJ != null) ? `${kdjK.toFixed(1)}/${kdjD.toFixed(1)}/${kdjJ.toFixed(1)}` : "--",
+      rsi12 != null ? rsi12.toFixed(1) : "--",
+      (bollL != null && bollU != null) ? `${bollL.toFixed(2)}~${bollU.toFixed(2)}` : "--",
+    ];
+    indEls.forEach((b, i) => b.textContent = indTxt[i] || "--");
+
+    // 量化评分（综合动能）：score 范围 -100..+100 → 进度圈百分比 0..100
     const score = sig.score != null ? sig.score : 0;
     const scorePct = Math.max(0, Math.min(100, (score + 100) / 2));
-    const price = rt && rt.price != null ? rt.price : sig.price;
-    const chg = rt && rt.change_pct != null ? rt.change_pct : null;
-    const chgCls = chg == null ? "" : (chg >= 0 ? "up" : "down");
-    const chgTxt = chg != null ? (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%" : "";
+    const snEl = $("tpScoreNum");
+    if (snEl) {
+      snEl.style.setProperty("--p", (scorePct * 3.6) + "deg");
+      snEl.innerHTML = `<span>${score > 0 ? "+" : ""}${score}</span>`;
+    }
+    const act = sig.action || "持有";
+    const bar = $("tpScoreBar") || (() => {
+      const el = document.querySelector(".tp-score-bar");
+      return el;
+    })();
+    // 标签语义映射：买入/加仓→加仓(绿)；持有/观望→持有(蓝)；减仓/卖出→减仓(红)
+    let tag = "持有";
+    let barCls = "tp-hold";
+    let note = "动能中性，区间操作";
+    if (act.includes("买入") || act.includes("加仓") || score >= 30) { tag = "加仓"; barCls = "tp-buy"; note = "动能偏多，可考虑逢低吸纳"; }
+    else if (act.includes("卖出") || act.includes("减仓") || score <= -30) { tag = "减仓"; barCls = "tp-sell"; note = "动能转弱，注意风险"; }
+    else if (score >= 10) { tag = "持有"; barCls = "tp-buy"; note = "动能略偏多，可继续持有"; }
+    else if (score <= -10) { tag = "持有"; barCls = "tp-sell"; note = "动能略偏空，注意回撤"; }
+    const scoreBar = document.querySelector(".tp-score-bar");
+    if (scoreBar) {
+      scoreBar.classList.remove("tp-buy","tp-hold","tp-sell");
+      scoreBar.classList.add(barCls);
+    }
+    $("tpScoreTag").textContent = tag;
+    $("tpScoreNote").textContent = note;
 
-    // —— 技术进度条（v3.1 标志：KDJ / MACD / 量能 / RSI）——
-    const ts = sig.tech_short || {};
-    const ind = sig.indicators || {};
-    const rsiObj = ind.rsi || {};
-    const kdjJ = ts.kdj_j != null ? +ts.kdj_j : null;
-    const kdjPct = kdjJ != null ? (kdjJ + 100) / 2 : 50;
-    const kdjTxt = kdjJ != null ? ("J " + kdjJ + (ts.kdj_status ? "·" + ts.kdj_status : "")) : "J —";
-    const kdjFill = kdjJ != null && kdjJ > 80 ? "red" : (kdjJ != null && kdjJ < 20 ? "green" : "green");
-    const macdMap = { "红柱": 88, "红柱放": 95, "红柱缩": 72, "金叉": 88, "绿柱": 12, "绿柱放": 5, "绿柱缩": 28, "死叉": 12 };
-    const macdPct = macdMap[ts.macd_status] != null ? macdMap[ts.macd_status] : 50;
-    const macdTxt = ts.macd_status ? ("MACD " + ts.macd_status) : "MACD —";
-    const macdFill = ts.macd_status ? (ts.macd_status.indexOf("绿") >= 0 ? "red" : "green") : "gray";
-    const vol = ts.vol_ratio != null ? +ts.vol_ratio : null;
-    const volPct = vol != null ? Math.max(4, Math.min(100, vol * 25)) : 50;
-    const volTxt = vol != null ? ("量比 " + vol) : "量比 —";
-    const volFill = vol != null ? (vol >= 1.2 ? "green" : vol <= 0.8 ? "red" : "gray") : "gray";
-    const rsi = rsiObj.rsi12 != null ? +rsiObj.rsi12 : null;
-    const rsiPct = rsi != null ? rsi : 50;
-    const rsiTxt = rsi != null ? ("RSI " + rsi) : "RSI —";
-    const rsiFill = rsi != null ? (rsi > 70 || rsi < 30 ? "red" : "green") : "gray";
+    // 6 维评分（趋势/均线/MACD/KDJ/RSI/量能）：范围 -100..+100
+    const dims = _calcSixDims(sig);
+    _setRadar("tpRadTrend", "tpRadTrendV", dims.trend);
+    _setRadar("tpRadMa",    "tpRadMaV",    dims.ma);
+    _setRadar("tpRadMacd",  "tpRadMacdV",  dims.macd);
+    _setRadar("tpRadKdj",   "tpRadKdjV",   dims.kdj);
+    _setRadar("tpRadRsi",   "tpRadRsiV",   dims.rsi);
+    _setRadar("tpRadVol",   "tpRadVolV",   dims.vol);
 
-    // —— 三档价位（v3.1 标志：建仓 / 止损 / 目标）——
-    const tl = sig.tight || {};
-    const buy = tl.buy != null ? fmt(tl.buy, 2) : "--";
-    const sl = tl.stop_loss != null ? fmt(tl.stop_loss, 2) : "--";
-    const tp = tl.take_profit != null ? fmt(tl.take_profit, 2) : "--";
+    // 三框
+    const tight = sig.tight || {};
+    const buyPx  = tight.buy != null ? tight.buy : null;
+    const stopPx = tight.stop_loss != null ? tight.stop_loss : null;
+    const tgtPx  = tight.take_profit != null ? tight.take_profit : null;
+    __tpCurrent.buy = buyPx; __tpCurrent.stop = stopPx; __tpCurrent.tgt = tgtPx;
+    $("tpBuy").textContent = buyPx != null ? buyPx.toFixed(2) : "--";
+    $("tpStop").textContent = stopPx != null ? stopPx.toFixed(2) : "--";
+    $("tpTarget").textContent = tgtPx != null ? tgtPx.toFixed(2) : "--";
 
-    // 评分圆环 SVG（r=40, 周长≈251.3）
-    const C = 251.327, off = C * (1 - scorePct / 100);
-    const ring = `<svg viewBox="0 0 90 90" width="90" height="90">
-      <circle cx="45" cy="45" r="40" fill="none" stroke="#2a2a2a" stroke-width="8"/>
-      <circle cx="45" cy="45" r="40" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"
-        stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 45 45)"/>
-    </svg>`;
+    // 建议仓位（基于账户总资金 + 单笔风险）
+    _computeSuggestedPosition();
 
-    // 今日做T参考
-    const today = sig.today || {};
-    const todayHtml = (today.buy != null && today.sell != null)
-      ? `<div class="sd-today">📅 今日做T：涨到 <b class="up">${fmt(today.sell, 2)}</b> 卖 / 跌到 <b class="down">${fmt(today.buy, 2)}</b> 买（开盘 ${fmt(today.open, 2)}）</div>`
-      : "";
-
-    // 技术研判要点
-    const reasons = (sig.reasons || []).slice(0, 6).map(r => {
-      const pc = r.pts > 0 ? "pos" : r.pts < 0 ? "neg" : "";
-      return `<li><span class="pts ${pc}">${r.pts > 0 ? "+" : ""}${r.pts}</span>${r.text}</li>`;
-    }).join("");
-
-    const bar = (name, pct, txt, fill) =>
-      `<div class="sd-bar"><span class="sd-bar-name">${name}</span>` +
-      `<div class="sd-bar-track"><i class="sd-bar-fill ${fill}" style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>` +
-      `<span class="sd-bar-val">${txt}</span></div>`;
-
-    return `
-    <div class="sd-detail">
-      <div class="sd-head">
-        <div>
-          <div class="sd-name">${name || code}<span class="sd-code">${code}</span></div>
-          <div class="sd-price">${price != null ? fmt(price) : "--"}<span class="sd-chg ${chgCls}">${chgTxt}</span></div>
-        </div>
-        <span class="sd-action-badge" style="background:${color}">${action}</span>
-      </div>
-
-      <div class="sd-signal-row">
-        <div class="sd-ring">${ring}<div class="sd-ring-text"><div class="sd-ring-num" style="color:${color}">${score > 0 ? "+" : ""}${score}</div><div class="sd-ring-label">综合评分</div></div></div>
-        <div class="sd-signal-info">
-          <div class="sd-signal-act" style="color:${color}">${action}</div>
-          <div class="sd-signal-desc">综合评分 ${score > 0 ? "+" : ""}${score}　·　偏向 ${score > 0 ? "多头" : score < 0 ? "空头" : "震荡"}</div>
-        </div>
-      </div>
-
-      <div class="sd-section-title">技术面 · 短线动能</div>
-      <div class="sd-bars">
-        ${bar("KDJ", kdjPct, kdjTxt, kdjFill)}
-        ${bar("MACD", macdPct, macdTxt, macdFill)}
-        ${bar("量能", volPct, volTxt, volFill)}
-        ${bar("RSI", rsiPct, rsiTxt, rsiFill)}
-      </div>
-
-      <div class="sd-section-title">三档价位</div>
-      <div class="sd-levels">
-        <div class="sd-lev"><div class="sd-lev-name">建仓</div><div class="sd-lev-val green">${buy}</div></div>
-        <div class="sd-lev"><div class="sd-lev-name">止损</div><div class="sd-lev-val">${sl}</div></div>
-        <div class="sd-lev"><div class="sd-lev-name">目标</div><div class="sd-lev-val green">${tp}</div></div>
-      </div>
-
-      ${todayHtml}
-
-      <div class="sd-section-title">技术研判</div>
-      <ul class="sd-reasons">${reasons || "<li>暂无研判要点</li>"}</ul>
-    </div>`;
+    // SVG 折线图
+    _drawTpChart(sig.bars || []);
   }
+
+  function _calcSixDims(sig) {
+    const ind = sig.indicators || {};
+    const bars = sig.bars || [];
+    const closes = bars.map(b => b.close).filter(v => v != null);
+    const vols = bars.map(b => b.volume).filter(v => v != null);
+    const dims = { trend: 0, ma: 0, macd: 0, kdj: 0, rsi: 0, vol: 0 };
+
+    // 趋势：最近 5 根 K 线 MA20 斜率（用 K 线自算，避免对单值调 slice）
+    try {
+      const bars = sig.bars || [];
+      if (bars.length >= 25) {
+        const ma20 = smaArr(bars.map(b => b.close), 20);
+        const tail = ma20.slice(-10).filter(v => v != null);
+        if (tail.length >= 2) {
+          const slope = (tail[tail.length - 1] - tail[0]) / tail[0];
+          dims.trend = Math.max(-100, Math.min(100, slope * 1000));
+        }
+      }
+    } catch (e) {}
+    // 均线多头排列：MA5 > MA10 > MA20
+    try {
+      const ma5 = lastNonNull(ind.ma && ind.ma.ma5);
+      const ma10 = lastNonNull(ind.ma && ind.ma.ma10);
+      const ma20 = lastNonNull(ind.ma && ind.ma.ma20);
+      const price = sig.price;
+      if (ma5 != null && ma10 != null && ma20 != null && price > 0) {
+        let s = 0;
+        if (ma5 > ma10) s += 30; if (ma10 > ma20) s += 30;
+        if (price > ma5) s += 20; if (price > ma20) s += 20;
+        dims.ma = Math.max(-100, Math.min(100, s - 50));
+      }
+    } catch (e) {}
+    // MACD：DIF-DEA 标准化
+    try {
+      const dif = lastNonNull(ind.macd && ind.macd.dif);
+      const dea = lastNonNull(ind.macd && ind.macd.dea);
+      const price = sig.price || 0;
+      if (dif != null && dea != null && price > 0) {
+        dims.macd = Math.max(-100, Math.min(100, (dif - dea) / price * 1000));
+      }
+    } catch (e) {}
+    // KDJ：J 偏离 50
+    try {
+      const j = lastNonNull(ind.kdj && ind.kdj.j);
+      if (j != null) dims.kdj = Math.max(-100, Math.min(100, (j - 50) * 1.5));
+    } catch (e) {}
+    // RSI：偏离 50
+    try {
+      const r = lastNonNull(ind.rsi && ind.rsi.rsi12);
+      if (r != null) dims.rsi = Math.max(-100, Math.min(100, (r - 50) * 2));
+    } catch (e) {}
+    // 量能：最近量比 - 1
+    try {
+      const ts = sig.tech_short || {};
+      const vr = ts.vol_ratio != null ? +ts.vol_ratio : null;
+      if (vr != null) dims.vol = Math.max(-100, Math.min(100, (vr - 1) * 100));
+    } catch (e) {}
+    return dims;
+  }
+
+  function _setRadar(fillId, valId, v) {
+    const fill = document.getElementById(fillId);
+    const val = document.getElementById(valId);
+    if (!fill || !val) return;
+    if (v == null) { fill.style.width = "0"; val.textContent = "--"; return; }
+    const abs = Math.abs(v);
+    const widthPct = (abs / 100) * 50; // 半幅最大 50%
+    if (v >= 0) {
+      fill.className = "tp-radar-fill tp-pos";
+      fill.style.left = "50%";
+      fill.style.width = widthPct + "%";
+    } else {
+      fill.className = "tp-radar-fill tp-neg";
+      fill.style.left = (50 - widthPct) + "%";
+      fill.style.width = widthPct + "%";
+    }
+    val.textContent = (v >= 0 ? "+" : "") + v.toFixed(0);
+    val.className = "tp-radar-val " + (v >= 0 ? "tp-pos" : (v < 0 ? "tp-neg" : ""));
+  }
+
+  function _computeSuggestedPosition() {
+    const $ = (s) => document.getElementById(s);
+    const cap = parseFloat(($("tpCapital") || {}).value) || 500000;
+    const riskPct = parseFloat(($("tpRisk") || {}).value) || 2;
+    const buy = __tpCurrent.buy;
+    const stop = __tpCurrent.stop;
+    const price = __tpCurrent.price;
+    const basePx = buy || price;
+    if (!basePx) { $("tpPosition").textContent = "--"; return; }
+    // 单笔风险 = 仓位 × (买入价 - 止损价) ≤ 总资金 × 风险%
+    let posAmount = 0;
+    if (buy && stop && stop < buy) {
+      const perShareLoss = buy - stop;
+      posAmount = cap * (riskPct / 100) / perShareLoss * buy;
+    } else {
+      posAmount = cap * 0.16; // 默认 16%（参考图）
+    }
+    const lot = 100;
+    const shares = Math.floor(posAmount / basePx / lot) * lot;
+    const pct = (shares * basePx / cap) * 100;
+    $("tpPosition").textContent = `${pct.toFixed(1)}% 约 ${shares.toLocaleString("zh-CN")} 股`;
+  }
+
+  function _drawTpChart(bars) {
+    const svg = document.getElementById("tpChart");
+    if (!svg || !bars || bars.length === 0) {
+      if (svg) svg.innerHTML = `<text x="300" y="140" text-anchor="middle" fill="#64748b" font-size="14">暂无 K 线数据</text>`;
+      return;
+    }
+    const W = 600, H = 280, PAD_L = 0, PAD_R = 0, PAD_T = 10, PAD_B = 22;
+    const x0 = PAD_L, y0 = PAD_T, w = W - PAD_L - PAD_R, h = H - PAD_T - PAD_B;
+    const closes = bars.map(b => b.close);
+    const minC = Math.min.apply(null, closes);
+    const maxC = Math.max.apply(null, closes);
+    const padC = (maxC - minC) * 0.08 || 0.05;
+    const lo = minC - padC, hi = maxC + padC;
+    const N = bars.length;
+    const px = (i) => x0 + (i / (N - 1)) * w;
+    const py = (v) => y0 + h - ((v - lo) / (hi - lo)) * h;
+
+    // 价格折线
+    let line = "";
+    bars.forEach((b, i) => { line += (i === 0 ? "M" : "L") + px(i).toFixed(1) + "," + py(b.close).toFixed(1) + " "; });
+    // 区域填充
+    const area = `M${px(0)},${py(bars[0].close)} ` + bars.map((b,i) => `L${px(i)},${py(b.close)}`).join(" ")
+                + ` L${px(N-1)},${(y0+h)} L${px(0)},${(y0+h)} Z`;
+    // Y 轴刻度 5 条
+    let grid = "";
+    let yLabels = "";
+    for (let i = 0; i <= 4; i++) {
+      const v = lo + (hi - lo) * (i / 4);
+      const y = py(v);
+      grid += `<line x1="${x0}" y1="${y}" x2="${x0+w}" y2="${y}" stroke="#1e293b" stroke-dasharray="2 3"/>`;
+      yLabels += `<text x="${x0+w-4}" y="${y-2}" text-anchor="end" fill="#64748b" font-size="10">${v.toFixed(2)}</text>`;
+    }
+    // X 轴日期（首末）
+    const xLabels = `<text x="${x0}" y="${H-6}" fill="#64748b" font-size="10">${bars[0].date || ""}</text>` +
+                    `<text x="${x0+w}" y="${H-6}" text-anchor="end" fill="#64748b" font-size="10">${bars[N-1].date || ""}</text>`;
+    // 价格颜色（涨绿跌红，国内惯例）
+    const isUp = (bars[N-1].close >= (bars[0].close));
+    const lineColor = isUp ? "#10b981" : "#ef4444";
+    const fillColor = isUp ? "rgba(16,185,129,0.18)" : "rgba(239,68,68,0.18)";
+    svg.innerHTML = `
+      ${grid}
+      <path d="${area}" fill="${fillColor}"/>
+      <path d="${line}" fill="none" stroke="${lineColor}" stroke-width="1.4"/>
+      ${yLabels}
+      ${xLabels}
+    `;
+    // 鼠标十字光标
+    if (!svg.__tpBound) {
+      svg.__tpBound = true;
+      svg.addEventListener("mousemove", (ev) => {
+        const rect = svg.getBoundingClientRect();
+        const xRel = (ev.clientX - rect.left) / rect.width;
+        const idx = Math.round(xRel * (N - 1));
+        if (idx < 0 || idx >= N) { hideTip(); return; }
+        const b = bars[idx];
+        showTip(ev, b, idx);
+      });
+      svg.addEventListener("mouseleave", hideTip);
+    }
+    function showTip(ev, b, i) {
+      const tip = document.getElementById("tpChartTip");
+      if (!tip) return;
+      const rect = svg.getBoundingClientRect();
+      tip.innerHTML = `<div>${b.date || ""}</div>
+        <div>开 ${b.open != null ? (+b.open).toFixed(2) : "--"} · 收 <b style="color:${b.close>=b.open?'#10b981':'#ef4444'}">${(+b.close).toFixed(2)}</b></div>
+        <div>高 ${(+b.high).toFixed(2)} · 低 ${(+b.low).toFixed(2)}</div>
+        <div>量 ${b.volume != null ? (+b.volume).toLocaleString("zh-CN") : "--"}</div>`;
+      tip.style.display = "block";
+      const x = (i / (N - 1)) * rect.width + 8;
+      const y = ((ev.clientY - rect.top)) + 8;
+      tip.style.left = Math.min(rect.width - 130, x) + "px";
+      tip.style.top = Math.min(rect.height - 80, y) + "px";
+    }
+    function hideTip() {
+      const tip = document.getElementById("tpChartTip");
+      if (tip) tip.style.display = "none";
+    }
+  }
+
+  function _normCodeForTp(code) { return (code || "").toLowerCase(); }
+
+  // r29：已用 _renderTradePlan + _drawTpChart，旧的 stockDetailHtml 不再使用（保留函数名以防旧引用报错）。
+  function stockDetailHtml(sig, rt, name, code) { return ""; }
 
   async function loadKline() {
     // K线图已被用户移除，所有调用安全跳过（保留函数名兼容旧引用）
@@ -2278,6 +2481,13 @@ function renderAiAdvice(positions) {
     // 视图进入时按需刷新数据
     if (name === 'dashboard') {
       try { renderSelfStocks(); } catch (e) { console.warn('[wb] dashboard render:', e && e.message); }
+      // r29：进入行情看板时，自动选第一只持仓股填到右上方交易计划（避免空白）
+      try {
+        if (!__tpCurrent.code) {
+          const first = (state.positions || [])[0];
+          if (first) renderStockDetail(first.code, first.name);
+        }
+      } catch (e) { console.warn('[wb] default stock detail:', e && e.message); }
     } else if (name === 'scan') {
       try { renderScanView(); } catch (e) { console.warn('[wb] scan render:', e && e.message); }
       try { renderTailBuy(); } catch (e) { console.warn('[wb] tailbuy render:', e && e.message); }
@@ -2571,71 +2781,71 @@ function renderAiAdvice(positions) {
   let _klineChart = null;       // StockChart 实例
   let _klineState = { code: "", name: "", period: "5m", timer: null };
 
+  // r29：把旧简易 K 线（chart.js + canvas）替换为新交易计划面板的事件绑定
+  // Tab 切换 / 刷新 / 模拟建仓 / 资金风控参数变更
   function bindKline() {
-    const cv = document.getElementById('klineCanvas');
-    const tip = document.getElementById('klineTooltip');
-    if (!cv) return;
-    try {
-      if (window.StockChart) _klineChart = new window.StockChart(cv, tip);
-    } catch (e) { console.warn('[wb] StockChart init:', e && e.message); return; }
-
-    // 周期按钮
-    document.querySelectorAll('.kline-period').forEach(b => {
+    bindTradePlan();
+  }
+  function bindTradePlan() {
+    // Tab：分时 / 日K+指标（暂用日K，分时图按需后续加）
+    document.querySelectorAll('#tradePlanBody .tp-tab').forEach(b => {
       b.addEventListener('click', () => {
-        document.querySelectorAll('.kline-period').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('#tradePlanBody .tp-tab').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
-        _klineState.period = b.dataset.p || "5m";
-        loadKline(_klineState.code, _klineState.name, _klineState.period);
+        // 周期切换：重新拉 /api/kline + /api/signal 重绘（r30 可接入；当前先刷新指标）
+        const period = b.dataset.p || 'daily';
+        if (__tpCurrent.code && (period === 'm5')) {
+          // 切到分时：从 /api/kline 取 5 分钟折线重画
+          api('GET', '/api/kline?code=' + encodeURIComponent(__tpCurrent.code) + '&period=5m&limit=120')
+            .then(r => { if (r && r.bars) _drawTpChart(r.bars); })
+            .catch(() => {});
+        } else if (__tpCurrent.code) {
+          // 切回日K：重渲染
+          renderStockDetail(__tpCurrent.code, __tpCurrent.name);
+        }
       });
     });
-
-    // 默认显示第一个持仓股的 5 分钟 K 线
-    const first = (state.positions || [])[0];
-    if (first) {
-      loadKline(first.code, first.name, _klineState.period);
-    } else {
-      const meta = document.getElementById('klineMeta');
-      if (meta) meta.textContent = '暂无持仓';
-    }
-
-    // 30 秒自动刷新（短线操作要求及时）
-    if (_klineState.timer) clearInterval(_klineState.timer);
-    _klineState.timer = setInterval(() => {
-      if (_klineState.code) loadKline(_klineState.code, _klineState.name, _klineState.period, true);
-    }, 30000);
+    // 立即刷新
+    const refresh = document.getElementById('tpRefresh');
+    if (refresh) refresh.addEventListener('click', () => {
+      if (__tpCurrent.code) renderStockDetail(__tpCurrent.code, __tpCurrent.name);
+    });
+    // 资金/风险参数变化 → 重算建议仓位
+    ['tpCapital','tpRisk'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', _computeSuggestedPosition);
+    });
+    // 模拟建仓（写交易记录 + 持仓 + 现金）
+    const sim = document.getElementById('tpSimulateBuy');
+    if (sim) sim.addEventListener('click', async () => {
+      if (!__tpCurrent.code) { toast('请先点左侧股票'); return; }
+      const buyPx = __tpCurrent.buy;
+      const cap = parseFloat(document.getElementById('tpCapital').value) || 500000;
+      const riskPct = parseFloat(document.getElementById('tpRisk').value) || 2;
+      const stopPx = __tpCurrent.stop;
+      let qty = 0, px = buyPx || __tpCurrent.price || 0;
+      if (buyPx && stopPx && stopPx < buyPx) {
+        const loss = buyPx - stopPx;
+        qty = Math.floor((cap * (riskPct / 100)) / loss / 100) * 100;
+      }
+      if (!px || qty <= 0) { toast('暂无可用买点/止损，无法算仓位'); return; }
+      try {
+        const r = await api('POST', '/api/trade', { code: __tpCurrent.code, name: __tpCurrent.name,
+                                                     side: 'buy', qty: qty, price: +px.toFixed(2) });
+        if (r && r.ok !== false) {
+          toast(`✅ 已模拟建仓 ${__tpCurrent.name} × ${qty} 股 @ ${(+px).toFixed(2)}`);
+          // 刷新左侧持仓
+          try { loadPositions && loadPositions(); } catch (e) {}
+        } else {
+          toast('建仓失败：' + (r && r.error || '未知'));
+        }
+      } catch (e) { toast('建仓失败：' + (e && e.message || e)); }
+    });
   }
 
-  async function loadKline(code, name, period, isRefresh) {
-    if (!code || !window.StockChart || !_klineChart) return;
-    _klineState.code = code;
-    _klineState.name = name || code;
-    _klineState.period = period || "5m";
-    const meta = document.getElementById('klineMeta');
-    const title = document.getElementById('klineTitle');
-    if (title) title.textContent = `📈 短线 K 线 · ${_klineState.name} · ${period}`;
-    if (meta && !isRefresh) meta.textContent = '加载中…';
-    try {
-      const r = await api('GET', '/api/kline?code=' + encodeURIComponent(code) + '&period=' + _klineState.period + '&limit=120');
-      if (!r || !r.bars || !r.bars.length) {
-        if (meta) meta.textContent = '暂无数据';
-        return;
-      }
-      // 短线图：关闭 BOLL/KDJ/RSI，只显示 MA + 成交量 + MACD（缩短布局）
-      const opts = { showBoll: false, showKdj: false, showRsi: false, showMacd: true };
-      _klineChart.setData(r.bars, r.indicators || null, opts);
-      if (meta) {
-        const last = r.bars[r.bars.length - 1];
-        const chg = last && last.close ? ((last.close - last.open) / last.open * 100).toFixed(2) : '--';
-        meta.textContent = `共 ${r.bars.length} 根 · 最新 ${last && last.close ? last.close.toFixed(2) : '--'} (${chg}%) · ${new Date().toLocaleTimeString()}`;
-      }
-    } catch (e) {
-      if (meta) meta.textContent = '加载失败：' + (e && e.message || e);
-    }
-  }
-
-  // openStock 切换时同时切换 K 线图
+  // openStock 切换时同时刷新交易计划面板
   function _klineShowForStock(code, name) {
-    if (_klineChart && code) loadKline(code, name || code, _klineState.period);
+    if (code) renderStockDetail(code, name);
   }
 
   // 全局错误兜底：任何未捕获的报错都只在控制台警告，不阻塞后续流程（出现红屏空白就糟了）
