@@ -27,6 +27,7 @@ from core import backtest as bt
 from core import intraday as intraday_mod
 from core import daily_strategy as dsmod
 from core.daily_strategy import run_daily, open_judgment, generate_snapshot, generate_review
+from core import market_sentiment as msent
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -962,6 +963,25 @@ def _tight_levels(price, intraday, tl):
 
     band_label = band_label.replace(" · 实盘目标价 → ", " · 实盘目标 → ")
 
+    # r34：新增"日内短线"参考价（贴合现价 ±1%，可立即挂单位）
+    # 王总原话："参考买点太低，不是当天的操作成本参考，我要短期的"——之前 buy 用日 K 波幅±3-8%，
+    # 算出来对短线没意义。short_buy 才是真正能日内/次日挂上的位。
+    _short_pct = 0.01  # 默认 ±1.0%
+    # 若日内已大跌（价格 < VWAP 或 low 距离较大），放宽到 1.5% 给小回踩位
+    try:
+        _vwap = (intraday or {}).get("vwap")
+        if _vwap and price < _vwap * 0.99:
+            _short_pct = 0.015
+        elif day_low and price and (price - day_low) / max(price, 1) > 0.025:
+            _short_pct = 0.015  # 日内已大波，做 T 空间稍大
+    except Exception:
+        pass
+    short_buy = round(price * (1 - _short_pct), 2)
+    short_sell = round(price * (1 + _short_pct), 2)
+    short_stop_loss = round(price * (1 - _short_pct * 1.5), 2)
+    short_take_profit = round(price * (1 + _short_pct * 1.5), 2)
+    short_band = f"日内短线 ±{_short_pct*100:.1f}%（{short_buy} ~ {short_sell}，止损 {short_stop_loss}/止盈 {short_take_profit}）"
+
     return {
         "buy": buy,
         "sell": sell,
@@ -975,6 +995,12 @@ def _tight_levels(price, intraday, tl):
         "resist": resist,
         "day_high": round(day_high, 2) if day_high else None,
         "day_low": round(day_low, 2) if day_low else None,
+        # r34：日内短线参考买/卖点（紧贴现价 ±1~1.5%，可立即挂单）
+        "short_buy": short_buy,
+        "short_sell": short_sell,
+        "short_stop_loss": short_stop_loss,
+        "short_take_profit": short_take_profit,
+        "short_band": short_band,
     }
 
 
@@ -1891,6 +1917,13 @@ class Handler(BaseHTTPRequestHandler):
                     rt = ds.fetch_realtime(codes) or {}
                 except Exception:
                     rt = {}
+            # r34：富行情（量比/换手/最高/最低）——给左栏"持仓股实时监控"行用
+            rt_extra = {}
+            if codes:
+                try:
+                    rt_extra = ds.fetch_realtime_extra(codes) or {}
+                except Exception:
+                    rt_extra = {}
             out = []
             total_value = 0.0
             for p in positions:
@@ -1910,6 +1943,33 @@ class Handler(BaseHTTPRequestHandler):
                 adv["name"] = p.get("name") or adv.get("name") or code
                 adv["shares"] = shares
                 adv["cost"] = cost
+                # r34：补 turn/volume_ratio/high/low 给左栏行渲染
+                _qe = rt_extra.get(code) or {}
+                if _qe.get("turnover") is not None:
+                    adv["turnover"] = _qe["turnover"]
+                if _qe.get("vol_ratio") is not None:
+                    adv["vol_ratio"] = _qe["vol_ratio"]
+                # 振幅 = (今高-今低)/昨收
+                try:
+                    _hi = _qe.get("high") or _rt.get("high")
+                    _lo = _qe.get("low") or _rt.get("low")
+                    _pc = _rt.get("prev_close") or adv.get("prev_close")
+                    if _hi is not None and _lo is not None and _pc:
+                        adv["amplitude"] = round((_hi - _lo) / _pc * 100, 2)
+                    if _hi is not None:
+                        adv["today_high"] = _hi
+                    if _lo is not None:
+                        adv["today_low"] = _lo
+                except Exception:
+                    pass
+                # 迷你趋势 K 线（近 12 日收盘），给左栏"趋势"列用
+                try:
+                    _kb = _cache_get(code, "daily", 60) or ds.get_kline(code, "daily", 60, _tdx_path or None)
+                    _cache_set(code, "daily", 60, _kb)
+                    if _kb:
+                        adv["spark"] = [round(b["close"], 2) for b in _kb[-12:]]
+                except Exception:
+                    pass
                 # 基本面/预期事实（PE + 机构目标价 + 新闻，best-effort，带缓存）
                 try:
                     adv["facts"] = _stock_facts(code)
@@ -1983,6 +2043,14 @@ class Handler(BaseHTTPRequestHandler):
             codes = qs.get("codes", [""])[0].replace(" ", ",").split(",")
             codes = [c for c in codes if c]
             self._send(200, ds.fetch_realtime(codes))
+            return
+        if route == "/api/market_sentiment":
+            # 大盘全局情绪（超短线四维决策之四）：指数涨跌/涨跌家数/涨停跌停/成交额/情绪标签
+            try:
+                force = (qs.get("force", ["0"])[0] in ("1", "true"))
+                self._send(200, msent.get_market_sentiment(force=force))
+            except Exception as e:
+                self._send(200, {"ok": False, "msg": "大盘情绪获取失败：" + str(e)})
             return
         if route == "/api/signal":
             code = qs.get("code", [""])[0]
