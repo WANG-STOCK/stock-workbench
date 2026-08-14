@@ -1865,3 +1865,41 @@ body.theme-dark { background: var(--bg); }
                   font-size: 13px; cursor: pointer; }
   .tp-btn-ghost:hover { background: #1e293b; color: #fff; }
 
+  /* r31：短线策略模式（隔夜抢仓 / 日内做T） */
+  .tp-strategy { background: #0b1220; border: 1px solid #1e293b; border-radius: 8px;
+                 padding: 12px 14px; margin-bottom: 14px; }
+  .tp-strategy-head { display: flex; align-items: center; justify-content: space-between;
+                      gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tp-strategy-title { font-size: 13px; font-weight: 700; color: #e2e8f0; }
+  .tp-strategy-tabs { display: flex; gap: 8px; }
+  .tp-stab { background: #161b22; color: #cbd5e1; border: 1px solid #1e293b;
+             padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+             transition: all .15s; }
+  .tp-stab:hover { border-color: #3b82f6; color: #fff; }
+  .tp-stab.active { background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+                    color: #fff; border-color: #3b82f6; font-weight: 600; }
+  .tp-strategy-hint { color: #64748b; font-size: 12px; padding: 6px 0; }
+  .tp-st-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .tp-st-tag { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 4px; }
+  .tp-st-tag.tp-st-buy  { background: #14532d; color: #4ade80; }
+  .tp-st-tag.tp-st-sell { background: #7f1d1d; color: #f87171; }
+  .tp-st-tag.tp-st-hold { background: #1e3a8a; color: #93c5fd; }
+  .tp-st-score { font-size: 12px; color: #94a3b8; }
+  .tp-st-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .tp-st-cell { background: #0d1117; border: 1px solid #1e293b; border-radius: 6px; padding: 8px 10px; }
+  .tp-st-cell-lbl { color: #64748b; font-size: 11px; }
+  .tp-st-cell-val { font-size: 16px; font-weight: 700; margin-top: 3px;
+                    font-family: 'Consolas','Monaco',monospace; color: #e2e8f0; }
+  .tp-st-cell-note { color: #64748b; font-size: 10px; margin-top: 2px; }
+  .tp-st-tp { font-size: 13px; color: #cbd5e1; margin-bottom: 10px;
+              font-family: 'Consolas','Monaco',monospace; }
+  .tp-st-num { color: #4ade80; font-weight: 700; }
+  .tp-st-reasons { font-size: 12px; margin-bottom: 8px; line-height: 1.8; }
+  .tp-st-reasons.tp-st-weak { opacity: .8; }
+  .tp-st-chip { display: inline-block; background: #0d1117; border: 1px solid #1e293b;
+                color: #93c5fd; border-radius: 4px; padding: 2px 8px; margin: 2px 4px 2px 0;
+                font-size: 11px; }
+  .tp-st-weak .tp-st-chip { color: #fca5a5; }
+  .tp-st-risk { font-size: 11px; color: #fbbf24; background: #1c1917; border: 1px solid #3f3f46;
+                border-radius: 6px; padding: 8px 10px; margin-top: 4px; }
+

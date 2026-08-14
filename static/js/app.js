@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
 /* 版本自检：刷新时第一行打印当前是 r28-kline，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
 console.log('%c[wb] app.js r28-kline loaded (K线图 + 删文字 + 持仓不自选 + 动态扫描计数)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r28-kline') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r28-kline。请强制刷新或清缓存。');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r31-strategy') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r31-strategy。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -2791,6 +2791,14 @@ function renderAiAdvice(positions) {
         }
       });
     });
+    // r31：短线策略模式切换（隔夜抢仓 / 日内做T）
+    document.querySelectorAll('#tpStrategy .tp-stab').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#tpStrategy .tp-stab').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        _loadStrategy(b.dataset.mode);
+      });
+    });
     // 立即刷新
     const refresh = document.getElementById('tpRefresh');
     if (refresh) refresh.addEventListener('click', () => {
@@ -2827,6 +2835,78 @@ function renderAiAdvice(positions) {
         }
       } catch (e) { toast('建仓失败：' + (e && e.message || e)); }
     });
+  }
+
+  // r31：短线策略模式：加载并渲染隔夜抢仓 / 日内做T 结果
+  async function _loadStrategy(mode) {
+    const code = __tpCurrent.code;
+    if (!code) { toast('请先点左侧股票'); return; }
+    const body = document.getElementById('tpStrategyBody');
+    if (body) body.innerHTML = '<div class="tp-strategy-hint">计算中…</div>';
+    try {
+      const r = await api('GET', '/api/strategy/' + mode + '?code=' + encodeURIComponent(code));
+      _renderStrategyResult(mode, r);
+    } catch (e) {
+      if (body) body.innerHTML = '<div class="tp-strategy-hint">加载失败：' + (e && e.message || e) + '</div>';
+    }
+  }
+
+  function _renderStrategyResult(mode, r) {
+    const body = document.getElementById('tpStrategyBody');
+    if (!body) return;
+    if (!r || !r.ok) {
+      body.innerHTML = '<div class="tp-strategy-hint">' + (r && r.msg || '暂无策略数据') + '</div>';
+      return;
+    }
+    if (mode === 'overnight') {
+      const tp = r.take_profit || [];
+      const tagCls = (r.action === '买入' || r.action === '分批建仓') ? 'tp-st-buy' : 'tp-st-hold';
+      let html = '';
+      html += '<div class="tp-st-row"><span class="tp-st-tag ' + tagCls + '">' + r.action + '</span>'
+            + '<span class="tp-st-score">隔夜评分 ' + (r.score != null ? r.score : '--') + '/100</span></div>';
+      html += '<div class="tp-st-grid">'
+            + _stCell('建议买点', r.entry != null ? r.entry.toFixed(2) : '--', r.entry_note || '')
+            + _stCell('止损价', r.stop_loss != null ? r.stop_loss.toFixed(2) : '--', '跌破买入价 -2.5%')
+            + _stCell('持股周期', r.hold_days || '--', '')
+            + '</div>';
+      html += '<div class="tp-st-tp"><b>分批止盈</b>：'
+            + (tp.length >= 3
+                ? ('+3% <span class="tp-st-num">' + tp[0].toFixed(2) + '</span> ｜ +5% <span class="tp-st-num">' + tp[1].toFixed(2) + '</span> ｜ +8% <span class="tp-st-num">' + tp[2].toFixed(2) + '</span>')
+                : '--')
+            + '</div>';
+      html += _stReasons('共振命中', r.hit) + _stReasons('未命中', r.miss, true);
+      html += '<div class="tp-st-risk">⚠️ ' + (r.risk || '') + '</div>';
+      body.innerHTML = html;
+    } else {
+      const actCls = r.action === '做T买' ? 'tp-st-buy'
+                   : (r.action === '做T卖' || r.action === '强制平仓') ? 'tp-st-sell' : 'tp-st-hold';
+      let html = '';
+      html += '<div class="tp-st-row"><span class="tp-st-tag ' + actCls + '">' + r.action + '</span>'
+            + '<span class="tp-st-score">' + (r.window || '') + '</span></div>';
+      html += '<div class="tp-st-grid">'
+            + _stCell('T+0 买点', r.t_buy != null ? r.t_buy.toFixed(2) : '--', '回补低点')
+            + _stCell('T+0 卖点', r.t_sell != null ? r.t_sell.toFixed(2) : '--', '高抛点')
+            + _stCell('成本差', r.cost_diff_pct != null ? (r.cost_diff_pct >= 0 ? '+' : '') + r.cost_diff_pct + '%' : '非持仓', r.cost != null ? '成本 ' + r.cost.toFixed(2) : '')
+            + '</div>';
+      html += '<div class="tp-st-tp"><b>目标 / 止损</b>：'
+            + '做T收益 ' + (r.target_pct != null ? (r.target_pct >= 0 ? '+' : '') + r.target_pct + '%' : '--')
+            + ' ｜ 止损 ' + (r.stop_pct != null ? r.stop_pct + '%' : '--')
+            + ' ｜ 强制平仓 ' + (r.force_close || '14:50')
+            + ' ｜ 当日≤' + (r.max_times_per_day || 2) + ' 次</div>';
+      html += _stReasons('触发条件', r.hit) + _stReasons('反向信号', r.miss, true);
+      html += '<div class="tp-st-risk">⚠️ ' + (r.risk || '') + '</div>';
+      body.innerHTML = html;
+    }
+  }
+  function _stCell(label, val, note) {
+    return '<div class="tp-st-cell"><div class="tp-st-cell-lbl">' + label + '</div>'
+         + '<div class="tp-st-cell-val">' + val + '</div>'
+         + (note ? '<div class="tp-st-cell-note">' + note + '</div>' : '') + '</div>';
+  }
+  function _stReasons(title, arr, weak) {
+    if (!arr || !arr.length) return '';
+    return '<div class="tp-st-reasons ' + (weak ? 'tp-st-weak' : '') + '"><b>' + title + '：</b>'
+         + arr.map(x => '<span class="tp-st-chip">' + x + '</span>').join('') + '</div>';
   }
 
   // openStock 切换时同时刷新交易计划面板

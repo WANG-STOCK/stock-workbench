@@ -22,6 +22,7 @@ from core import fundamentals as fm
 from core import sector_flow as sf
 from core import news as nw
 from core import screener as sc
+from core import strategies as strat
 from core import intraday as intraday_mod
 from core import daily_strategy as dsmod
 from core.daily_strategy import run_daily, open_judgment, generate_snapshot, generate_review
@@ -365,6 +366,22 @@ def _load_positions():
         return p
     # 2. 云端/本地共用主源（git 跟踪）：云端部署后自动同步，重启不丢
     return _load_json(STATIC_POSITIONS, [])
+
+
+def _position_cost(code):
+    """返回该持仓股的成本价（无持仓则返回 None）。"""
+    try:
+        for p in _load_positions():
+            if p.get("code") == code:
+                c = p.get("cost")
+                if c is not None:
+                    try:
+                        return float(c)
+                    except (TypeError, ValueError):
+                        return None
+    except Exception:
+        pass
+    return None
 
 
 def _held_shares(code):
@@ -2265,6 +2282,54 @@ class Handler(BaseHTTPRequestHandler):
             res["code"] = code
             res["period"] = period
             self._send(200, res)
+            return
+
+        # ========== r31 两套短线量化策略接口 ==========
+        if route == "/api/strategy/overnight":
+            code = qs.get("code", [""])[0]
+            if not code:
+                self._send(400, {"error": "code required"})
+                return
+            try:
+                bars_day = ds.get_kline(code, "daily", 120, _tdx_path or None)
+                bars_30m = ds.fetch_kline_em(code, "30m", 80)
+                bars_60m = ds.fetch_kline_em(code, "60m", 60)
+                q = (ds.fetch_realtime_extra([code]) or {}).get(code) or {}
+                price = q.get("price")
+                prev_close = q.get("prev_close")
+                name = q.get("name") or code
+                r = strat.overnight_score(code, bars_day, bars_30m, bars_60m, price, prev_close, name)
+            except Exception as e:
+                r = {"ok": False, "mode": "overnight", "msg": "计算失败：" + str(e)}
+            self._send(200, r)
+            return
+        if route == "/api/strategy/intraday":
+            code = qs.get("code", [""])[0]
+            cost = qs.get("cost", [""])[0]
+            try:
+                cost = float(cost) if cost else None
+            except Exception:
+                cost = None
+            if not code:
+                self._send(400, {"error": "code required"})
+                return
+            try:
+                bars_1m = ds.fetch_kline_em(code, "1m", 240)
+                if not bars_1m or len(bars_1m) < 30:
+                    fb = ds.get_kline(code, "5m", 120, _tdx_path or None)
+                    if fb and len(fb) >= 30:
+                        bars_1m = fb  # 1m 不可达 → 用 5m 近似
+                bars_5m = ds.get_kline(code, "5m", 80, _tdx_path or None)
+                q = (ds.fetch_realtime_extra([code]) or {}).get(code) or {}
+                price = q.get("price")
+                prev_close = q.get("prev_close")
+                name = q.get("name") or code
+                if cost is None:
+                    cost = _position_cost(code)
+                r = strat.intraday_t_signal(code, bars_1m, bars_5m, cost, price, name, prev_close)
+            except Exception as e:
+                r = {"ok": False, "mode": "intraday", "msg": "计算失败：" + str(e)}
+            self._send(200, r)
             return
 
         # ========== r27 尾盘买入法 + 复盘视图 4 个 GET 端点 ==========
