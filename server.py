@@ -23,6 +23,7 @@ from core import sector_flow as sf
 from core import news as nw
 from core import screener as sc
 from core import strategies as strat
+from core import backtest as bt
 from core import intraday as intraday_mod
 from core import daily_strategy as dsmod
 from core.daily_strategy import run_daily, open_judgment, generate_snapshot, generate_review
@@ -2329,6 +2330,30 @@ class Handler(BaseHTTPRequestHandler):
                 r = strat.intraday_t_signal(code, bars_1m, bars_5m, cost, price, name, prev_close)
             except Exception as e:
                 r = {"ok": False, "mode": "intraday", "msg": "计算失败：" + str(e)}
+            self._send(200, r)
+            return
+
+        # ========== r32 两套策略历史回测接口 ==========
+        if route == "/api/backtest/overnight":
+            code = qs.get("code", [""])[0]
+            if not code:
+                self._send(400, {"error": "code required"})
+                return
+            try:
+                r = bt.backtest_overnight(code, 600, code)
+            except Exception as e:
+                r = {"ok": False, "mode": "overnight", "msg": "回测失败：" + str(e)}
+            self._send(200, r)
+            return
+        if route == "/api/backtest/intraday":
+            code = qs.get("code", [""])[0]
+            if not code:
+                self._send(400, {"error": "code required"})
+                return
+            try:
+                r = bt.backtest_intraday(code, 1200, code)
+            except Exception as e:
+                r = {"ok": False, "mode": "intraday", "msg": "回测失败：" + str(e)}
             self._send(200, r)
             return
 

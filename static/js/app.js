@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
 /* 版本自检：刷新时第一行打印当前是 r28-kline，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
 console.log('%c[wb] app.js r28-kline loaded (K线图 + 删文字 + 持仓不自选 + 动态扫描计数)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r31-strategy') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r31-strategy。请强制刷新或清缓存。');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r32-backtest') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r32-backtest。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -2799,6 +2799,9 @@ function renderAiAdvice(positions) {
         _loadStrategy(b.dataset.mode);
       });
     });
+    // r32：策略历史回测按钮
+    const btBtn = document.getElementById('tpBacktestBtn');
+    if (btBtn) btBtn.addEventListener('click', () => _loadBacktest());
     // 立即刷新
     const refresh = document.getElementById('tpRefresh');
     if (refresh) refresh.addEventListener('click', () => {
@@ -2849,6 +2852,102 @@ function renderAiAdvice(positions) {
     } catch (e) {
       if (body) body.innerHTML = '<div class="tp-strategy-hint">加载失败：' + (e && e.message || e) + '</div>';
     }
+  }
+
+  // r32：策略历史回测：并行跑隔夜/日内两个接口并渲染报告
+  async function _loadBacktest() {
+    const code = __tpCurrent.code;
+    if (!code) { toast('请先点左侧股票'); return; }
+    const body = document.getElementById('tpBacktestBody');
+    if (body) body.innerHTML = '<div class="tp-strategy-hint">回测中（拉取历史K线，约 2-5 秒）…</div>';
+    try {
+      const [ov, id] = await Promise.all([
+        api('GET', '/api/backtest/overnight?code=' + encodeURIComponent(code)),
+        api('GET', '/api/backtest/intraday?code=' + encodeURIComponent(code)),
+      ]);
+      _renderBacktestReport(ov, id);
+    } catch (e) {
+      if (body) body.innerHTML = '<div class="tp-strategy-hint">回测失败：' + (e && e.message || e) + '</div>';
+    }
+  }
+
+  function _renderBacktestReport(ov, id) {
+    const body = document.getElementById('tpBacktestBody');
+    if (!body) return;
+    if ((!ov || !ov.ok) && (!id || !id.ok)) {
+      body.innerHTML = '<div class="tp-strategy-hint">' + ((ov && ov.msg) || (id && id.msg) || '暂无回测数据') + '</div>';
+      return;
+    }
+    let html = '';
+    if (ov && ov.ok) {
+      const s = ov.stats || {};
+      const eq = s.equity_curve || [];
+      html += '<div class="bt-card"><div class="bt-card-title">🌙 隔夜抢仓 · 历史回测</div>';
+      html += '<div class="bt-sample">样本 ' + (ov.sample ? (ov.sample.from + ' ~ ' + ov.sample.to + '（' + ov.sample.bars + ' 根日线）') : '') + '</div>';
+      html += '<div class="bt-grid">'
+        + _btCell('交易笔数', s.trades)
+        + _btCell('胜率', s.win_rate + '%', s.win_rate >= 55 ? 'tp-pos' : '')
+        + _btCell('盈亏比', s.profit_factor)
+        + _btCell('总收益*', s.total_return + '%', s.total_return >= 0 ? 'tp-pos' : 'tp-neg')
+        + _btCell('最大回撤', s.max_drawdown + '%', 'tp-neg')
+        + _btCell('夏普', s.sharpe)
+        + _btCell('平均持有', s.avg_hold_days + ' 天')
+        + '</div>';
+      if (eq.length > 1) html += _btSpark(eq);
+      const rec = ov.recent || [];
+      if (rec.length) {
+        html += '<div class="bt-sub">最近交易</div><table class="bt-table"><thead><tr><th>买入</th><th>卖出</th><th>进场</th><th>出场</th><th>盈亏</th><th>天</th></tr></thead><tbody>';
+        rec.forEach(t => {
+          const cls = t.pnl_pct >= 0 ? 'tp-pos' : 'tp-neg';
+          html += '<tr><td>' + t.buy_date + '</td><td>' + t.sell_date + '</td><td>' + t.entry + '</td><td>' + t.exit + '</td>'
+            + '<td class="' + cls + '">' + (t.pnl_pct >= 0 ? '+' : '') + t.pnl_pct + '%</td><td>' + t.hold_days + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      html += '</div>';
+    } else if (ov) {
+      html += '<div class="bt-card"><div class="bt-card-title">🌙 隔夜抢仓</div><div class="bt-sample">' + (ov.msg || '无数据') + '</div></div>';
+    }
+    if (id && id.ok) {
+      const s = id.stats || {};
+      html += '<div class="bt-card"><div class="bt-card-title">🔵 日内做T · 历史回测</div>';
+      html += '<div class="bt-sample">样本 ' + (id.sample ? (id.sample.from + ' ~ ' + id.sample.to + '（' + id.sample.days + ' 日 ' + (id.sample.granularity || '') + '）') : '') + '</div>';
+      html += '<div class="bt-grid">'
+        + _btCell('T 次数', s.trades)
+        + _btCell('胜率', s.win_rate + '%', s.win_rate >= 55 ? 'tp-pos' : '')
+        + _btCell('单笔均值', s.avg_pnl + '%', s.avg_pnl >= 0 ? 'tp-pos' : 'tp-neg')
+        + _btCell('日均值', s.avg_day_pnl + '%', s.avg_day_pnl >= 0 ? 'tp-pos' : 'tp-neg')
+        + _btCell('最大单日亏', s.max_day_loss + '%', 'tp-neg')
+        + _btCell('达标率', s.target_rate + '%')
+        + '</div>';
+      const rd = id.recent_days || [];
+      if (rd.length) {
+        html += '<div class="bt-sub">最近交易日</div><table class="bt-table"><thead><tr><th>日期</th><th>日收益</th><th>次</th><th>明细（时间/盈亏）</th></tr></thead><tbody>';
+        rd.forEach(d => {
+          const cls = d.pnl >= 0 ? 'tp-pos' : 'tp-neg';
+          const detail = (d.trades || []).map(tr => tr.t + (tr.pnl >= 0 ? '+' : '') + tr.pnl + '%').join('　');
+          html += '<tr><td>' + d.date + '</td><td class="' + cls + '">' + (d.pnl >= 0 ? '+' : '') + d.pnl + '%</td><td>' + d.times + '</td><td class="bt-detail">' + detail + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      html += '</div>';
+    } else if (id) {
+      html += '<div class="bt-card"><div class="bt-card-title">🔵 日内做T</div><div class="bt-sample">' + (id.msg || '无数据') + '</div></div>';
+    }
+    html += '<div class="bt-note">*总收益按每笔满仓复利估算，仅示方法；回测不含未来函数，仅供参考、不构成投资建议。</div>';
+    body.innerHTML = html;
+  }
+
+  function _btCell(label, val, cls) {
+    return '<div class="bt-cell"><div class="bt-cell-lbl">' + label + '</div><div class="bt-cell-val ' + (cls || '') + '">' + (val != null ? val : '--') + '</div></div>';
+  }
+
+  function _btSpark(eq) {
+    const W = 240, H = 40, n = eq.length;
+    const min = Math.min.apply(null, eq), max = Math.max.apply(null, eq);
+    const rng = (max - min) || 1;
+    const pts = eq.map((v, i) => (i / (n - 1) * W).toFixed(1) + ',' + (H - (v - min) / rng * H).toFixed(1)).join(' ');
+    return '<svg class="bt-spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"><polyline points="' + pts + '" fill="none" stroke="#2b8a3e" stroke-width="1.5"/></svg>';
   }
 
   function _renderStrategyResult(mode, r) {

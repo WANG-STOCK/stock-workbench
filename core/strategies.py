@@ -288,7 +288,7 @@ def overnight_score(code, bars_day, bars_30m=None, bars_60m=None,
 
 # ---------------- 模式二 · 日内做 T ----------------
 def intraday_t_signal(code, bars_1m, bars_5m=None, cost=None,
-                      price=None, name="", prev_close=None):
+                      price=None, name="", prev_close=None, sim_time=None):
     """日内做 T 信号（底仓 T+0）。
 
     入参：
@@ -338,9 +338,12 @@ def intraday_t_signal(code, bars_1m, bars_5m=None, cost=None,
     lu = _last(up1)
     ll = _last(low1)
 
-    # 交易窗口（本地时间）
-    now = datetime.datetime.now()
-    hm = now.hour * 60 + now.minute
+    # 交易窗口（本地时间；回测可注入 sim_time=分钟数，避免用 datetime.now 失真）
+    if sim_time is not None:
+        hm = int(sim_time)
+    else:
+        now = datetime.datetime.now()
+        hm = now.hour * 60 + now.minute
     if hm >= 14 * 60 + 50:
         window = "14:50 强制平仓窗口"
         force = True
@@ -384,12 +387,13 @@ def intraday_t_signal(code, bars_1m, bars_5m=None, cost=None,
         sell_cond.append("贴 BOLL 上轨")
         miss.append("贴近 1m BOLL 上轨")
 
-    # 动作判定
+    # 动作判定：低位接（价<VWAP 或 贴 BOLL 下轨）+ 不逆势（盘中共振过滤已含 5m 趋势）
+    low_side = (vwap and price < vwap) or (ll and price < ll * 1.01)
     if force:
         action = "强制平仓"
         t_buy = None
         t_sell = round(price, 2)
-    elif len(buy_cond) >= 2 and macd5_red and trend_ok:
+    elif low_side and trend_ok:
         action = "做T买"
         t_buy = round((ll if ll and price > ll else price) * 0.998, 2)
         t_sell = round(price * 1.01, 2)

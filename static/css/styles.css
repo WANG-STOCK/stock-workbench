@@ -1879,6 +1879,33 @@ body.theme-dark { background: var(--bg); }
   .tp-stab.active { background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
                     color: #fff; border-color: #3b82f6; font-weight: 600; }
   .tp-strategy-hint { color: #64748b; font-size: 12px; padding: 6px 0; }
+  /* r32 策略历史回测面板 */
+  .tp-backtest { margin-top: 14px; border: 1px solid #1e293b; border-radius: 10px; padding: 10px 12px; background: #0d1117; }
+  .tp-backtest-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .tp-backtest-title { font-size: 13px; font-weight: 700; color: #e2e8f0; }
+  .tp-bt-btn { background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%); color: #fff;
+               border: 1px solid #3b82f6; border-radius: 6px; padding: 5px 14px; font-size: 12px;
+               font-weight: 600; cursor: pointer; transition: all .15s; }
+  .tp-bt-btn:hover { filter: brightness(1.15); }
+  .tp-backtest-body { font-size: 12px; }
+  .bt-card { border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; background: #11161d; }
+  .bt-card-title { font-size: 13px; font-weight: 700; color: #e2e8f0; margin-bottom: 4px; }
+  .bt-sample { font-size: 11px; color: #64748b; margin-bottom: 6px; }
+  .bt-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .bt-cell { background: #0d1117; border: 1px solid #1e293b; border-radius: 6px; padding: 5px 6px; text-align: center; }
+  .bt-cell-lbl { font-size: 10px; color: #64748b; margin-bottom: 2px; }
+  .bt-cell-val { font-size: 13px; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+  .bt-cell-val.tp-pos { color: #ef4444; }   /* 涨=红 */
+  .bt-cell-val.tp-neg { color: #22c55e; }   /* 跌=绿 */
+  .bt-spark { width: 100%; height: 40px; display: block; margin: 6px 0; }
+  .bt-sub { font-size: 11px; color: #94a3b8; margin: 6px 0 3px; font-weight: 600; }
+  .bt-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .bt-table th { color: #64748b; font-weight: 500; text-align: left; padding: 2px 4px; border-bottom: 1px solid #1e293b; }
+  .bt-table td { padding: 2px 4px; color: #cbd5e1; font-variant-numeric: tabular-nums; border-bottom: 1px solid #141b24; }
+  .bt-table td.tp-pos { color: #ef4444; font-weight: 700; }
+  .bt-table td.tp-neg { color: #22c55e; font-weight: 700; }
+  .bt-detail { color: #94a3b8; }
+  .bt-note { font-size: 10px; color: #475569; margin-top: 4px; line-height: 1.5; }
   .tp-st-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .tp-st-tag { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 4px; }
   .tp-st-tag.tp-st-buy  { background: #14532d; color: #4ade80; }

@@ -9,13 +9,13 @@
   <meta http-equiv="Expires" content="0">
   <title>婷婷量化AI · 金融K线AI工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E📈%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/css/styles.css?v=r31-strategy">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r32-backtest">
 </head>
 <body class="theme-dark">
   <!-- 启动期错误条：IIFE 或 init 抛错时实时显示在页面顶部，不用开 F12 -->
   <div id="errToast" style="display:none;position:fixed;left:0;top:0;right:0;z-index:999999;background:#7a1f1f;color:#fff;font:13px/1.5 monospace;padding:8px 14px;border-bottom:2px solid #ff5252;max-height:35vh;overflow:auto;white-space:pre-wrap;word-break:break-all;"></div>
   <!-- 版本自检标记：王总刷新时控制台第一行就能看到当前是哪个版本（必须是 r28） -->
-  <script>window.__WB_VERSION__='r31-strategy';console.log('%c[wb] HTML r31-strategy loaded','color:#3b82f6;font-weight:bold');</script>
+  <script>window.__WB_VERSION__='r32-backtest';console.log('%c[wb] HTML r32-backtest loaded','color:#3b82f6;font-weight:bold');</script>
   <!-- 顶部品牌条 -->
   <header class="topbar-v3">
     <div class="brand-v3">
@@ -164,6 +164,16 @@
                   </div>
                   <div class="tp-strategy-body" id="tpStrategyBody">
                     <div class="tp-strategy-hint">点击上方按钮，按所选模式生成交易计划</div>
+                  </div>
+                </div>
+                <!-- r32：策略历史回测 -->
+                <div class="tp-backtest" id="tpBacktest">
+                  <div class="tp-backtest-head">
+                    <span class="tp-backtest-title">📊 策略历史回测</span>
+                    <button type="button" class="tp-bt-btn" id="tpBacktestBtn">运行回测</button>
+                  </div>
+                  <div class="tp-backtest-body" id="tpBacktestBody">
+                    <div class="tp-strategy-hint">点击「运行回测」，用历史数据验证两套策略的胜率 / 盈亏比 / 最大回撤（仅供参考）</div>
                   </div>
                 </div>
                 <!-- 交易参数 -->

@@ -55,15 +55,15 @@ def fetch_kline_online(code, period="daily", limit=300):
 
 
 # 东方财富 1 分钟线（新浪 scale=1 返回 null、腾讯 m1/min 接口不存在，故 1m 走东财）
-def fetch_kline_em(code, period="1m", limit=60):
+def fetch_kline_em(code, period="1m", limit=60, end="20500101"):
     market = "1" if code.startswith("sh") else "0"
     num = code[2:]
     secid = f"{market}.{num}"
-    klt = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60}.get(period, 1)
+    klt = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "daily": 101}.get(period, 1)
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
            f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
            f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
-           f"&klt={klt}&fqt=0&end=20500101&lmt={limit}")
+           f"&klt={klt}&fqt=0&end={end}&lmt={limit}")
     import subprocess
     raw = ""
     # Git Bash 子进程下：用 shell=True 让 bash 把 Windows 路径标准化后再调 curl；
