@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* 版本自检：刷新时第一行打印当前是 r35-2col-chart，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
-console.log('%c[wb] app.js r35-2col-chart loaded (左 K线+量能/KDJ/MACD 副图 / 下 AI决策; 右 账号+持仓 / 扫描)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r35-2col-chart') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r35-2col-chart。请强制刷新或清缓存。');
+/* 版本自检：刷新时第一行打印当前是 r36-review，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
+console.log('%c[wb] app.js r36-review loaded (K线缩半高更专业 + 账户KPI4改3卡 + 自动刷新短线策略 + 复盘视图)','color:#2ecc71;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r36-review') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r36-review。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -148,9 +148,9 @@ if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r35-2col-chart') {
       // 顶部 v3.1 风格 KPI 5 卡（总资产/当日涨跌/持仓/浮盈/信号）
       const set5 = (id, v, cls) => { const e = document.getElementById(id); if (e) { e.textContent = v; e.classList.remove("up", "down"); if (cls) e.classList.add(cls); } };
       try { set5("k5Asset", fmt(asset, 0)); } catch (e) { console.error("[wb] k5Asset 渲染失败", e); }
+      try { set5("k5Cash", fmt(cash, 0)); } catch (e) { console.error("[wb] k5Cash 渲染失败", e); }
       try { set5("k5Chg", signed(todayPct, 2) + "%", todayPct > 0 ? "up" : todayPct < 0 ? "down" : ""); } catch (e) { console.error("[wb] k5Chg 渲染失败", e); }
       try { set5("k5Pos", positions.length + " 只"); } catch (e) { console.error("[wb] k5Pos 渲染失败", e); }
-      try { set5("k5Total", signed(total, 0), total > 0 ? "up" : total < 0 ? "down" : ""); } catch (e) { console.error("[wb] k5Total 渲染失败", e); }
       try {
         const sigN = (state.candidates && state.candidates.length) ? state.candidates.length
                     : ((state.watchlist && state.watchlist.length) ? state.watchlist.length
@@ -161,11 +161,9 @@ if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r35-2col-chart') {
       try {
         const sub = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
         sub("k5AssetSub", "现金占 " + ((cash / Math.max(asset, 1)) * 100).toFixed(0) + "%");
+        sub("k5CashSub", "现金 " + fmt(cash, 0));
         sub("k5ChgSub", signed(todayPct, 2) + "% vs 开盘");
-        sub("k5PosSub", "市值 " + fmt(mv, 0));
-        sub("k5TotalSub", "浮盈 " + signed(total, 0));
-        sub("k5SignalSub", "持仓+自选");
-      } catch (_) {}
+      } catch (e) {}
       computeSignalsForWatchlist();   // 自选股也注入当日行业资金流
       // 同时刷新今日已成交明细（不让"刚录入的记录"看起来消失）
       loadTradeLog();
@@ -1340,6 +1338,9 @@ function renderAiAdvice(positions) {
     reset.forEach(id => { const e = $(id); if (e) e.textContent = "--"; });
     document.querySelectorAll("#tpIndicators .tp-ind b").forEach(b => b.textContent = "--");
     const tpChart = $("tpChart"); if (tpChart) tpChart.innerHTML = "";
+    // r36：短线策略占位默认重置（重置后由 _loadStrategy 自动填充）
+    const tsBody = $("tpStrategyBody");
+    if (tsBody) tsBody.innerHTML = '<div class="tp-strategy-hint">短线策略计算中…</div>';
 
     try {
       const sig = await api("GET", "/api/signal?code=" + encodeURIComponent(code)
@@ -1349,6 +1350,13 @@ function renderAiAdvice(positions) {
         return;
       }
       _renderTradePlan(sig, code, name);
+      // r36：切换股票后自动刷新短线策略（默认显示隔夜抢仓结果），用户不用再手动点
+      try {
+        const ov = await api("GET", "/api/strategy/overnight?code=" + encodeURIComponent(code));
+        _renderStrategyResult("overnight", ov);
+      } catch (e) {
+        if (tsBody) tsBody.innerHTML = '<div class="tp-strategy-hint">短线策略加载失败：' + (e && e.message || e) + '</div>';
+      }
       if (meta) meta.textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", {hour12: false});
     } catch (e) {
       if (meta) meta.textContent = "加载失败：" + (e && e.message || e);
@@ -1662,20 +1670,20 @@ function renderAiAdvice(positions) {
     const svg = document.getElementById("tpChart");
     if (!svg) return;
     if (!bars || bars.length === 0) {
-      svg.innerHTML = `<text x="300" y="140" text-anchor="middle" fill="#64748b" font-size="14">暂无 K 线数据</text>`;
+      svg.innerHTML = `<text x="300" y="115" text-anchor="middle" fill="#64748b" font-size="14">暂无 K 线数据</text>`;
       return;
     }
-    // ====== 画布布局（viewBox 0 0 600 460）======
-    const W = 600, H = 460;
-    const PAD_L = 36, PAD_R = 8;
+    // ====== 画布布局（viewBox 0 0 600 230，高度减半，更精炼） ======
+    const W = 600, H = 230;
+    const PAD_L = 38, PAD_R = 8;
     const x0 = PAD_L, w = W - PAD_L - PAD_R;
     const N = bars.length;
     const px = (i) => x0 + (i / Math.max(1, N - 1)) * w;
-    // 四段竖向分配：主图 / 量能 / KDJ / MACD
-    const mainH = 268, gap = 12;
-    const volH  = 70;
-    const kdjH  = 50;
-    const macdH = 50;
+    // 四段竖向分配：主图 / 量能 / KDJ / MACD（r36：用户要求 K 线缩半高，整体更精炼）
+    const mainH = 130, gap = 6;
+    const volH  = 36;
+    const kdjH  = 24;
+    const macdH = 24;
     let yCursor = 2;
     const regMain = { top: yCursor, bot: yCursor + mainH };             yCursor = regMain.bot + gap;
     const regVol  = { top: yCursor, bot: yCursor + volH  };             yCursor = regVol.bot  + gap;
@@ -1684,76 +1692,22 @@ function renderAiAdvice(positions) {
 
     const pyV = (v, reg, lo, hi) => reg.top + (reg.bot - reg.top) * (1 - (v - lo) / (hi - lo || 1));
 
-    // ====== 主图：价格 + MA5/10/20 + 区域填充 ======
+    // ====== 主图：价格 + MA5/10/20 + 区域填充（r36：涨绿跌红加深，更专业） ======
     const closes = bars.map(b => b.close);
     const minC = Math.min.apply(null, closes);
     const maxC = Math.max.apply(null, closes);
-    const padC = (maxC - minC) * 0.08 || 0.05;
+    const padC = (maxC - minC) * 0.05 || 0.05;
     const loMain = minC - padC, hiMain = maxC + padC;
     const pyMain = (v) => pyV(v, regMain, loMain, hiMain);
-    const ma5  = (series.ma5  || []).slice(-N);
-    const ma10 = (series.ma10 || []).slice(-N);
-    const ma20 = (series.ma20 || []).slice(-N);
     const alignSeries = (arr) => {
-      // bars 与 series 在 server 端严格等长；series 已被 _strip_series_for_payload 截去前缀 None。
-      // 这里只补齐到 bars 长度：不足时前面补 None，过长截断。
       const len = arr.length;
       if (len === N) return arr;
       if (len < N) return new Array(N - len).concat(arr);
       return arr.slice(arr.length - N);
     };
-    const aMa5  = alignSeries(series.ma5  || ma5);
-    const aMa10 = alignSeries(series.ma10 || ma10);
-    const aMa20 = alignSeries(series.ma20 || ma20);
-    const toPath = (arr) => {
-      let p = "";
-      for (let i = 0; i < N; i++) {
-        const v = arr[i];
-        if (v == null) continue;
-        p += (p === "" ? "M" : "L") + px(i).toFixed(1) + "," + pyMain(v).toFixed(1) + " ";
-      }
-      return p;
-    };
-    // 价格折线（涨绿跌红，国内惯例）
-    let pricePath = "";
-    for (let i = 0; i < N; i++) pricePath += (i === 0 ? "M" : "L") + px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
-    const isUp = bars[N - 1].close >= bars[0].close;
-    const priceColor = isUp ? "#10b981" : "#ef4444";
-    const fillColor = isUp ? "rgba(16,185,129,0.18)" : "rgba(239,68,68,0.18)";
-    const areaPath = `M${px(0)},${pyMain(bars[0].close)} ` + bars.map((b, i) => `L${px(i)},${pyMain(b.close)}`).join(" ")
-                    + ` L${px(N - 1)},${regMain.bot} L${px(0)},${regMain.bot} Z`;
-
-    // ====== 量能 ======
-    const vols = bars.map(b => +b.volume || 0);
-    const maxV = Math.max.apply(null, vols);
-    const yVolBase = regVol.bot;
-    let volBars = "";
-    for (let i = 0; i < N; i++) {
-      const up = bars[i].close >= (bars[i].open != null ? bars[i].open : bars[i].close);
-      const col = up ? "#10b981" : "#ef4444";
-      const h = (vols[i] / (maxV || 1)) * (regVol.bot - regVol.top - 4);
-      const x = px(i) - (w / N) * 0.4;
-      const bw = Math.max(1, (w / N) * 0.8);
-      const y = yVolBase - h;
-      volBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.85"/>`;
-    }
-
-    // ====== KDJ（K=白线, D=黄线, J=紫线）+ 80/20 水平虚线 ======
-    const kdjK = alignSeries(series.kdj_k || []);
-    const kdjD = alignSeries(series.kdj_d || []);
-    const kdjJ = alignSeries(series.kdj_j || []);
-    const kdjAll = [].concat(kdjK, kdjD, kdjJ).filter(v => v != null);
-    const kdjLo = Math.min.apply(null, kdjAll.length ? kdjAll : [0]);
-    const kdjHi = Math.max.apply(null, kdjAll.length ? kdjAll : [100]);
-    const kdjPad = Math.max(5, (kdjHi - kdjLo) * 0.1);
-    const pyKdj = (v) => pyV(v, regKdj, Math.min(kdjLo, 0) - kdjPad, Math.max(kdjHi, 100) + kdjPad);
-    const kdjRefLines = `
-      <line x1="${x0}" y1="${pyKdj(80)}" x2="${x0+w}" y2="${pyKdj(80)}" stroke="#475569" stroke-dasharray="2 3"/>
-      <line x1="${x0}" y1="${pyKdj(20)}" x2="${x0+w}" y2="${pyKdj(20)}" stroke="#475569" stroke-dasharray="2 3"/>
-      <text x="${x0+w-2}" y="${pyKdj(80)-1}" text-anchor="end" fill="#64748b" font-size="9">80</text>
-      <text x="${x0+w-2}" y="${pyKdj(20)-1}" text-anchor="end" fill="#64748b" font-size="9">20</text>
-    `;
-    const kdjKPath = toPath(kdjK); // px-based; need KDJ-y mapping instead.
+    const aMa5  = alignSeries(series.ma5  || []);
+    const aMa10 = alignSeries(series.ma10 || []);
+    const aMa20 = alignSeries(series.ma20 || []);
     function seriesPath(arr, pyFn) {
       let p = "";
       for (let i = 0; i < N; i++) {
@@ -1763,8 +1717,53 @@ function renderAiAdvice(positions) {
       }
       return p;
     }
+    const toPathMain = (arr) => seriesPath(arr, pyMain);
+    // 价格折线（A 股：涨绿跌红，颜色加深；末根相对首根的方向决定颜色）
+    const isUp = bars[N - 1].close >= bars[0].close;
+    const priceColor = isUp ? "#10b981" : "#ef4444";
+    const fillColor  = isUp ? "rgba(16,185,129,0.32)" : "rgba(239,68,68,0.30)";
+    let pricePath = "";
+    for (let i = 0; i < N; i++) pricePath += (i === 0 ? "M" : "L") + px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
+    const areaPath = `M${px(0)},${pyMain(bars[0].close)} ` + bars.map((b, i) => `L${px(i)},${pyMain(b.close)}`).join(" ")
+                    + ` L${px(N - 1)},${regMain.bot} L${px(0)},${regMain.bot} Z`;
+
+    // ====== 横向虚线网格（主图：4 条）======
+    let gridLines = "";
+    for (let i = 0; i <= 3; i++) {
+      const y = regMain.top + (i / 3) * mainH;
+      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#1e293b" stroke-dasharray="2 4"/>`;
+    }
+
+    // ====== 量能 ======
+    const vols = bars.map(b => +b.volume || 0);
+    const maxV = Math.max.apply(null, vols);
+    const yVolBase = regVol.bot;
+    let volBars = "";
+    for (let i = 0; i < N; i++) {
+      const up = bars[i].close >= (bars[i].open != null ? bars[i].open : bars[i].close);
+      const col = up ? "#10b981" : "#ef4444";
+      const h = (vols[i] / (maxV || 1)) * (regVol.bot - regVol.top - 2);
+      const x = px(i) - (w / N) * 0.4;
+      const bw = Math.max(1, (w / N) * 0.8);
+      const y = yVolBase - h;
+      volBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.85"/>`;
+    }
+
+    // ====== KDJ（K=白, D=黄, J=紫）+ 80/20 水平虚线 ======
+    const kdjK = alignSeries(series.kdj_k || []);
+    const kdjD = alignSeries(series.kdj_d || []);
+    const kdjJ = alignSeries(series.kdj_j || []);
+    const kdjAll = [].concat(kdjK, kdjD, kdjJ).filter(v => v != null);
+    const kdjLo = kdjAll.length ? Math.min.apply(null, kdjAll) : 0;
+    const kdjHi = kdjAll.length ? Math.max.apply(null, kdjAll) : 100;
+    const kdjPad = Math.max(5, (kdjHi - kdjLo) * 0.1);
+    const pyKdj = (v) => pyV(v, regKdj, Math.min(kdjLo, 0) - kdjPad, Math.max(kdjHi, 100) + kdjPad);
+    const kdjRefLines = `
+      <line x1="${x0}" y1="${pyKdj(80)}" x2="${x0+w}" y2="${pyKdj(80)}" stroke="#334155" stroke-dasharray="1 2"/>
+      <line x1="${x0}" y1="${pyKdj(20)}" x2="${x0+w}" y2="${pyKdj(20)}" stroke="#334155" stroke-dasharray="1 2"/>
+    `;
     const kdjKLine = seriesPath(kdjK, pyKdj);
-    const kjdDLine = seriesPath(kdjD, pyKdj);
+    const kdjDLine = seriesPath(kdjD, pyKdj);
     const kdjJLine = seriesPath(kdjJ, pyKdj);
 
     // ====== MACD：红绿柱 + DIF/DEA 双线 ======
@@ -1782,72 +1781,65 @@ function renderAiAdvice(positions) {
     for (let i = 0; i < N; i++) {
       const v = macdHist[i];
       if (v == null) continue;
-      const col = v >= 0 ? "#ef4444" : "#10b981"; // 国内：红涨绿跌，柱正红柱负绿
-      const h = Math.abs(v) / (macdMaxAbs || 1) * ((regMacd.bot - regMacd.top) / 2 - 2);
+      const col = v >= 0 ? "#ef4444" : "#10b981"; // A 股：红涨绿跌，柱正红柱负绿
+      const h = Math.abs(v) / (macdMaxAbs || 1) * ((regMacd.bot - regMacd.top) / 2 - 1);
       const x = px(i) - (w / N) * 0.4;
       const bw = Math.max(1, (w / N) * 0.8);
       const y = v >= 0 ? (macdBaseY - h) : macdBaseY;
-      macdBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.7"/>`;
+      macdBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.75"/>
+    `;
     }
     const macdDifLine = seriesPath(macdDif, pyMacd);
     const macdDeaLine = seriesPath(macdDea, pyMacd);
 
-    // ====== 区域分隔线（横向条）======
+    // ====== 区域分隔线 =======
     const separators = `
       <line x1="${x0}" y1="${regMain.bot}" x2="${x0+w}" y2="${regMain.bot}" stroke="#1e293b" stroke-width="1"/>
       <line x1="${x0}" y1="${regVol.bot}"  x2="${x0+w}" y2="${regVol.bot}"  stroke="#1e293b" stroke-width="1"/>
       <line x1="${x0}" y1="${regKdj.bot}"  x2="${x0+w}" y2="${regKdj.bot}"  stroke="#1e293b" stroke-width="1"/>
     `;
 
-    // ====== Y 轴刻度（仅主图 + 各副图一条最大值/最小值标签）======
+    // ====== Y 轴刻度（左侧 4 个价格 + 右侧副图末值）======
     let yLabels = "";
+    // 主图：左侧 4 个价格
     for (let i = 0; i <= 3; i++) {
       const v = loMain + (hiMain - loMain) * (i / 3);
       const y = pyMain(v);
-      yLabels += `<text x="${x0+w-4}" y="${y+3}" text-anchor="end" fill="#94a3b8" font-size="10">${v.toFixed(2)}</text>`;
+      yLabels += `<text x="${x0-4}" y="${y+3}" text-anchor="end" fill="#94a3b8" font-size="9">${v.toFixed(2)}</text>`;
     }
-    // 量能最大值
-    yLabels += `<text x="${x0+w-4}" y="${regVol.top+11}" text-anchor="end" fill="#94a3b8" font-size="9">量/${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
-    // KDJ 右端标签（不画数字，只画 ABC 标识）
-    yLabels += `<text x="${x0+w-4}" y="${regKdj.top+12}" text-anchor="end" fill="#f1f5f9" font-size="9">K ${kdjK[0]!=null?kdjK[N-1].toFixed(0):'—'}</text>`;
-    yLabels += `<text x="${x0+w-4}" y="${regKdj.top+24}" text-anchor="end" fill="#fbbf24" font-size="9">D ${kdjD[0]!=null?kdjD[N-1].toFixed(0):'—'}</text>`;
-    yLabels += `<text x="${x0+w-4}" y="${regKdj.top+36}" text-anchor="end" fill="#a78bfa" font-size="9">J ${kdjJ[0]!=null?kdjJ[N-1].toFixed(0):'—'}</text>`;
-    // MACD 右端 DIF/DEA
-    yLabels += `<text x="${x0+w-4}" y="${regMacd.top+12}" text-anchor="end" fill="#60a5fa" font-size="9">DIF ${macdDif[N-1]!=null?macdDif[N-1].toFixed(2):'—'}</text>`;
-    yLabels += `<text x="${x0+w-4}" y="${regMacd.top+24}" text-anchor="end" fill="#fb923c" font-size="9">DEA ${macdDea[N-1]!=null?macdDea[N-1].toFixed(2):'—'}</text>`;
-
-    // ====== 左侧区段名称 ======
-    const regionLabels = `
-      <text x="3" y="${regMain.top + 12}" fill="#64748b" font-size="9">价</text>
-      <text x="3" y="${regVol.top  + 12}" fill="#64748b" font-size="9">量</text>
-      <text x="3" y="${regKdj.top  + 12}" fill="#64748b" font-size="9">KDJ</text>
-      <text x="3" y="${regMacd.top + 12}" fill="#64748b" font-size="9">MACD</text>
-    `;
+    // 量能最大值（左侧）
+    yLabels += `<text x="${x0-4}" y="${regVol.top+9}" text-anchor="end" fill="#94a3b8" font-size="8">量 ${maxV ? (maxV/1e4).toFixed(0)+'万' : '—'}</text>`;
+    // KDJ 标签（左）
+    yLabels += `<text x="${x0-4}" y="${regKdj.top+10}" text-anchor="end" fill="#94a3b8" font-size="8">K</text>`;
+    yLabels += `<text x="${x0+w-2}" y="${regKdj.top+10}" text-anchor="end" fill="#f1f5f9" font-size="9">${kdjK[0]!=null?kdjK[N-1].toFixed(0):'—'}</text>`;
+    // MACD 标签
+    yLabels += `<text x="${x0-4}" y="${regMacd.top+10}" text-anchor="end" fill="#94a3b8" font-size="8">M</text>`;
+    yLabels += `<text x="${x0+w-2}" y="${regMacd.top+10}" text-anchor="end" fill="#60a5fa" font-size="9">${macdDif[N-1]!=null?macdDif[N-1].toFixed(2):'—'}</text>`;
 
     // ====== X 轴日期（首末）======
-    const xLabels = `<text x="${x0}" y="${H-3}" fill="#64748b" font-size="10">${bars[0].date || ""}</text>` +
-                    `<text x="${x0+w}" y="${H-3}" text-anchor="end" fill="#64748b" font-size="10">${bars[N-1].date || ""}</text>`;
+    const xLabels = `<text x="${x0}" y="${H-3}" fill="#64748b" font-size="9">${bars[0].date || ""}</text>` +
+                    `<text x="${x0+w}" y="${H-3}" text-anchor="end" fill="#64748b" font-size="9">${bars[N-1].date || ""}</text>`;
 
     // ====== 十字光标线（空白态隐藏，鼠标移动时定位）======
     const crosshair = `<line id="tpChartCross" x1="0" y1="0" x2="0" y2="0" stroke="#475569" stroke-dasharray="2 3" style="display:none"/>`;
 
     svg.innerHTML = `
       ${separators}
-      ${regionLabels}
+      ${gridLines}
       <path d="${areaPath}" fill="${fillColor}"/>
-      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="1.4"/>
-      <path d="${toPath(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.1"/>
-      <path d="${toPath(aMa10)}" fill="none" stroke="#60a5fa" stroke-width="1.1"/>
-      <path d="${toPath(aMa20)}" fill="none" stroke="#a78bfa" stroke-width="1.1"/>
+      <path d="${pricePath}" fill="none" stroke="${priceColor}" stroke-width="1.6"/>
+      <path d="${toPathMain(aMa5)}"  fill="none" stroke="#fbbf24" stroke-width="1.5"/>
+      <path d="${toPathMain(aMa10)}" fill="none" stroke="#60a5fa" stroke-width="1.2"/>
+      <path d="${toPathMain(aMa20)}" fill="none" stroke="#a78bfa" stroke-width="1.2"/>
       ${volBars}
       ${kdjRefLines}
-      <path d="${kdjKLine}" fill="none" stroke="#f1f5f9" stroke-width="1.1"/>
-      <path d="${kjdDLine}" fill="none" stroke="#fbbf24" stroke-width="1.1"/>
-      <path d="${kdjJLine}" fill="none" stroke="#a78bfa" stroke-width="1.1"/>
-      <line x1="${x0}" y1="${macdBaseY}" x2="${x0+w}" y2="${macdBaseY}" stroke="#475569" stroke-dasharray="2 3"/>
+      <path d="${kdjKLine}" fill="none" stroke="#f1f5f9" stroke-width="1.0"/>
+      <path d="${kdjDLine}" fill="none" stroke="#fbbf24" stroke-width="1.0"/>
+      <path d="${kdjJLine}" fill="none" stroke="#a78bfa" stroke-width="1.0"/>
+      <line x1="${x0}" y1="${macdBaseY}" x2="${x0+w}" y2="${macdBaseY}" stroke="#334155" stroke-dasharray="1 2"/>
       ${macdBars}
-      <path d="${macdDifLine}" fill="none" stroke="#60a5fa" stroke-width="1.1"/>
-      <path d="${macdDeaLine}" fill="none" stroke="#fb923c" stroke-width="1.1"/>
+      <path d="${macdDifLine}" fill="none" stroke="#60a5fa" stroke-width="1.0"/>
+      <path d="${macdDeaLine}" fill="none" stroke="#fb923c" stroke-width="1.0"/>
       ${yLabels}
       ${xLabels}
       ${crosshair}
@@ -1859,12 +1851,10 @@ function renderAiAdvice(positions) {
       svg.addEventListener("mousemove", (ev) => {
         const rect = svg.getBoundingClientRect();
         const xRel = (ev.clientX - rect.left) / rect.width;
-        // viewBox 0 0 600 → 我们计算 px 对应的 idx
         const pxSvg = xRel * W;
         const idx = Math.round((pxSvg - PAD_L) / (W - PAD_L - PAD_R) * (N - 1));
         if (idx < 0 || idx >= N) { hideTip(); return; }
         const b = bars[idx];
-        // 十字光标
         const cross = svg.querySelector("#tpChartCross");
         if (cross) {
           cross.setAttribute("x1", pxSvg); cross.setAttribute("x2", pxSvg);
@@ -2811,11 +2801,8 @@ function renderAiAdvice(positions) {
       try { renderScanView(); } catch (e) { console.warn('[wb] scan render:', e && e.message); }
       try { renderTailBuy(); } catch (e) { console.warn('[wb] tailbuy render:', e && e.message); }
     } else if (name === 'backtest') {
-      // 策略回测视图：若有当前股票直接跑回测
-      try {
-        const btn = document.getElementById('tpBacktestBtn');
-        if (btn && __tpCurrent.code) _loadBacktest();
-      } catch (e) { console.warn('[wb] backtest view:', e && e.message); }
+      // r36：策略回测视图改为「每日复盘」：自动加载历史记录 + 今日预测 + 累计正确率
+      try { renderReview(); } catch (e) { console.warn('[wb] review render:', e && e.message); }
     } else if (name === 'account') {
       try {
         if (state.posAdvice && state.posAdvice.length) renderPosTable(state.posAdvice);

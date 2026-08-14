@@ -8,11 +8,11 @@
   <meta http-equiv="Expires" content="0">
   <title>婷婷量化AI · 超短线交易工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E📈%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/css/styles.css?v=r34-restyle">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r36-review">
 </head>
 <body class="theme-dark">
   <div id="errToast" style="display:none;position:fixed;left:0;top:0;right:0;z-index:999999;background:#7a1f1f;color:#fff;font:13px/1.5 monospace;padding:8px 14px;border-bottom:2px solid #ff5252;max-height:35vh;overflow:auto;white-space:pre-wrap;word-break:break-all;"></div>
-  <script>window.__WB_VERSION__='r35-2col-chart';console.log('%c[wb] HTML r35-2col-chart loaded','color:#3b82f6;font-weight:bold');</script>
+  <script>window.__WB_VERSION__='r36-review';console.log('%c[wb] HTML r36-review loaded','color:#3b82f6;font-weight:bold');</script>
 
   <div class="app-shell">
     <!-- ===== 左侧可收起导航 ===== -->
@@ -31,7 +31,7 @@
         </ul>
       </nav>
       <div class="sb-foot">
-        <span class="badge" id="buildTag">v2026-08-14-r35</span>
+        <span class="badge" id="buildTag">v2026-08-14-r36</span>
       </div>
     </aside>
 
@@ -91,7 +91,7 @@
                   </div>
                 </div>
                 <div class="tp-chart-wrap">
-                  <svg id="tpChart" class="tp-chart" viewBox="0 0 600 460" preserveAspectRatio="none"></svg>
+                  <svg id="tpChart" class="tp-chart" viewBox="0 0 600 230" preserveAspectRatio="none"></svg>
                   <div class="tp-chart-tooltip" id="tpChartTip" style="display:none"></div>
                 </div>
                 <div class="tp-indicators" id="tpIndicators">
@@ -159,7 +159,7 @@
                 <div class="tp-strategy-head">
                   <span class="tp-strategy-title">短线策略模式</span>
                   <div class="tp-strategy-tabs">
-                    <button type="button" class="tp-stab" data-mode="overnight">🌙 隔夜抢仓</button>
+                    <button type="button" class="tp-stab active" data-mode="overnight">🌙 隔夜抢仓</button>
                     <button type="button" class="tp-stab" data-mode="intraday">🔵 日内做T</button>
                   </div>
                 </div>
@@ -185,11 +185,10 @@
             <div class="col col-right">
               <div class="panel g-account">
                 <div class="panel-title"><span>💰 账户总览 + 持仓</span></div>
-                <div class="kpi4">
+                <div class="kpi4 kpi3">
                   <div class="kpi4-card"><div class="k4-label">总资产</div><div class="k4-val" id="k5Asset">--</div><div class="k4-sub" id="k5AssetSub">--</div></div>
                   <div class="kpi4-card"><div class="k4-label">可用资金</div><div class="k4-val" id="k5Cash">--</div><div class="k4-sub" id="k5CashSub">--</div></div>
                   <div class="kpi4-card"><div class="k4-label">当日盈亏</div><div class="k4-val" id="k5Chg">--</div><div class="k4-sub" id="k5ChgSub">--</div></div>
-                  <div class="kpi4-card"><div class="k4-label">总盈亏</div><div class="k4-val" id="k5Total">--</div><div class="k4-sub" id="k5TotalSub">--</div></div>
                 </div>
                 <div class="pos-table-wrap">
                   <table class="hm-table"><thead><tr>
@@ -251,13 +250,53 @@
           </div>
         </section>
 
-        <!-- ================= 视图3：策略回测 ================= -->
+        <!-- ================= 视图3：每日复盘 ================= -->
         <section class="view view-backtest" data-view="backtest" hidden>
-          <div class="panel">
-            <div class="panel-title"><span>📈 策略历史回测</span><span class="panel-extra"><button type="button" class="tp-bt-btn" id="tpBacktestBtn">运行回测</button></span></div>
-            <div class="tp-backtest-body" id="tpBacktestBody">
-              <div class="tp-strategy-hint">在左侧「盯盘仪表盘」选一只股票，点「运行回测」用历史数据验证两套策略的胜率 / 盈亏比 / 最大回撤（仅供参考）</div>
+          <!-- 顶部累计统计 -->
+          <div class="panel rv-panel">
+            <div class="panel-title"><span>📈 每日复盘 · 建议正确性追踪</span><span class="panel-extra">自动核对模型建议 vs 实际涨跌</span></div>
+            <div class="rv-kpi4">
+              <div class="rv-card"><div class="rv-lbl">累计天数</div><div class="rv-val" id="rvTotalDays">--</div><div class="rv-sub">自模型启用</div></div>
+              <div class="rv-card"><div class="rv-lbl">方向正确率</div><div class="rv-val" id="rvDirAcc">--</div><div class="rv-sub">涨/跌方向命中</div></div>
+              <div class="rv-card"><div class="rv-lbl">幅度 MAE</div><div class="rv-val" id="rvPctErr">--</div><div class="rv-sub">幅度误差越小越准</div></div>
+              <div class="rv-card"><div class="rv-lbl">最高价准确率</div><div class="rv-val" id="rvHiAcc">--</div><div class="rv-sub">预测高点命中</div></div>
+              <div class="rv-card"><div class="rv-lbl">最低价准确率</div><div class="rv-val" id="rvLoAcc">--</div><div class="rv-sub">预测低点命中</div></div>
             </div>
+            <div class="rv-actions">
+              <button type="button" class="tp-btn-primary" id="rvPredictBtn">立即生成今日预测</button>
+              <button type="button" class="tp-btn-ghost" id="rvCheckBtn">核对今日实际</button>
+              <span class="rv-meta" id="todayPredMeta">加载中…</span>
+            </div>
+          </div>
+
+          <!-- 今日预测表 -->
+          <div class="panel rv-panel">
+            <div class="panel-title"><span>🎯 今日预测 · 预测值 vs 实际值</span><span class="panel-extra">收盘后请点「核对今日实际」</span></div>
+            <div class="pos-table-wrap">
+              <table class="rv-table">
+                <thead><tr>
+                  <th>股票</th>
+                  <th class="r">开盘预</th>
+                  <th class="r">最高预</th>
+                  <th class="r">最低预</th>
+                  <th class="r">收盘预</th>
+                  <th class="r">幅度预</th>
+                  <th class="r">实际开</th>
+                  <th class="r">实际高</th>
+                  <th class="r">实际低</th>
+                  <th class="r">实际收</th>
+                  <th class="r">实际幅%</th>
+                  <th>方向</th><th>幅度</th><th>高</th><th>低</th>
+                </tr></thead>
+                <tbody id="todayPredBody"><tr><td colspan="15" class="empty-cell">加载今日预测中…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 历史记录 -->
+          <div class="panel rv-panel">
+            <div class="panel-title"><span>📅 历史复盘记录（每日按日期展开）</span></div>
+            <div id="reviewHistoryList" class="dash-monitor-list"><div class="dash-monitor-empty">加载历史记录中…</div></div>
           </div>
         </section>
 
@@ -308,6 +347,6 @@
   <div class="reminder-bar" id="reminderBar" style="display:none"></div>
 
   <div id="toast" class="toast"></div>
-  <script src="/static/js/app.js?v=r35-2col-chart"></script>
+  <script src="/static/js/app.js?v=r36-review"></script>
 </body>
 </html>
