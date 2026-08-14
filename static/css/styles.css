@@ -1468,3 +1468,258 @@ body.theme-dark { background: var(--bg); }
 .theme-dark ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
 .theme-dark ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
 
+
+/* ========== r27: 全量深色覆盖（消除残余白底）+ 新模块样式 ========== */
+
+/* 通用：.panel-account 在 v3.1 不再使用但兜底 */
+  .panel-account { background: var(--panel) !important; border-color: var(--line) !important; }
+  .akpi { background: #1a1a1a !important; border-color: var(--line) !important; }
+  .akpi-val { color: #fff !important; }
+  .akpi-label, .akpi-sub { color: var(--muted) !important; }
+
+/* .ss-row 仍是白底（datalist 等场景）— 强制深色覆盖 */
+  .ss-row { background: #161616 !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  .ss-row:hover { background: #1f1f1f !important; }
+  .ss-row.ss-strong { background: #2a1f0a !important; border-color: #876200 !important; }
+  .ss-row .ss-name b { color: #fff !important; }
+  .ss-row .ss-name i { color: var(--muted) !important; }
+  .ss-row .ss-add { background: #1a1a1a; color: #e74c3c; border: 1px solid #e74c3c; }
+  .ss-row .ss-add:hover { background: #2a1a1a; }
+  .ss-row .ss-del { background: #1a1a1a; color: var(--muted); }
+  .ss-row .ss-del:hover { color: #e74c3c; }
+  .ss-row .ss-added { background: #1a1a1a; color: #2ecc71; border: 1px solid #2ecc71; }
+
+/* .hb-card 持仓看板卡（原 r23 仍有 #fff） */
+  .hb-card { background: #1a1a1a !important; border-color: var(--line) !important; }
+  .hb-card .hb-name { color: #fff !important; }
+  .hb-card .hb-code { color: var(--muted) !important; }
+  .hb-card .hb-px b { color: #fff !important; }
+  .hb-bar-track { background: #2a2a2a; }
+  .hb-bar-track i { background: linear-gradient(90deg, #e74c3c, #f59e0b); }
+  .hb-lv { background: #161616; border-color: var(--line); }
+  .hb-lv span { color: var(--muted); }
+  .hb-lv b { color: #fff; }
+
+/* .scan-row 信号扫描行（仍白） */
+  .scan-row { background: #1a1a1a !important; border-bottom: 1px solid var(--line) !important; color: var(--ink) !important; }
+  .scan-row:hover { background: #222 !important; }
+  .scan-row.sr-name { color: #fff !important; }
+  .scan-row .sr-name { color: #fff !important; }
+  .scan-row .sr-track { background: #2a2a2a; color: var(--ink); }
+  .scan-header { background: #161616 !important; color: var(--muted) !important; border-bottom: 1px solid var(--line); }
+  .scan-col.buy { background: #1a1a1a; border-color: #5a1f1f; }
+  .scan-col.sell { background: #1a1a1a; border-color: #1f5a3a; }
+  .scan-col-title { color: #fff; }
+  .scan-col.buy .scan-col-title { color: #e74c3c; }
+  .scan-col.sell .scan-col-title { color: #2ecc71; }
+
+/* .ai-table 表格行覆盖 */
+  .ai-table tbody td { background: #1a1a1a !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  .ai-table tbody tr.ai-row-flat td,
+  .ai-table tbody tr.ai-row-buy td,
+  .ai-table tbody tr.ai-row-sell td,
+  .ai-table tbody tr.ai-row-hold td { background: #1a1a1a !important; }
+  .ai-table tbody tr.ai-row-buy td { border-left: 5px solid #2ecc71; }
+  .ai-table tbody tr.ai-row-sell td { border-left: 5px solid #e74c3c; }
+  .ai-table tbody tr.ai-row-hold td { border-left: 5px solid #f59e0b; }
+  .ai-table thead th { background: #161616 !important; color: var(--muted) !important; border-color: var(--line) !important; }
+  .ai-c-name .name-line b { color: #fff !important; }
+  .ai-c-name .price-line .ss-px b { color: #fff !important; }
+  .ai-table tbody tr.ai-row-buy td.ai-c-score { color: #2ecc71; }
+  .ai-table tbody tr.ai-row-sell td.ai-c-score { color: #e74c3c; }
+  .ai-table tbody tr.ai-row-hold td.ai-c-score { color: #f59e0b; }
+  .ai-table .ai-c-fc .fc-band { background: #222 !important; color: var(--ink) !important; }
+  .ai-c-tech .tech-state { background: #222 !important; color: var(--ink) !important; }
+  .ai-c-tech .tech-state.gold { background: #2a1f0a !important; color: #f59e0b !important; }
+  .ai-c-tech .tech-state.zero-up { background: #1a3a1f !important; color: #2ecc71 !important; }
+  .ai-c-tech .tech-state.zero-down { background: #3a1f1f !important; color: #e74c3c !important; }
+  .ai-c-tech .tech-state.ob { background: #3a1f1f !important; color: #e74c3c !important; }
+  .ai-c-tech .tech-state.os { background: #1a3a1f !important; color: #2ecc71 !important; }
+
+/* .ai-card 整卡 */
+  .ai-card { background: #1a1a1a !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  .ai-card.ai-hold { background: linear-gradient(135deg, #2a1f0a, #1f1a14) !important; border-color: #876200 !important; }
+  .ai-card.ai-buy  { background: linear-gradient(135deg, #1a3a1f, #14241a) !important; border-color: #2b8a3e !important; }
+  .ai-card.ai-sell { background: linear-gradient(135deg, #3a1f1f, #241418) !important; border-color: #c92a2a !important; }
+  .ai-card-name { color: #fff !important; }
+  .ai-info-row .ai-info-v b, .ai-info-row .ai-info-v { color: #fff !important; }
+  .ai-card-op .op-row { background: #161616 !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  .ai-card-op .op-row.op-on { background: #2a1f0a !important; border-color: #f59e0b !important; }
+  .ai-card-op .op-price { color: #fff !important; }
+  .ai-card-op .op-band { background: #2a1f0a !important; color: #f59e0b !important; border-left-color: #f59e0b !important; }
+  .ai-score-badge { background: #222 !important; color: var(--ink) !important; }
+  .ai-action-pill.ai-buy { background: #1a3a1f !important; color: #2ecc71 !important; }
+  .ai-action-pill.ai-sell { background: #3a1f1f !important; color: #e74c3c !important; }
+  .ai-action-pill.ai-hold { background: #2a1f0a !important; color: #f59e0b !important; }
+
+/* 全球搜索结果（白底） */
+  .gsr-v3, .gsr-row { background: #1a1a1a !important; color: var(--ink) !important; border-color: var(--line) !important; }
+  .gsr-row:hover { background: #222 !important; }
+  .gsr-row .gsr-meta { color: var(--muted) !important; }
+
+/* pos-table-v3 行底色（仍是浅红/浅绿） */
+  .pos-table-v3 tr.pos-row-up { background: linear-gradient(90deg, rgba(231,76,60,0.18), rgba(231,76,60,0.06)) !important; }
+  .pos-table-v3 tr.pos-row-down { background: linear-gradient(90deg, rgba(46,204,113,0.18), rgba(46,204,113,0.06)) !important; }
+  .pos-table-v3 tr.pos-row-flat { background: #1a1a1a !important; }
+  .pos-table-v3 tbody tr:hover { background: #222 !important; }
+  .pos-table-v3 .pi-track { color: #74c0fc !important; }
+  .pos-table-v3 .pi-fund.up { color: #e74c3c !important; }
+  .pos-table-v3 .pi-fund.down { color: #2ecc71 !important; }
+  .pos-table-v3 .code-mini { color: var(--muted) !important; }
+  .pos-table-v3 .chg-mini.up { color: #e74c3c !important; }
+  .pos-table-v3 .chg-mini.down { color: #2ecc71 !important; }
+
+/* .daily-open / daily-snap 内表格 */
+  .daily-open { background: #141414 !important; border-color: var(--line) !important; color: var(--ink) !important; }
+  .ds-table th, .ds-table td { color: var(--ink) !important; background: #161616 !important; border-color: var(--line) !important; }
+  .ds-table thead th { color: var(--muted) !important; background: #1a1a1a !important; }
+
+/* ========== r27 新模块：左侧拆两块 持仓监控 + 自选监控 ========== */
+  .dash-left { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+  .dash-right { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .panel-holdings-monitor, .panel-self-monitor { flex: 1 1 auto; min-height: 280px; }
+  .panel-holdings-monitor { border-left: 3px solid #e74c3c; }
+  .panel-self-monitor { border-left: 3px solid #f59e0b; }
+  .dash-monitor-list { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; padding-right: 2px; }
+  .dm-row {
+    display: grid; grid-template-columns: 50px 1fr 70px 70px 56px 70px; gap: 6px; align-items: center;
+    background: #1a1a1a; border: 1px solid var(--line); border-left: 3px solid #868e96; border-radius: 6px;
+    padding: 6px 10px; cursor: pointer; font-size: 12px; color: var(--ink);
+    transition: background .15s;
+  }
+  .dm-row:hover { background: #222; }
+  .dm-row.dm-buy  { border-left-color: #2ecc71; }
+  .dm-row.dm-sell { border-left-color: #e74c3c; }
+  .dm-row.dm-hold { border-left-color: #f59e0b; }
+  .dm-row .dm-act {
+    font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; color: #fff; text-align: center;
+  }
+  .dm-row .dm-act.act-buy  { background: #1a3a1f; color: #2ecc71; }
+  .dm-row .dm-act.act-sell { background: #3a1f1f; color: #e74c3c; }
+  .dm-row .dm-act.act-hold { background: #2a1f0a; color: #f59e0b; }
+  .dm-row .dm-name { color: #fff; font-weight: 600; font-size: 12.5px; }
+  .dm-row .dm-code { color: var(--muted); font-size: 10px; font-family: monospace; margin-left: 4px; }
+  .dm-row .dm-px { color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+  .dm-row .dm-chg { font-variant-numeric: tabular-nums; text-align: right; font-size: 11px; }
+  .dm-row .dm-chg.up { color: #e74c3c; }
+  .dm-row .dm-chg.down { color: #2ecc71; }
+  .dm-row .dm-score { font-size: 11px; text-align: center; padding: 2px 4px; border-radius: 4px; background: #161616; color: #fff; font-weight: 700; }
+  .dm-row .dm-track { font-size: 10px; color: var(--muted); text-align: center; }
+  .dash-monitor-empty { padding: 30px 10px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ========== r27 新模块：尾盘买入法 ========== */
+  .panel-tailbuy { border-left: 3px solid #7c3aed; }
+  .tailbuy-rules {
+    background: #161616; border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 14px; font-size: 12px; color: var(--ink); margin-bottom: 10px; line-height: 1.8;
+  }
+  .tailbuy-rules b { color: #7c3aed; margin-right: 6px; }
+  .tailbuy-rules .rule { color: var(--ink); margin: 0 2px; }
+  .tailbuy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .tailbuy-col {
+    background: #161616; border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+  }
+  .tailbuy-col-title { color: #fff; font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .tailbuy-col-title .cnt {
+    font-size: 11px; background: #2a2a2a; color: var(--muted); padding: 1px 8px; border-radius: 10px;
+  }
+  .tailbuy-list { display: flex; flex-direction: column; gap: 6px; max-height: 520px; overflow-y: auto; }
+  .tailbuy-list.tailbuy-pool { max-height: 320px; }
+  .tailbuy-card {
+    background: #1a1a1a; border: 1px solid var(--line); border-left: 4px solid #7c3aed;
+    border-radius: 6px; padding: 8px 12px;
+  }
+  .tailbuy-card.tb-pick {
+    background: linear-gradient(135deg, #1a1f2e 0%, #161616 100%); border-left-color: #7c3aed;
+    box-shadow: 0 0 0 1px rgba(124,58,237,0.25);
+  }
+  .tailbuy-card .tb-top {
+    display: grid; grid-template-columns: 1fr 90px 90px 70px; gap: 8px; align-items: center;
+  }
+  .tailbuy-card .tb-name { color: #fff; font-weight: 700; font-size: 13px; }
+  .tailbuy-card .tb-code { color: var(--muted); font-size: 10px; margin-left: 4px; font-family: monospace; }
+  .tailbuy-card .tb-px { color: #fff; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; text-align: right; }
+  .tailbuy-card .tb-chg { font-variant-numeric: tabular-nums; text-align: right; font-size: 11px; }
+  .tailbuy-card .tb-chg.up { color: #e74c3c; }
+  .tailbuy-card .tb-chg.down { color: #2ecc71; }
+  .tailbuy-card .tb-score {
+    text-align: center; font-size: 14px; font-weight: 800; color: #fff;
+    padding: 4px 0; background: #161616; border-radius: 4px;
+  }
+  .tailbuy-card .tb-mid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; font-size: 11px;
+  }
+  .tailbuy-card .tb-mid-cell { background: #161616; padding: 4px 6px; border-radius: 4px; text-align: center; }
+  .tailbuy-card .tb-mid-cell b { display: block; color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tailbuy-card .tb-mid-cell span { color: var(--muted); font-size: 10px; }
+  .tailbuy-card .tb-rules-hit {
+    margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px;
+  }
+  .tailbuy-card .tb-rule-tag {
+    font-size: 10px; padding: 1px 6px; border-radius: 8px;
+    background: #1a3a1f; color: #2ecc71; border: 1px solid #2ecc71;
+  }
+  .tailbuy-card .tb-rule-tag.no {
+    background: #2a2a2a; color: var(--muted); border: 1px solid var(--line);
+  }
+  .tailbuy-empty { padding: 20px 10px; text-align: center; color: var(--muted); font-size: 12px; }
+  .tailbuy-stop {
+    background: #1a1f2e; border: 1px solid #2a3a4a; border-radius: 6px;
+    padding: 8px 12px; font-size: 11.5px; color: var(--ink); margin-top: 4px; line-height: 1.7;
+  }
+  .tailbuy-stop b { color: #f59e0b; margin: 0 4px; }
+  .btn-tiny { padding: 2px 8px !important; font-size: 11px !important; }
+
+/* ========== r27 新模块：复盘视图 ========== */
+  .review-stats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px;
+  }
+  .rs-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; box-shadow: var(--shadow); text-align: center;
+  }
+  .rs-label { color: var(--muted); font-size: 12px; }
+  .rs-val { font-size: 24px; font-weight: 800; color: #fff; margin: 6px 0 2px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .rs-val.up { color: #2ecc71; }
+  .rs-val.down { color: #e74c3c; }
+  .rs-sub { color: var(--muted); font-size: 11px; }
+  .panel-today-pred { border-left: 3px solid #3b82f6; }
+  .today-pred-meta {
+    font-size: 11.5px; color: var(--muted); margin-bottom: 10px; padding: 6px 10px;
+    background: #161616; border-radius: 4px; border: 1px solid var(--line);
+  }
+  .today-pred-meta b { color: #fff; }
+  .today-pred-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .today-pred-table th, .today-pred-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--ink); text-align: center; }
+  .today-pred-table th { background: #161616; color: var(--muted); font-weight: 400; font-size: 11px; }
+  .today-pred-table td.r, .today-pred-table th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .today-pred-table .empty-cell { padding: 20px; color: var(--muted); }
+  .tp-row-pos td.name b { color: #fff; }
+  .tp-row-pos td.code { color: var(--muted); font-family: monospace; font-size: 10.5px; }
+  .tp-dir-h { background: rgba(46,204,113,0.18); color: #2ecc71; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+  .tp-dir-w { background: rgba(231,76,60,0.18); color: #e74c3c; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+  .tp-dir-x { background: #2a2a2a; color: var(--muted); padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+  .tp-acc-ok { color: #2ecc71; font-weight: 700; }
+  .tp-acc-no { color: #e74c3c; font-weight: 700; }
+  .tp-acc-mid { color: #f59e0b; font-weight: 700; }
+  .panel-history-pred { border-left: 3px solid #7c3aed; }
+  .review-history-list { display: flex; flex-direction: column; gap: 8px; }
+  .rh-day {
+    background: #161616; border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 14px; font-size: 12px;
+  }
+  .rh-day-head {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+    color: #fff; font-weight: 700;
+  }
+  .rh-day-stats { color: var(--muted); font-size: 11px; }
+  .rh-day-stats b { color: #fff; }
+  .rh-day-stats .ok { color: #2ecc71; }
+  .rh-day-stats .no { color: #e74c3c; }
+  .rh-day-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11px; }
+  .rh-day-table th, .rh-day-table td { padding: 4px 6px; border-bottom: 1px dashed var(--line); color: var(--ink); }
+  .rh-day-table th { color: var(--muted); font-weight: 400; }
+
+/* 一些零碎清理 */
+  .signal-empty { color: var(--muted); padding: 20px; text-align: center; font-size: 12px; }
+

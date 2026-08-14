@@ -15,6 +15,7 @@ import urllib.request
 import urllib.parse
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 SINA_KLINE = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
 SCALE_MAP = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60, "daily": 240, "weekly": 1200}
@@ -464,6 +465,72 @@ def fetch_realtime(codes):
                 results[c] = cache[c]
     # 写回缓存，供下次/海外兜底
     _save_quote_cache(results)
+    return results
+
+
+def _fetch_eastmoney_ulist(codes):
+    """东方财富批量 ulist 接口：一次请求多只，返回富字段（含 量比 f10、主力净流入 f62）。
+    用于尾盘买入法扫描 / 复盘预测，避免逐只请求。f62 单位为元，转成"亿"。"""
+    results = {}
+    for chunk in _chunk(codes, 80):
+        secids = []
+        for c in chunk:
+            market = "1" if c.lower().startswith("sh") else "0"
+            num = c[2:]
+            secids.append(f"{market}.{num}")
+        secid_str = ",".join(secids)
+        url = ("https://push2.eastmoney.com/api/qt/ulist.np/get"
+               f"?fltt=2&invt=2&fields=f12,f13,f14,f2,f3,f15,f16,f17,f18,f8,f10,f62"
+               f"&secids={secid_str}&_={int(time.time()*1000)}")
+        try:
+            raw = _http_get(url, referer="https://quote.eastmoney.com/", timeout=8)
+            d = (json.loads(raw) or {}).get("data") or {}
+            diff = d.get("diff") or []
+            for it in diff:
+                num = it.get("f12") or ""
+                mkt = it.get("f13")
+                if not num:
+                    continue
+                code = ("sh" if mkt == 1 else "sz") + num
+                f2 = it.get("f2")
+                if f2 in (None, "-", ""):
+                    continue
+                price = _to_float(f2)
+                prev = _to_float(it.get("f18"))
+                if price is None or prev is None:
+                    continue
+                results[code] = {
+                    "code": code,
+                    "name": it.get("f14") or code,
+                    "price": price,
+                    "prev_close": prev,
+                    "open": _to_float(it.get("f17")),
+                    "high": _to_float(it.get("f15")),
+                    "low": _to_float(it.get("f16")),
+                    "change_pct": _to_float(it.get("f3")),
+                    "turnover": _to_float(it.get("f8")),
+                    "vol_ratio": _to_float(it.get("f10")),
+                    "main_fund_net": round((_to_float(it.get("f62")) or 0) / 1e8, 4),  # 元→亿
+                    "time": "",
+                }
+        except Exception:
+            continue
+    return results
+
+
+def fetch_realtime_extra(codes, fallback=True):
+    """富实时行情：东方财富 ulist 批量（含 量比/主力净流入），
+    缺失的回退 fetch_realtime 基础字段（保证不空白）。"""
+    if not codes:
+        return {}
+    codes = list(dict.fromkeys(codes))
+    results = _fetch_eastmoney_ulist(codes)
+    if fallback and len(results) < len(codes):
+        missing = [c for c in codes if c not in results]
+        try:
+            results.update(fetch_realtime(missing))
+        except Exception:
+            pass
     return results
 
 

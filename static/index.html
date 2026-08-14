@@ -9,22 +9,22 @@
   <meta http-equiv="Expires" content="0">
   <title>婷婷量化AI · 金融K线AI工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E📈%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/css/styles.css?v=r26-stub">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r27-darkbuy">
 </head>
 <body class="theme-dark">
   <!-- 启动期错误条：IIFE 或 init 抛错时实时显示在页面顶部，不用开 F12 -->
   <div id="errToast" style="display:none;position:fixed;left:0;top:0;right:0;z-index:999999;background:#7a1f1f;color:#fff;font:13px/1.5 monospace;padding:8px 14px;border-bottom:2px solid #ff5252;max-height:35vh;overflow:auto;white-space:pre-wrap;word-break:break-all;"></div>
-  <!-- 版本自检标记：王总刷新时控制台第一行就能看到当前是哪个版本（必须是 r26） -->
-  <script>window.__WB_VERSION__='r26-stub';console.log('%c[wb] HTML r26-stub loaded','color:#3b82f6;font-weight:bold');</script>
+  <!-- 版本自检标记：王总刷新时控制台第一行就能看到当前是哪个版本（必须是 r27） -->
+  <script>window.__WB_VERSION__='r27-darkbuy';console.log('%c[wb] HTML r27-darkbuy loaded','color:#3b82f6;font-weight:bold');</script>
   <!-- 顶部品牌条 -->
   <header class="topbar-v3">
     <div class="brand-v3">
       <span class="logo-v3">📈</span>
       <span>婷婷量化AI · 金融K线AI工作台</span>
-      <span class="brand-tag">v2026-08-13-r26-stub</span>
+      <span class="brand-tag">v2026-08-14-r27-darkbuy</span>
     </div>
     <div class="topbar-meta-v3">
-      <span class="badge" id="buildTag">v2026-08-13-r26-stub</span>
+      <span class="badge" id="buildTag">v2026-08-14-r27-darkbuy</span>
       <span class="badge" id="marketBadge">A股 · 沪深</span>
       <span class="badge" id="tdxStatus">数据源：检测中…</span>
       <span class="badge clock" id="clock">--:--:--</span>
@@ -46,6 +46,7 @@
       <ul class="sb-nav-v3" id="sbNav">
         <li data-view="dashboard" class="active"><span>📊 行情看板</span><span class="dot-red"></span></li>
         <li data-view="scan"><span>📡 信号扫描</span></li>
+        <li data-view="review"><span>🔁 复盘</span></li>
         <li data-view="positions"><span>💼 持仓与仓位</span></li>
         <li data-view="settings"><span>⚙ 设置</span></li>
       </ul>
@@ -63,16 +64,23 @@
         <div class="kpi5-card"><div class="k5-label">信号</div><div class="k5-val" id="k5Signal">5个</div><div class="k5-sub" id="k5SignalSub">行情提醒</div></div>
       </div>
 
-      <!-- 视图 1：行情看板 -->
+      <!-- 视图 1：行情看板（左侧拆两块：上=持仓监控 / 下=自选监控） -->
       <section class="view view-dashboard" data-view="dashboard">
         <div class="view-grid-2">
           <div class="dash-left">
-            <div class="panel-v3">
+            <div class="panel-v3 panel-holdings-monitor">
               <div class="panel-title-v3">
-                <span>📋 自选股票实时追踪</span>
-                <span class="panel-extra">实时</span>
+                <span>💼 持仓股实时监控</span>
+                <span class="panel-extra" id="holdingsMonitorCount">0 只</span>
               </div>
-              <div id="selfStocks"></div>
+              <div id="holdingsMonitor" class="dash-monitor-list"></div>
+            </div>
+            <div class="panel-v3 panel-self-monitor">
+              <div class="panel-title-v3">
+                <span>⭐ 自选股实时监控</span>
+                <span class="panel-extra" id="selfMonitorCount">信号扫描前 10</span>
+              </div>
+              <div id="selfMonitor" class="dash-monitor-list"></div>
             </div>
           </div>
           <div class="dash-right">
@@ -89,11 +97,11 @@
         </div>
       </section>
 
-      <!-- 视图 2：信号扫描 -->
+      <!-- 视图 2：信号扫描（KDJ+MACD 短线 + 尾盘买入法 14:50 推荐） -->
       <section class="view view-scan" data-view="scan" hidden>
         <div class="panel-v3">
           <div class="panel-title-v3">
-            <span>📡 信号扫描</span>
+            <span>📡 信号扫描 · KDJ+MACD+量能</span>
             <span class="panel-extra">短线扫描（结合当前 MACD+KDJ+OBV 趋势）</span>
           </div>
           <div class="scan-grid">
@@ -107,9 +115,37 @@
             </div>
           </div>
         </div>
+
+        <!-- 尾盘买入法（r27）：每天 14:50~14:58 推荐 2-3 只大A纯主板，次日超短线 -->
+        <div class="panel-v3 panel-tailbuy">
+          <div class="panel-title-v3">
+            <span>🌙 尾盘买入法 · 次日超短</span>
+            <span class="panel-extra">
+              <button id="tailbuyRefresh" class="btn btn-tiny">刷新</button>
+              <span id="tailbuyStatus">未运行</span>
+            </span>
+          </div>
+          <div class="tailbuy-rules">
+            <b>选股条件（综合打分 ≥ 60 才入选）：</b>
+            <span class="rule">① 振幅≤3%</span>·<span class="rule">② 涨幅 -2%~+3%（白线托盘）</span>·<span class="rule">③ 量比 ≥ 1.2 且为近20日均量的 1.2~1.8 倍</span>·<span class="rule">④ 5/10/20 日均线多头排列</span>·<span class="rule">⑤ 主力净流入 &gt; 0 且买盘持续</span>·<span class="rule">⑥ 大A纯主板（沪 60/601/603/605；深 000/001/002）</span>
+          </div>
+          <div class="tailbuy-grid">
+            <div class="tailbuy-col">
+              <div class="tailbuy-col-title">🎯 明日重点关注 <span class="cnt" id="tailbuyPickCount">0</span></div>
+              <div id="tailbuyPickList" class="tailbuy-list"></div>
+            </div>
+            <div class="tailbuy-col">
+              <div class="tailbuy-col-title">📋 全主板候选池 <span class="cnt" id="tailbuyPoolCount">0</span></div>
+              <div id="tailbuyPoolList" class="tailbuy-list tailbuy-pool"></div>
+            </div>
+          </div>
+          <div class="tailbuy-stop">
+            <b>止损止盈提醒：</b>次日跌破 5 日均线或当日震荡区间上沿即止损（≤3%）；次日涨 3%-5% 直接止盈，早盘放量冲高可看 5%-7%，但 10:30 前落袋为安。<b style="color:#e74c3c">风险提示：股市投资有风险，仅供参考，不构成投资建议。</b>
+          </div>
+        </div>
       </section>
 
-      <!-- 视图 3：持仓与仓位 -->
+      <!-- 视图 3：持仓与仓位（精简版：只保留持仓表 + 当日交易录入 + 每日策略；已删：实时建议/尾盘策略/每日复盘） -->
       <section class="view view-positions" data-view="positions" hidden>
         <div class="panel-v3">
           <div class="panel-title-v3">
@@ -127,11 +163,6 @@
             </tr></thead>
             <tbody id="posTableBody"><tr><td colspan="6" class="empty-cell">暂无持仓。可在「行情看板」或「自动优选」中添加</td></tr></tbody>
           </table>
-        </div>
-
-        <div class="panel-v3">
-          <div class="panel-title-v3"><span>⚡ 实时建议（KDJ+MACD+量能）</span><span class="panel-extra">每 5 秒刷新</span></div>
-          <div id="aiAdviceBody"><div class="empty-v3">加载中…</div></div>
         </div>
 
         <div class="panel-v3 trade-entry-v3">
@@ -158,7 +189,7 @@
         </div>
 
         <div class="panel-v3">
-          <details class="fold-box" id="foldDaily">
+          <details class="fold-box" id="foldDaily" open>
             <summary>📅 每日策略（开盘判断 · 四时点快照）</summary>
             <div class="fold-body">
               <div class="daily-sub">
@@ -177,20 +208,53 @@
               </div>
             </div>
           </details>
-          <details class="fold-box" id="foldTail">
-            <summary>📊 尾盘策略</summary>
-            <div class="fold-body">
-              <div id="tailConclusion">加载中…</div>
-              <div class="tail-cols">
-                <div class="tail-col"><div class="tail-col-title">🟠 持仓该减仓</div><ul id="tailReduce"></ul></div>
-                <div class="tail-col"><div class="tail-col-title">🟢 尾盘可埋伏</div><ul id="tailBury"></ul></div>
-              </div>
-            </div>
-          </details>
-          <details class="fold-box" id="foldReview" open>
-            <summary>📊 每日复盘</summary>
-            <div class="fold-body"><div id="reviewBox">加载中…</div></div>
-          </details>
+        </div>
+      </section>
+
+      <!-- 视图 4：复盘（r27）：每天 9:25~9:30 自动给持仓股做开盘预测 + 累计准确率统计 -->
+      <section class="view view-review" data-view="review" hidden>
+        <div class="review-stats">
+          <div class="rs-card"><div class="rs-label">累计复盘</div><div class="rs-val" id="rvTotalDays">--</div><div class="rs-sub">天</div></div>
+          <div class="rs-card"><div class="rs-label">方向正确率</div><div class="rs-val" id="rvDirAcc">--</div><div class="rs-sub">涨/跌预测命中</div></div>
+          <div class="rs-card"><div class="rs-label">幅度偏差</div><div class="rs-val" id="rvPctErr">--</div><div class="rs-sub">平均绝对误差</div></div>
+          <div class="rs-card"><div class="rs-label">最高价命中</div><div class="rs-val" id="rvHiAcc">--</div><div class="rs-sub">误差 &lt; 1%</div></div>
+          <div class="rs-card"><div class="rs-label">最低价命中</div><div class="rs-val" id="rvLoAcc">--</div><div class="rs-sub">误差 &lt; 1%</div></div>
+        </div>
+
+        <div class="panel-v3 panel-today-pred">
+          <div class="panel-title-v3">
+            <span>📅 今日预测（9:25 自动生成 · 9:30 后点击「核对今日」验证）</span>
+            <span class="panel-extra">
+              <button id="rvPredictBtn" class="btn btn-tiny">立即生成今日预测</button>
+              <button id="rvCheckBtn" class="btn btn-tiny">核对今日实际</button>
+            </span>
+          </div>
+          <div class="today-pred-meta" id="todayPredMeta">尚未生成</div>
+          <table class="today-pred-table" id="todayPredTable">
+            <thead><tr>
+              <th>持仓</th>
+              <th class="r">预测开</th>
+              <th class="r">预测高</th>
+              <th class="r">预测低</th>
+              <th class="r">预测收</th>
+              <th class="r">预测涨跌%</th>
+              <th class="r">实际开</th>
+              <th class="r">实际高</th>
+              <th class="r">实际低</th>
+              <th class="r">实际收</th>
+              <th class="r">实际涨跌%</th>
+              <th>方向</th>
+              <th>幅度</th>
+              <th>最高</th>
+              <th>最低</th>
+            </tr></thead>
+            <tbody id="todayPredBody"><tr><td colspan="15" class="empty-cell">点击「立即生成今日预测」开始</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="panel-v3 panel-history-pred">
+          <div class="panel-title-v3"><span>📊 历史复盘记录（按日期倒序）</span></div>
+          <div id="reviewHistoryList" class="review-history-list"></div>
         </div>
       </section>
 
@@ -236,6 +300,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="/static/js/app.js?v=r26-stub"></script>
+  <script src="/static/js/app.js?v=r27-darkbuy"></script>
 </body>
 </html>

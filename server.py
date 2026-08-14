@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core import data_source as ds
 from core import signals as sig
-from core.indicators import compute_all
+from core.indicators import compute_all, sma, macd
 from core import industry_pool as ip
 from core import fundamentals as fm
 from core import sector_flow as sf
@@ -1277,6 +1277,529 @@ def _tail_market_strategy():
 
 
 # ---------- 请求处理 ----------
+# ========== r27 尾盘买入法（14:50 推荐 2-3 只大A纯主板，次日超短线） ==========
+_TAIL_BUY_CACHE = {"ts": 0.0, "data": None}
+_TAIL_BUY_TTL = 300  # 5 分钟缓存（避免重复扫几千只股票）
+
+def _is_main_board(code):
+    """大A纯主板：沪 60x/601x/603x/605x；深 000x/001x/002x
+    排除：30x(创业板)、688x(科创板)、83x/87x/43x(北交所)、9xx(B 股)"""
+    if not code:
+        return False
+    c = code.lower()
+    # 沪市主板
+    if c.startswith(("sh600", "sh601", "sh603", "sh605")):
+        return True
+    # 深市主板（000/001 中小板已并入主板，002 也算主板）
+    if c.startswith(("sz000", "sz001", "sz002")):
+        return True
+    return False
+
+
+def _compute_indicators(code, q=None):
+    """从日线 K 线计算 MA5/10/20 + MACD 状态（红柱/绿柱）。
+    实时接口不含这些字段，统一用日线回算；无 K线时返回全 0/空（评分相应规则不命中）。"""
+    try:
+        bars = ds.get_kline(code, "daily", 60, _tdx_path or None)
+    except Exception:
+        bars = []
+    if not bars or len(bars) < 25:
+        return {"ma5": 0, "ma10": 0, "ma20": 0, "macd_status": ""}
+    closes = [b["close"] for b in bars if b.get("close") is not None]
+    if len(closes) < 25:
+        return {"ma5": 0, "ma10": 0, "ma20": 0, "macd_status": ""}
+    try:
+        ma5 = sma(closes, 5)[-1] or 0
+        ma10 = sma(closes, 10)[-1] or 0
+        ma20 = sma(closes, 20)[-1] or 0
+    except Exception:
+        ma5 = ma10 = ma20 = 0
+    try:
+        _, _, hist = macd(closes)
+        h = hist[-1]
+        macd_status = "红柱" if (h is not None and h > 0) else "绿柱" if (h is not None and h < 0) else ""
+    except Exception:
+        macd_status = ""
+    return {"ma5": round(ma5, 3), "ma10": round(ma10, 3),
+            "ma20": round(ma20, 3), "macd_status": macd_status}
+
+def _tail_buy_score_row(q, ind):
+    """按用户提供的 6 条策略评分（0~100）。ind 含 kdj/macd/ma/vol_ratio/main_fund_net/turnover"""
+    score = 0
+    rules_hit = []
+    rules_miss = []
+    price = q.get("price") or 0
+    change_pct = q.get("change_pct") or 0  # 涨幅 %
+    high = q.get("high") or 0
+    low = q.get("low") or 0
+    prev_close = q.get("prev_close") or 0
+    turnover = q.get("turnover") or 0  # 换手率 %
+    open_p = q.get("open") or 0
+    vol_ratio = (ind or {}).get("vol_ratio") or 0
+    main_fund_net = (ind or {}).get("main_fund_net") or 0  # 主力净流入（亿）
+    ma5  = (ind or {}).get("ma5") or 0
+    ma10 = (ind or {}).get("ma10") or 0
+    ma20 = (ind or {}).get("ma20") or 0
+    macd_status = (ind or {}).get("macd_status") or ""
+
+    # 计算振幅
+    if prev_close > 0 and high > 0 and low > 0:
+        amp_pct = (high - low) / prev_close * 100
+    else:
+        amp_pct = 999  # 数据不足时给一个高分（不命中规则①）
+
+    # ① 振幅 ≤ 3%（托盘）
+    if amp_pct <= 3:
+        score += 18
+        rules_hit.append(f"振幅{amp_pct:.1f}%")
+    elif amp_pct <= 5:
+        score += 8
+        rules_miss.append(f"振幅{amp_pct:.1f}%>3")
+    else:
+        rules_miss.append(f"振幅{amp_pct:.1f}%>3")
+
+    # ② 涨幅 -2%~+3%（白线在黄线上方）
+    if -2 <= change_pct <= 3:
+        score += 17
+        rules_hit.append(f"涨跌{change_pct:+.2f}%")
+    else:
+        rules_miss.append(f"涨跌{change_pct:+.2f}%∉[-2,3]")
+
+    # ③ 量比 ≥ 1.2（且 < 5，太高是异动）
+    if 1.2 <= vol_ratio <= 5:
+        score += 16
+        rules_hit.append(f"量比{vol_ratio:.2f}")
+    elif vol_ratio >= 0.8:
+        score += 5
+        rules_miss.append(f"量比{vol_ratio:.2f}")
+    else:
+        rules_miss.append(f"量比{vol_ratio:.2f}")
+
+    # ④ 5/10/20 日均线多头排列
+    if ma5 > 0 and ma10 > 0 and ma20 > 0 and ma5 > ma10 > ma20 and price > ma5:
+        score += 17
+        rules_hit.append("5/10/20多头")
+    elif ma5 > 0 and ma10 > 0 and ma20 > 0 and ma5 > ma10 > ma20:
+        score += 8
+        rules_miss.append("价在MA5下方")
+    else:
+        rules_miss.append("均线未多头")
+
+    # ⑤ 主力净流入 > 0 且较大
+    if main_fund_net > 0.5:
+        score += 16
+        rules_hit.append(f"主力+{main_fund_net:.2f}亿")
+    elif main_fund_net > 0:
+        score += 6
+        rules_miss.append(f"主力+{main_fund_net:.2f}亿弱")
+    else:
+        rules_miss.append(f"主力{main_fund_net:+.2f}亿")
+
+    # ⑥ MACD 红柱 / 金叉
+    if macd_status and ("红柱" in macd_status or "金叉" in macd_status):
+        score += 16
+        rules_hit.append(f"MACD{macd_status}")
+    else:
+        rules_miss.append("MACD弱")
+
+    # 换手率辅助分（1%-10% 最佳，过高是出货）
+    if 1 <= turnover <= 10:
+        score += 5
+    return {
+        "score": min(score, 100),
+        "amp_pct": amp_pct,
+        "rules_hit": rules_hit,
+        "rules_miss": rules_miss,
+    }
+
+
+def _tail_buy_scan(force=False, top_n=3, pool_n=80):
+    """扫描大A纯主板，按 r27 尾盘买入法策略评分，返回 top_n 推荐 + pool_n 候选池。"""
+    global _TAIL_BUY_CACHE
+    # 缓存命中
+    if not force and _TAIL_BUY_CACHE["data"] and time.time() - _TAIL_BUY_CACHE["ts"] < _TAIL_BUY_TTL:
+        return _TAIL_BUY_CACHE["data"]
+
+    # 1) 取全 A 股代码池
+    try:
+        all_codes = _get_universe()
+    except Exception:
+        all_codes = []
+    if not all_codes:
+        return {"ok": False, "error": "股票池为空（先点设置里「重建成长池」或稍后再试）",
+                "picks": [], "pool": []}
+    main_codes = [c for c in all_codes if _is_main_board(c)]
+    if not main_codes:
+        return {"ok": False, "error": "主板股票池为空",
+                "picks": [], "pool": []}
+
+    # 2) 批量取富实时行情（东方财富 ulist 批量，一次返回 量比/主力净流入 等），缺失回退基础字段
+    try:
+        quotes = ds.fetch_realtime_extra(main_codes) or {}
+    except Exception:
+        quotes = {}
+
+    # 3) 第一遍：用"便宜字段"（振幅/涨跌/量比/主力净流入）粗评，取前 40 进入 K线深度计算
+    cheap = []
+    for code in main_codes:
+        q = quotes.get(code)
+        if not q or q.get("price") is None:
+            continue
+        ind = {
+            "vol_ratio": q.get("vol_ratio") or 0,
+            "main_fund_net": q.get("main_fund_net") or 0,
+            "ma5": 0, "ma10": 0, "ma20": 0, "macd_status": "",
+        }
+        s = _tail_buy_score_row(q, ind)
+        cheap.append((code, q, s))
+    cheap.sort(key=lambda x: -(x[2].get("score") or 0))
+
+    # 4) 对前 40 只并行补算 MA5/10/20 + MACD（来自日线 K线，磁盘缓存），做最终评分
+    #    首次扫描时每只都要在线拉 K线，顺序执行会卡 40~60s；用线程池并行压到 10s 内。
+    scored = []
+    top40 = cheap[:40]
+    if top40:
+        def _score_one(item):
+            code, q, _ = item
+            try:
+                ind = _compute_indicators(code, q)
+            except Exception:
+                ind = {"ma5": 0, "ma10": 0, "ma20": 0, "macd_status": ""}
+            s2 = _tail_buy_score_row(q, ind)
+            price = q.get("price") or 0
+            low = q.get("low") or price
+            high = q.get("high") or price
+            next_open = price * 1.001 if price > 0 else None   # 次日参考开（轻微高开）
+            stop_loss = low * 0.97 if low > 0 else None
+            take_profit = high * 1.03 if high > 0 else None
+            return {
+                "code": code,
+                "name": q.get("name") or code,
+                "price": q.get("price"),
+                "change_pct": q.get("change_pct"),
+                "vol_ratio": q.get("vol_ratio"),
+                "turnover": q.get("turnover"),
+                "main_fund_net": q.get("main_fund_net"),
+                "amp_pct": s2["amp_pct"],
+                "score": s2["score"],
+                "rules_hit": s2["rules_hit"],
+                "rules_miss": s2["rules_miss"],
+                "ma5": ind.get("ma5"), "ma10": ind.get("ma10"),
+                "ma20": ind.get("ma20"), "macd_status": ind.get("macd_status"),
+                "next_open": round(next_open, 2) if next_open else None,
+                "stop_loss": round(stop_loss, 2) if stop_loss else None,
+                "take_profit": round(take_profit, 2) if take_profit else None,
+            }
+        with ThreadPoolExecutor(max_workers=12) as ex:
+            scored = list(ex.map(_score_one, top40))
+
+    # 5) 按最终评分排序
+    scored.sort(key=lambda r: -(r.get("score") or 0))
+    picks = scored[:top_n]
+    pool = scored[top_n:pool_n]
+    out = {
+        "ok": True,
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "total_scanned": len(main_codes),
+        "total_with_data": len(scored),
+        "picks": picks,
+        "pool": pool,
+        "policy": {
+            "amp_max": 3.0,
+            "chg_range": [-2.0, 3.0],
+            "vol_ratio_min": 1.2,
+            "main_fund_min_yi": 0.5,
+            "buy_window": "14:50~14:58",
+            "stop_loss_rule": "次日跌破5日均线/震荡上沿，止损≤3%",
+            "take_profit_rule": "次日涨3-5%止盈；放量冲高看5-7%但10:30前落袋",
+        },
+    }
+    _TAIL_BUY_CACHE["data"] = out
+    _TAIL_BUY_CACHE["ts"] = time.time()
+    return out
+
+
+# ========== r27 复盘视图：每日 9:25 预测 + 收盘核对 + 累计统计 ==========
+REVIEW_HISTORY = os.path.join(DATA_DIR, "review_history.json")
+STATIC_REVIEW_HISTORY = os.path.join(BASE, "static", "review_history.json")
+
+
+def _load_review_history():
+    """读取复盘历史：dict[date] = {date, generated_at, market_note, confidence, rows:[{code,name, open_pred,high_pred,low_pred,close_pred,amp_pred, dir_pred, ...actual...}]}"""
+    rh = _load_json(REVIEW_HISTORY, None)
+    if not rh:
+        rh = _load_json(STATIC_REVIEW_HISTORY, {})
+    return rh or {}
+
+
+def _save_review_history(rh):
+    _save_json(REVIEW_HISTORY, rh)
+    try:
+        _save_json(STATIC_REVIEW_HISTORY, rh)
+    except Exception as e:
+        print("[WARN] static review_history write failed (cloud may be read-only):", e)
+
+
+def _predict_one_stock(code, name):
+    """对单只股票做"今日预测"：开/高/低/收/涨跌幅。
+    简化模型：基于昨收 + 当日开盘前的技术面（MA5/MA10/MA20 偏离度、KDJ/MACD、量能、换手、板块强度）。
+    返回 {open_pred, high_pred, low_pred, close_pred, amp_pred, dir_pred, confidence}"""
+    try:
+        q = ds.fetch_realtime_extra([code]).get(code) or {}
+    except Exception:
+        q = {}
+    # 技术面：MA5/10/20 + MACD 由日线 K线计算（实时接口不含这些字段）
+    try:
+        _ind = _compute_indicators(code, q)
+    except Exception:
+        _ind = {"ma5": 0, "ma10": 0, "ma20": 0, "macd_status": ""}
+    price = q.get("price")
+    prev_close = q.get("prev_close") or 0
+    high = q.get("high") or prev_close
+    low = q.get("low") or prev_close
+    open_p = q.get("open") or prev_close
+    change_pct = q.get("change_pct") or 0
+    main_fund_net = q.get("main_fund_net") or 0
+    vol_ratio = q.get("vol_ratio") or 1
+    turnover = q.get("turnover") or 0
+    ma5 = _ind.get("ma5") or 0
+    ma10 = _ind.get("ma10") or 0
+    ma20 = _ind.get("ma20") or 0
+    macd_status = _ind.get("macd_status") or ""
+
+    if prev_close <= 0:
+        return None
+
+    # 趋势分（基于均线偏离度）
+    if ma5 > 0 and ma10 > 0 and ma20 > 0:
+        ma_dev = (price - ma5) / ma5 * 100 if ma5 else 0
+        ma_align = (1 if ma5 > ma10 > ma20 else -1 if ma5 < ma10 < ma20 else 0)
+    else:
+        ma_dev = 0
+        ma_align = 0
+
+    # MACD 信号
+    macd_score = 1 if (macd_status and ("红柱" in macd_status or "金叉" in macd_status)) \
+              else -1 if (macd_status and ("绿柱" in macd_status or "死叉" in macd_status)) \
+              else 0
+
+    # 主力净流入方向
+    fund_score = 1 if main_fund_net > 0.2 else -1 if main_fund_net < -0.2 else 0
+
+    # 综合趋势分（-3 ~ +3）
+    trend_score = ma_align + macd_score + fund_score
+    if trend_score >= 2:
+        amp_pred = 1.8    # 偏多 → 预测涨 1.8%
+        dir_pred = "up"
+    elif trend_score == 1:
+        amp_pred = 0.6
+        dir_pred = "up"
+    elif trend_score == 0:
+        amp_pred = 0
+        dir_pred = "flat"
+    elif trend_score == -1:
+        amp_pred = -0.6
+        dir_pred = "down"
+    else:
+        amp_pred = -1.8
+        dir_pred = "down"
+
+    # 振幅预测（用于最高最低）
+    if vol_ratio > 1.5:
+        amp_range = 2.5
+    elif vol_ratio > 1:
+        amp_range = 1.5
+    else:
+        amp_range = 1.0
+
+    # 开盘预测 = 昨收 * (1 + 跳空%)
+    gap_pct = 0.0  # 默认平开
+    if ma_align > 0 and macd_score > 0:
+        gap_pct = 0.3
+    elif ma_align < 0 and macd_score < 0:
+        gap_pct = -0.3
+    open_pred = round(prev_close * (1 + gap_pct / 100), 2)
+    close_pred = round(prev_close * (1 + amp_pred / 100), 2)
+    high_pred = round(max(open_pred, close_pred) * (1 + amp_range / 200), 2)
+    low_pred = round(min(open_pred, close_pred) * (1 - amp_range / 200), 2)
+
+    return {
+        "open_pred": open_pred,
+        "high_pred": high_pred,
+        "low_pred": low_pred,
+        "close_pred": close_pred,
+        "amp_pred": round(amp_pred, 2),
+        "dir_pred": dir_pred,
+        "confidence": 60 + min(abs(trend_score) * 8, 30),
+        "ref_prev_close": prev_close,
+        "trend_score": trend_score,
+        "fund_net": main_fund_net,
+        "vol_ratio": vol_ratio,
+    }
+
+
+def _predict_review_today():
+    """为当前持仓生成今日 9:25 预测；保存到 review_history。"""
+    positions = _load_positions()
+    today = _today_str()
+    rh = _load_review_history()
+    existing = rh.get(today, {})
+    rows = []
+    for p in positions:
+        code = p.get("code", "")
+        if not code:
+            continue
+        name = p.get("name") or code
+        pred = _predict_one_stock(code, name)
+        if not pred:
+            continue
+        row = {"code": code, "name": name}
+        row.update(pred)
+        rows.append(row)
+    rh[today] = {
+        "date": today,
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "market_note": "",
+        "confidence": 65 if rows else 0,
+        "rows": rows,
+        "stats": {},   # check 后再填
+    }
+    _save_review_history(rh)
+    return {"ok": True, "date": today, "count": len(rows)}
+
+
+def _check_review_today(date=None):
+    """核对今日（或指定日期）预测：拉真实开/高/低/收，比对方向/幅度/高低。"""
+    date = date or _today_str()
+    rh = _load_review_history()
+    day = rh.get(date)
+    if not day or not day.get("rows"):
+        return {"ok": False, "error": f"{date} 没有预测数据，请先生成预测"}
+    # 拉今日持仓的实际行情
+    rows = day["rows"]
+    codes = [r["code"] for r in rows]
+    rt = {}
+    try:
+        rt = ds.fetch_realtime(codes) or {}
+    except Exception:
+        pass
+    dir_hit = dir_miss = amp_hit = amp_miss = hi_hit = hi_miss = lo_hit = lo_miss = 0
+    for r in rows:
+        q = rt.get(r["code"]) or {}
+        if not q:
+            continue
+        actual_open = q.get("open") or 0
+        actual_high = q.get("high") or 0
+        actual_low = q.get("low") or 0
+        actual_close = q.get("price") or 0
+        actual_amp = q.get("change_pct") or 0
+        if actual_open <= 0 or actual_close <= 0:
+            continue
+        r["open_actual"] = actual_open
+        r["high_actual"] = actual_high
+        r["low_actual"] = actual_low
+        r["close_actual"] = actual_close
+        r["amp_actual"] = round(actual_amp, 2)
+        r["dir_actual"] = "up" if actual_amp > 0.1 else "down" if actual_amp < -0.1 else "flat"
+        # 方向
+        if r.get("dir_pred") == r["dir_actual"]:
+            r["dir_hit"] = True; dir_hit += 1
+        else:
+            r["dir_hit"] = False; dir_miss += 1
+        # 幅度（绝对误差 < 1% 算命中）
+        if r.get("amp_pred") is not None:
+            err = abs(r["amp_actual"] - r["amp_pred"])
+            r["amp_err"] = round(err, 2)
+            r["amp_hit"] = err < 1
+            if r["amp_hit"]: amp_hit += 1
+            else: amp_miss += 1
+        # 最高（误差 < 1%）
+        if r.get("high_pred") and actual_high > 0:
+            err_pct = abs(actual_high - r["high_pred"]) / max(r["high_pred"], 0.01) * 100
+            r["hi_hit"] = err_pct < 1
+            if r["hi_hit"]: hi_hit += 1
+            else: hi_miss += 1
+        # 最低
+        if r.get("low_pred") and actual_low > 0:
+            err_pct = abs(actual_low - r["low_pred"]) / max(r["low_pred"], 0.01) * 100
+            r["lo_hit"] = err_pct < 1
+            if r["lo_hit"]: lo_hit += 1
+            else: lo_miss += 1
+    # 写入当日统计
+    total = dir_hit + dir_miss
+    day["stats"] = {
+        "total": total,
+        "dir_hit": dir_hit, "dir_miss": dir_miss,
+        "amp_hit": amp_hit, "amp_miss": amp_miss,
+        "hi_hit": hi_hit, "hi_miss": hi_miss,
+        "lo_hit": lo_hit, "lo_miss": lo_miss,
+    }
+    rh[date] = day
+    _save_review_history(rh)
+    return {"ok": True, "date": date, "dir_hit": dir_hit, "dir_total": total, "stats": day["stats"]}
+
+
+def _review_stats():
+    """累计统计：总天数、方向正确率、幅度 MAE、最高价正确率、最低价正确率。"""
+    rh = _load_review_history()
+    total_days = 0
+    total_dir_hit = total_dir_miss = 0
+    total_amp_hit = total_amp_miss = 0
+    total_hi_hit = total_hi_miss = 0
+    total_lo_hit = total_lo_miss = 0
+    amp_err_sum = amp_err_n = 0
+    for date, day in sorted(rh.items()):
+        st = day.get("stats") or {}
+        if not st:
+            continue
+        total_days += 1
+        total_dir_hit += st.get("dir_hit", 0)
+        total_dir_miss += st.get("dir_miss", 0)
+        total_amp_hit += st.get("amp_hit", 0)
+        total_amp_miss += st.get("amp_miss", 0)
+        total_hi_hit += st.get("hi_hit", 0)
+        total_hi_miss += st.get("hi_miss", 0)
+        total_lo_hit += st.get("lo_hit", 0)
+        total_lo_miss += st.get("lo_miss", 0)
+        for r in (day.get("rows") or []):
+            if r.get("amp_err") is not None:
+                amp_err_sum += r["amp_err"]; amp_err_n += 1
+    dir_total = total_dir_hit + total_dir_miss
+    return {
+        "total_days": total_days,
+        "dir_total": dir_total,
+        "dir_hit": total_dir_hit,
+        "dir_acc": round(total_dir_hit / dir_total * 100, 1) if dir_total else 0,
+        "amp_mae": round(amp_err_sum / amp_err_n, 2) if amp_err_n else 0,
+        "hi_total": total_hi_hit + total_hi_miss,
+        "hi_acc": round(total_hi_hit / (total_hi_hit + total_hi_miss) * 100, 1) if (total_hi_hit + total_hi_miss) else 0,
+        "lo_total": total_lo_hit + total_lo_miss,
+        "lo_acc": round(total_lo_hit / (total_lo_hit + total_lo_miss) * 100, 1) if (total_lo_hit + total_lo_miss) else 0,
+    }
+
+
+def _review_history(days=60):
+    """返回历史记录列表（按日期倒序，最多 days 天）。"""
+    rh = _load_review_history()
+    items = []
+    for date in sorted(rh.keys(), reverse=True)[:days]:
+        d = rh[date]
+        items.append({
+            "date": date,
+            "market_note": d.get("market_note", ""),
+            "rows": d.get("rows", []),
+            "stats": d.get("stats", {}),
+        })
+    return {"history": items}
+
+
+def _review_today():
+    """返回今日预测。"""
+    rh = _load_review_history()
+    today = _today_str()
+    return {"prediction": rh.get(today, {}), "date": today}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # 静默
@@ -1738,6 +2261,27 @@ class Handler(BaseHTTPRequestHandler):
             res["period"] = period
             self._send(200, res)
             return
+
+        # ========== r27 尾盘买入法 + 复盘视图 4 个 GET 端点 ==========
+        if route == "/api/tail_buy":
+            try:
+                force = qs.get("force", [""])[0] in ("1", "true", "yes")
+                data = _tail_buy_scan(force=force)
+                self._send(200, data)
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e), "picks": [], "pool": []})
+            return
+        if route == "/api/review/today":
+            self._send(200, _review_today())
+            return
+        if route == "/api/review/history":
+            days = int(qs.get("days", ["60"])[0] or 60)
+            self._send(200, _review_history(days=days))
+            return
+        if route == "/api/review/stats":
+            self._send(200, {"stats": _review_stats()})
+            return
+
         self._send(404, {"error": "unknown route"})
 
     def do_POST(self):
@@ -2014,6 +2558,26 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(200, {"ok": False, "error": str(e)})
             return
+
+        # ========== r27 复盘视图 2 个 POST 端点 ==========
+        if route == "/api/review/predict":
+            # 立即生成今日 9:25 预测（基于当前持仓 + 当前技术指标）
+            try:
+                result = _predict_review_today()
+                self._send(200, result)
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
+            return
+        if route == "/api/review/check":
+            # 核对今日实际涨跌 / 最高 / 最低 / 收盘
+            try:
+                date = payload.get("date") if isinstance(payload, dict) else None
+                result = _check_review_today(date=date)
+                self._send(200, result)
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
+            return
+
         self._send(404, {"error": "unknown route"})
 
     def do_DELETE(self):

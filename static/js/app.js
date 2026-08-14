@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* 版本自检：刷新时第一行打印当前是 r26-stub，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
-console.log('%c[wb] app.js r26-stub loaded ($() stub-sentinel + errToast + window.onerror)','color:#2ecc71;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r26-stub') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r26-stub。请强制刷新或清缓存。');
+/* 版本自检：刷新时第一行打印当前是 r27-darkbuy，如果不是说明浏览器还在用旧缓存（强制刷新 Ctrl+Shift+R / Cmd+Shift+R） */
+console.log('%c[wb] app.js r27-darkbuy loaded (split dashboard: 持仓/自选 + 尾盘买入法 + 复盘视图 + 全量深色)','color:#2ecc71;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r27-darkbuy') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r27-darkbuy。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -672,6 +672,7 @@ function renderAiAdvice(positions) {
     // 注意：已按需求移除「可用资金」输入（扫描候选量改由后端默认配置计算）
 
     bindEvents();
+    try { bindReviewButtons(); } catch (e) { console.warn('[wb] bindReviewButtons:', e && e.message); }
     // 任何一步失败都不影响其余渲染（避免整页白屏）
     try { await loadWatchlist(); } catch (e) { console.warn("自选加载失败：", e); }
     try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
@@ -690,7 +691,7 @@ function renderAiAdvice(positions) {
     renderAccount().catch(e => console.warn("账户刷新失败：", e));
     // 之后每 5 秒刷新一次（更紧的实时节奏，配合盘中实时建议闪烁）
     state.timers.push(setInterval(renderAccount, 5000));
-    // 尾盘策略：30 秒刷新（低频，尾盘汇总减仓/埋伏结论）
+    // 尾盘策略：30 秒刷新（r27 已删，保留空壳兼容旧调用）
     try { loadTailStrategy(); } catch (e) {}
     state.timers.push(setInterval(loadTailStrategy, 30000));
     // 每日策略：开盘判断 / 四时点快照 / 收盘复盘（30 秒刷新，后端自动补齐缺失记录）
@@ -708,9 +709,17 @@ function renderAiAdvice(positions) {
         if (state.daily) renderDailySnap(state.daily);
       });
     }
-    // 每日复盘：开盘后自动记录持仓建议/最高/收盘，用于复盘准确率
+    // r27：旧 loadReview（每日复盘）已删，保留空函数避免旧引用报错；新版复盘在 review 视图按需拉取
     try { loadReview(); } catch (e) {}
-    state.timers.push(setInterval(loadReview, 60000));
+    // r27：信号扫描页首次进入时预热尾盘买入法候选池
+    try {
+      api('GET', '/api/tail_buy').then(d => {
+        if (d && d.ok) {
+          const statEl = document.getElementById('tailbuyStatus');
+          if (statEl) statEl.textContent = d.generated_at ? '更新于 ' + d.generated_at : '已生成';
+        }
+      }).catch(() => {});
+    } catch (e) {}
     // 自动优选：3 秒后异步触发，不阻塞首屏（再每 10 分钟重扫）
     setTimeout(() => {
       autoScan().catch(e => console.warn("自动优选启动失败：", e));
@@ -1091,70 +1100,83 @@ function renderAiAdvice(positions) {
     </div>`;
   }
 
-  function renderSelfStocks() {
-    const el = $("#selfStocks");
+  // r27：行情看板左侧拆两块 —— 上=持仓股实时监控（来自 state.positions），下=自选股实时监控（扫描前 5-10 只）
+  // 共用 buildSelfList() 计算 candidates/watchlist 合并列表
+  function _renderMonitorRow(it) {
+    const act = it.action || "持有";
+    const cls = _ssActionClass2(act);
+    const actCls = act === "强烈买入" || act === "买入" || act === "加仓" ? "act-buy"
+                 : act === "减仓" || act === "卖出" ? "act-sell" : "act-hold";
+    const pxTxt = it.price != null
+      ? `<span class="dm-px ${chgClass(it.change_pct)}">${fmt(it.price)}</span><span class="dm-chg ${chgClass(it.change_pct)}">${it.change_pct != null ? (it.change_pct >= 0 ? "+" : "") + fmt(it.change_pct) + "%" : ""}</span>`
+      : `<span class="dm-px">--</span>`;
+    const scoreTxt = it.score != null ? it.score : "—";
+    const track = it.track || "";
+    return `<div class="dm-row ${cls}" data-code="${it.code}" data-name="${it.name}">
+      <span class="dm-act ${actCls}">${act}</span>
+      <span class="dm-name">${it.name}<i class="dm-code">${it.code}</i></span>
+      ${pxTxt}
+      <span class="dm-score">${scoreTxt}</span>
+      <span class="dm-track">${track}</span>
+    </div>`;
+  }
+  function _ssActionClass2(act) {
+    if (act === "强烈买入" || act === "买入" || act === "加仓") return "dm-buy";
+    if (act === "减仓" || act === "卖出") return "dm-sell";
+    return "dm-hold";
+  }
+  // 兼容旧名（hyphen 不合法 → camelCase）
+  const _ss_action_class = _ssActionClass2;
+  function renderHoldingsMonitor() {
+    const el = document.getElementById("holdingsMonitor");
+    const cnt = document.getElementById("holdingsMonitorCount");
     if (!el) return;
-    const list = buildSelfList();
-    const cnt = $("#selfCount");
+    // 仅来自 state.positions（持仓股）：自动优选/自选不混入此面板，避免重复
+    const list = (state.positions || []).map(p => {
+      const code = p.code || "";
+      const m = state.watchMeta[code] || {};
+      return {
+        origin: "持仓",
+        code: code,
+        name: p.name || m.name || code,
+        action: p.action || m.action || "持有",
+        score: p.advice_score != null ? p.advice_score : (p.score != null ? p.score : (m.score != null ? m.score : null)),
+        price: p.price != null ? p.price : (m.price != null ? m.price : null),
+        change_pct: p.change_pct != null ? p.change_pct : m.change_pct,
+        track: p.track || m.track || "—",
+      };
+    });
     if (cnt) cnt.textContent = `共 ${list.length} 只`;
     if (!list.length) {
-      el.innerHTML = `<div class="signal-empty">自动优选中…（首次约 1 分钟扫描成长池）</div>`;
+      el.innerHTML = '<div class="dash-monitor-empty">暂无持仓。录入或导入后这里会出现实时监控卡片。</div>';
       return;
     }
-    el.innerHTML = list.map(it => {
-      const act = it.action || "—";
-      const strong = act === "强烈买入";
-      const cls = _ssActionClass(act);
-      const c = ACT_COLOR[act] || "#868e96";
-      const pxTxt = it.price != null
-        ? `<span class="ss-px ${chgClass(it.change_pct)}">${fmt(it.price)}</span><span class="ss-chg ${chgClass(it.change_pct)}">${it.change_pct != null ? (it.change_pct >= 0 ? "+" : "") + fmt(it.change_pct) + "%" : ""}</span>`
-        : `<span class="ss-px">--</span>`;
-      const scoreTxt = it.score != null ? `综合 <b>${it.score}</b>` : "";
-      const sec = [];
-      if (it.track) sec.push(`<span class="ss-track">${it.track}</span>`);
-      if (it.sector_trend != null) sec.push(`<span class="${it.sector_trend >= 0 ? 'up' : 'down'}">${it.sector_trend >= 0 ? '↑' : '↓'}${fmt(it.sector_trend)}%</span>`);
-      if (it.sector_fund != null) sec.push(`<span class="${it.sector_fund >= 0 ? 'up' : 'down'}">主力${it.sector_fund >= 0 ? '+' : ''}${fmt(it.sector_fund)}亿</span>`);
-      const buyTxt = it.buy_price != null ? `荐买 <b class="ss-buy-price">${fmt(it.buy_price)}</b>` : "";
-      const sellTxt = it.sell_price != null ? `卖 <b class="ss-sell-price">${fmt(it.sell_price)}</b>` : "";
-      const gradeTxt = it.fund_grade ? `<span class="ss-grade g-${it.fund_grade}">${it.fund_grade}</span>` : "";
-      const peTxt = it.pe != null ? `PE ${it.pe}` : "";
-      // 操作按钮：优选可加自选；自选可移除
-      const actionBtn = it.origin === "自选"
-        ? `<span class="ss-del" data-code="${it.code}" title="移除自选">✕</span>`
-        : (_inWatch(it.code) ? `<span class="ss-added">已加</span>` : `<span class="ss-add" data-code="${it.code}" data-name="${it.name}" data-price="${it.price != null ? it.price : ''}" data-buy="${it.buy_price != null ? it.buy_price : ''}">+自选</span>`);
-      return `<div class="ss-row ${cls}${strong ? ' ss-strong' : ''}" data-code="${it.code}" data-name="${it.name}">
-        <div class="ss-top">
-          <span class="ss-act" style="background:${c}">${strong ? '🔥' : ''}${act}</span>
-          <span class="ss-name">${it.name}<i>${it.code}</i></span>
-          <span class="ss-tag tag-${it.origin}">${it.origin}</span>
-          ${actionBtn}
-        </div>
-        <div class="ss-mid">
-          ${pxTxt}
-          <span class="ss-score">${scoreTxt}</span>
-          <span class="ss-sector">${sec.join("　")}</span>
-        </div>
-        <div class="ss-bot">${buyTxt}${sellTxt ? "　" + sellTxt : ""}${gradeTxt}${peTxt ? "　" + peTxt : ""}</div>
-      </div>`;
-    }).join("");
-    // 绑定：优选点击加自选；自选点击移除
-    el.querySelectorAll(".ss-add").forEach(b =>
-      b.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await addToWatch(b.dataset.code, b.dataset.name, b.dataset.price || null, b.dataset.buy || null);
-      }));
-    el.querySelectorAll(".ss-del").forEach(b =>
-      b.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        state.watchlist = state.watchlist.filter(w => w.code !== b.dataset.code);
-        delete state.watchMeta[b.dataset.code];
-        await saveWatchlist(); renderSelfStocks();
-      }));
-    el.querySelectorAll(".ss-row").forEach(row =>
-      row.addEventListener("click", () => {
-        if (row.querySelector(".ss-add, .ss-del")) return;
-        openStock(row.dataset.code, row.dataset.name);
-      }));
+    // 按评分绝对值降序，强信号在最上
+    list.sort((a, b) => Math.abs(+(b.score || 0)) - Math.abs(+(a.score || 0)));
+    el.innerHTML = list.map(_renderMonitorRow).join("");
+    el.querySelectorAll(".dm-row").forEach(row =>
+      row.addEventListener("click", () => openStock(row.dataset.code, row.dataset.name)));
+  }
+  function renderSelfMonitor() {
+    const el = document.getElementById("selfMonitor");
+    const cnt = document.getElementById("selfMonitorCount");
+    if (!el) return;
+    // 来自 buildSelfList：取所有非"持仓"来源，按评分降序，前 10 只
+    const list = buildSelfList().filter(it => it.origin !== "持仓");
+    if (cnt) cnt.textContent = `信号扫描前 ${Math.min(list.length, 10)} / 共 ${list.length} 只`;
+    if (!list.length) {
+      el.innerHTML = '<div class="dash-monitor-empty">自动优选中…（首次约 1 分钟扫描成长池）</div>';
+      return;
+    }
+    const top = list.slice(0, 10);
+    el.innerHTML = top.map(_renderMonitorRow).join("");
+    el.querySelectorAll(".dm-row").forEach(row =>
+      row.addEventListener("click", () => openStock(row.dataset.code, row.dataset.name)));
+  }
+  // 兼容旧 renderSelfStocks 调用（任何调用点都同时刷新两块面板）
+  function renderSelfStocks() {
+    try { renderHoldingsMonitor(); } catch (e) { console.warn('[wb] renderHoldingsMonitor:', e && e.message); }
+    try { renderSelfMonitor(); } catch (e) { console.warn('[wb] renderSelfMonitor:', e && e.message); }
   }
 
   // 自动优选：触发候选扫描（不点扫描也自动跑），轮询进度并渲染
@@ -2252,21 +2274,22 @@ function renderAiAdvice(positions) {
     });
     // 视图进入时按需刷新数据
     if (name === 'dashboard') {
-      try { renderSelfStocks(); } catch (e) {}
+      try { renderSelfStocks(); } catch (e) { console.warn('[wb] dashboard render:', e && e.message); }
     } else if (name === 'scan') {
-      try { renderScanView(); } catch (e) {}
+      try { renderScanView(); } catch (e) { console.warn('[wb] scan render:', e && e.message); }
+      try { renderTailBuy(); } catch (e) { console.warn('[wb] tailbuy render:', e && e.message); }
     } else if (name === 'positions') {
-      // 进入持仓与仓位视图时，主动刷新一次持仓表/AI 建议（防止打开后空白）
+      // 进入持仓与仓位视图时，主动刷新一次持仓表（r27 删了 AI 建议 / 尾盘策略 / 每日复盘）
       try {
         if (state.posAdvice && state.posAdvice.length) {
           renderPosTable(state.posAdvice);
-          renderAiAdvice(state.posAdvice);
-          renderHoldingsBoard(state.posAdvice);
         } else {
-          // 数据尚未到达，主动拉一次
           renderAccount();
         }
       } catch (e) { console.warn('positions 视图刷新失败：', e); }
+    } else if (name === 'review') {
+      // r27：进入复盘视图，主动加载今日预测 + 历史 + 准确率统计
+      try { renderReview(); } catch (e) { console.warn('[wb] review render:', e && e.message); }
     }
   }
 
@@ -2321,6 +2344,219 @@ function renderAiAdvice(positions) {
       buyEl.innerHTML  = (buy.length  ? headerHtml(buyAll.length) + buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>');
       sellEl.innerHTML = (sell.length ? headerHtml(sellAll.length) + sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>');
     }).catch(e => paint('信号扫描失败：' + (e.message || e)));
+  }
+
+  // ========== r27 尾盘买入法 ==========
+  // 每天 14:50~14:58 推荐 2-3 只大A纯主板（沪 60/601/603/605；深 000/001/002），
+  // 排除创业板（30x）、北交所（83x/87x/43x）、可转债等；策略详见 HTML 注释
+  async function renderTailBuy(forceRefresh) {
+    const pickEl = document.getElementById('tailbuyPickList');
+    const poolEl = document.getElementById('tailbuyPoolList');
+    const pickCnt = document.getElementById('tailbuyPickCount');
+    const poolCnt = document.getElementById('tailbuyPoolCount');
+    const statEl = document.getElementById('tailbuyStatus');
+    if (!pickEl || !poolEl) return;
+    pickEl.innerHTML = '<div class="tailbuy-empty">加载中…（扫全主板约 5-10 秒）</div>';
+    poolEl.innerHTML = '<div class="tailbuy-empty">加载中…</div>';
+    if (statEl) statEl.textContent = '运行中…';
+    try {
+      const url = '/api/tail_buy' + (forceRefresh ? '?force=1' : '');
+      const data = await api('GET', url);
+      if (!data || !data.ok) throw new Error((data && data.error) || '无响应');
+      const picks = data.picks || [];
+      const pool = data.pool || [];
+      if (pickCnt) pickCnt.textContent = picks.length;
+      if (poolCnt) poolCnt.textContent = pool.length;
+      if (statEl) statEl.textContent = data.generated_at ? '更新于 ' + data.generated_at : '已生成';
+      const card = (r, isPick) => {
+        const px = r.price != null ? fmt(r.price) : '--';
+        const chg = r.change_pct != null ? (r.change_pct >= 0 ? '+' : '') + r.change_pct.toFixed(2) + '%' : '';
+        const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
+        const sc = r.score != null ? r.score : '--';
+        const tags = (r.rules_hit || []).map(h => `<span class="tb-rule-tag">${h}</span>`).join('');
+        const noTags = (r.rules_miss || []).map(h => `<span class="tb-rule-tag no">${h}</span>`).join('');
+        const next = r.next_open != null ? `<b style="color:#fff">${fmt(r.next_open)}</b>` : '<b style="color:var(--muted)">—</b>';
+        const sl = r.stop_loss != null ? `<b style="color:#e74c3c">${fmt(r.stop_loss)}</b>` : '<b style="color:var(--muted)">—</b>';
+        const tp = r.take_profit != null ? `<b style="color:#2ecc71">${fmt(r.take_profit)}</b>` : '<b style="color:var(--muted)">—</b>';
+        const amp = r.amp_pct != null ? r.amp_pct.toFixed(1) + '%' : '--';
+        return `<div class="tailbuy-card ${isPick ? 'tb-pick' : ''}" data-code="${r.code}">
+          <div class="tb-top">
+            <span class="tb-name">${r.name || r.code}<i class="tb-code">${r.code}</i></span>
+            <span class="tb-px">¥${px}</span>
+            <span class="tb-chg ${chgCls}">${chg}</span>
+            <span class="tb-score">${sc}</span>
+          </div>
+          <div class="tb-mid">
+            <div class="tb-mid-cell"><span>振幅</span><b>${amp}</b></div>
+            <div class="tb-mid-cell"><span>量比</span><b>${r.vol_ratio != null ? r.vol_ratio.toFixed(2) : '--'}</b></div>
+            <div class="tb-mid-cell"><span>主力净流</span><b style="color:${(r.main_fund_net||0) >= 0 ? '#e74c3c' : '#2ecc71'}">${r.main_fund_net != null ? (r.main_fund_net >= 0 ? '+' : '') + r.main_fund_net.toFixed(2) + '亿' : '--'}</b></div>
+            <div class="tb-mid-cell"><span>换手</span><b>${r.turnover != null ? r.turnover.toFixed(1) + '%' : '--'}</b></div>
+          </div>
+          <div class="tb-mid">
+            <div class="tb-mid-cell"><span>次日开</span>${next}</div>
+            <div class="tb-mid-cell"><span>止损</span>${sl}</div>
+            <div class="tb-mid-cell"><span>目标</span>${tp}</div>
+            <div class="tb-mid-cell"><span>持有</span><b>1-3 天</b></div>
+          </div>
+          <div class="tb-rules-hit">${tags}${noTags}</div>
+        </div>`;
+      };
+      pickEl.innerHTML = picks.length
+        ? picks.map(r => card(r, true)).join('')
+        : '<div class="tailbuy-empty">暂无达标（可能不在 14:50 后或主板无满足全部条件的票）</div>';
+      poolEl.innerHTML = pool.length
+        ? pool.slice(0, 30).map(r => card(r, false)).join('')
+        : '<div class="tailbuy-empty">候选池为空</div>';
+      // 点击卡片打开个股详情
+      [pickEl, poolEl].forEach(box => {
+        box.querySelectorAll('.tailbuy-card').forEach(c => {
+          c.addEventListener('click', () => openStock(c.dataset.code, c.dataset.code));
+        });
+      });
+    } catch (e) {
+      pickEl.innerHTML = `<div class="tailbuy-empty">尾盘买入法加载失败：${(e && e.message) || e}<br><span style="font-size:11px">首次会缓存股票池，1-2 分钟后重试</span></div>`;
+      poolEl.innerHTML = '';
+      if (statEl) statEl.textContent = '加载失败';
+    }
+  }
+
+  // ========== r27 复盘视图 ==========
+  async function renderReview() {
+    const elMeta = document.getElementById('todayPredMeta');
+    const body = document.getElementById('todayPredBody');
+    const hist = document.getElementById('reviewHistoryList');
+    if (!body || !hist) return;
+    body.innerHTML = '<tr><td colspan="15" class="empty-cell">加载今日预测中…</td></tr>';
+    hist.innerHTML = '<div class="dash-monitor-empty">加载历史记录中…</div>';
+    try {
+      // 1) 今日预测
+      const td = await api('GET', '/api/review/today');
+      const today = td.prediction || td || {};
+      const rows = today.rows || [];
+      if (elMeta) {
+        elMeta.innerHTML = today.date
+          ? `<b>${today.date}</b>　生成于 ${today.generated_at || today.date + ' 09:30'}　置信度 ${today.confidence || '--'}%　${today.market_note || ''}`
+          : '今日尚未生成预测 — 点击右上「立即生成今日预测」';
+      }
+      body.innerHTML = rows.length
+        ? rows.map(r => {
+          const dirActual = r.dir_actual || '-';
+          const dirPred = r.dir_pred || '-';
+          const dirCell = (dirActual === 'up') ? '<span class="tp-dir-h">↑ 涨</span>'
+                        : (dirActual === 'down') ? '<span class="tp-dir-w">↓ 跌</span>'
+                        : '<span class="tp-dir-x">→ 平</span>';
+          const dirHit = (dirPred === dirActual) ? '<span class="tp-acc-ok">✓</span>'
+                       : (dirPred && dirActual && dirPred !== '-') ? '<span class="tp-acc-no">✗</span>'
+                       : '<span class="tp-acc-mid">待</span>';
+          const ampHit = (r.amp_pred != null && r.amp_actual != null)
+            ? (Math.abs(r.amp_actual - r.amp_pred) < 1 ? '<span class="tp-acc-ok">✓</span>'
+              : Math.abs(r.amp_actual - r.amp_pred) < 3 ? '<span class="tp-acc-mid">≈</span>'
+              : '<span class="tp-acc-no">✗</span>')
+            : '<span class="tp-acc-mid">待</span>';
+          const hiHit = (r.high_pred != null && r.high_actual != null)
+            ? (Math.abs(r.high_actual - r.high_pred) / Math.max(r.high_pred, 0.01) < 0.01 ? '<span class="tp-acc-ok">✓</span>'
+              : Math.abs(r.high_actual - r.high_pred) / Math.max(r.high_pred, 0.01) < 0.03 ? '<span class="tp-acc-mid">≈</span>'
+              : '<span class="tp-acc-no">✗</span>')
+            : '<span class="tp-acc-mid">待</span>';
+          const loHit = (r.low_pred != null && r.low_actual != null)
+            ? (Math.abs(r.low_actual - r.low_pred) / Math.max(r.low_pred, 0.01) < 0.01 ? '<span class="tp-acc-ok">✓</span>'
+              : Math.abs(r.low_actual - r.low_pred) / Math.max(r.low_pred, 0.01) < 0.03 ? '<span class="tp-acc-mid">≈</span>'
+              : '<span class="tp-acc-no">✗</span>')
+            : '<span class="tp-acc-mid">待</span>';
+          return `<tr class="tp-row-pos">
+            <td class="name"><b>${r.name || r.code}</b><br><span class="code">${r.code}</span></td>
+            <td class="r">${r.open_pred != null ? fmt(r.open_pred) : '—'}</td>
+            <td class="r">${r.high_pred != null ? fmt(r.high_pred) : '—'}</td>
+            <td class="r">${r.low_pred != null ? fmt(r.low_pred) : '—'}</td>
+            <td class="r">${r.close_pred != null ? fmt(r.close_pred) : '—'}</td>
+            <td class="r ${(r.amp_pred||0) >= 0 ? 'up' : 'down'}">${r.amp_pred != null ? (r.amp_pred >= 0 ? '+' : '') + r.amp_pred.toFixed(2) + '%' : '—'}</td>
+            <td class="r">${r.open_actual != null ? fmt(r.open_actual) : '—'}</td>
+            <td class="r">${r.high_actual != null ? fmt(r.high_actual) : '—'}</td>
+            <td class="r">${r.low_actual != null ? fmt(r.low_actual) : '—'}</td>
+            <td class="r">${r.close_actual != null ? fmt(r.close_actual) : '—'}</td>
+            <td class="r ${(r.amp_actual||0) >= 0 ? 'up' : 'down'}">${r.amp_actual != null ? (r.amp_actual >= 0 ? '+' : '') + r.amp_actual.toFixed(2) + '%' : '—'}</td>
+            <td>${dirHit}</td><td>${ampHit}</td><td>${hiHit}</td><td>${loHit}</td>
+          </tr>`;
+        }).join('')
+        : '<tr><td colspan="15" class="empty-cell">尚未生成今日预测</td></tr>';
+
+      // 2) 历史记录
+      const hd = await api('GET', '/api/review/history');
+      const history = hd.history || [];
+      hist.innerHTML = history.length
+        ? history.map(day => {
+          const dr = day.stats || {};
+          return `<div class="rh-day">
+            <div class="rh-day-head">
+              <span>📅 ${day.date}　<b>${day.market_note || ''}</b></span>
+              <span class="rh-day-stats">
+                共 <b>${dr.total || 0}</b> 只 · 方向 <span class="ok">${dr.dir_hit || 0}</span>/<span class="no">${dr.dir_miss || 0}</span>
+                · 幅度 <span class="ok">${dr.amp_hit || 0}</span>/<span class="no">${dr.amp_miss || 0}</span>
+                · 高 <span class="ok">${dr.hi_hit || 0}</span>/<span class="no">${dr.hi_miss || 0}</span>
+                · 低 <span class="ok">${dr.lo_hit || 0}</span>/<span class="no">${dr.lo_miss || 0}</span>
+              </span>
+            </div>
+            <table class="rh-day-table">
+              <thead><tr>
+                <th>持仓</th><th>方向</th><th>预测%</th><th>实际%</th><th>幅度</th><th>高</th><th>低</th>
+              </tr></thead>
+              <tbody>${(day.rows || []).map(r => {
+                const dir = r.dir_actual || '-';
+                const dirCell = (dir === 'up') ? '<span class="tp-dir-h">↑</span>' : (dir === 'down') ? '<span class="tp-dir-w">↓</span>' : '<span class="tp-dir-x">→</span>';
+                return `<tr>
+                  <td>${r.name || r.code}</td>
+                  <td>${dirCell}</td>
+                  <td>${r.amp_pred != null ? (r.amp_pred >= 0 ? '+' : '') + r.amp_pred.toFixed(2) + '%' : '—'}</td>
+                  <td>${r.amp_actual != null ? (r.amp_actual >= 0 ? '+' : '') + r.amp_actual.toFixed(2) + '%' : '—'}</td>
+                  <td>${r.dir_hit ? '<span class="tp-acc-ok">✓</span>' : '<span class="tp-acc-no">✗</span>'}</td>
+                  <td>${r.amp_hit ? '<span class="tp-acc-ok">✓</span>' : r.amp_hit === false ? '<span class="tp-acc-no">✗</span>' : '—'}</td>
+                  <td>${r.hi_hit ? '<span class="tp-acc-ok">✓</span>' : r.hi_hit === false ? '<span class="tp-acc-no">✗</span>' : '—'}</td>
+                  <td>${r.lo_hit ? '<span class="tp-acc-ok">✓</span>' : r.lo_hit === false ? '<span class="tp-acc-no">✗</span>' : '—'}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>`;
+        }).join('')
+        : '<div class="dash-monitor-empty">尚无历史记录</div>';
+
+      // 3) 累计统计
+      const sd = await api('GET', '/api/review/stats');
+      const s = sd.stats || {};
+      const setv = (id, v, cls) => { const e = document.getElementById(id); if (e) { e.textContent = v; e.classList.remove('up', 'down'); if (cls) e.classList.add(cls); } };
+      setv('rvTotalDays', s.total_days != null ? s.total_days + ' 天' : '--');
+      setv('rvDirAcc', s.dir_acc != null ? s.dir_acc + '%' : '--', (s.dir_acc || 0) >= 60 ? 'up' : 'down');
+      setv('rvPctErr', s.amp_mae != null ? s.amp_mae.toFixed(2) + '%' : '--');
+      setv('rvHiAcc', s.hi_acc != null ? s.hi_acc + '%' : '--', (s.hi_acc || 0) >= 60 ? 'up' : 'down');
+      setv('rvLoAcc', s.lo_acc != null ? s.lo_acc + '%' : '--', (s.lo_acc || 0) >= 60 ? 'up' : 'down');
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="15" class="empty-cell">加载失败：${(e && e.message) || e}</td></tr>`;
+      hist.innerHTML = `<div class="dash-monitor-empty">加载失败：${(e && e.message) || e}</div>`;
+    }
+  }
+  // r27：复盘视图的"立即生成今日预测" / "核对今日实际"两个按钮
+  function bindReviewButtons() {
+    const btnP = document.getElementById('rvPredictBtn');
+    const btnC = document.getElementById('rvCheckBtn');
+    const refresh = document.getElementById('tailbuyRefresh');
+    if (btnP) btnP.addEventListener('click', async () => {
+      btnP.disabled = true; btnP.textContent = '生成中…';
+      try {
+        const r = await api('POST', '/api/review/predict', {});
+        toast(r && r.ok ? '已生成今日预测（' + (r.count || 0) + ' 只）' : '生成失败：' + (r && r.error || '未知'));
+        renderReview();
+      } catch (e) { toast('生成失败：' + (e && e.message || e)); }
+      btnP.disabled = false; btnP.textContent = '立即生成今日预测';
+    });
+    if (btnC) btnC.addEventListener('click', async () => {
+      btnC.disabled = true; btnC.textContent = '核对中…';
+      try {
+        const r = await api('POST', '/api/review/check', {});
+        toast(r && r.ok ? '已核对（方向 ' + (r.dir_hit || 0) + '/' + (r.dir_total || 0) + '）' : '核对失败：' + (r && r.error || '未知'));
+        renderReview();
+      } catch (e) { toast('核对失败：' + (e && e.message || e)); }
+      btnC.disabled = false; btnC.textContent = '核对今日实际';
+    });
+    if (refresh) refresh.addEventListener('click', () => renderTailBuy(true));
   }
 
   // 全局错误兜底：任何未捕获的报错都只在控制台警告，不阻塞后续流程（出现红屏空白就糟了）
