@@ -675,8 +675,8 @@ function renderAiAdvice(positions) {
     try { bindReviewButtons(); } catch (e) { console.warn('[wb] bindReviewButtons:', e && e.message); }
     try { bindKline(); } catch (e) { console.warn('[wb] bindKline:', e && e.message); }
     // 任何一步失败都不影响其余渲染（避免整页白屏）
-    try { await loadWatchlist(); } catch (e) { console.warn("自选加载失败：", e); }
-    try { await loadPositions(); } catch (e) { console.warn("持仓加载失败：", e); }
+    // 首屏提速：自选 + 持仓 并发拉取
+    try { await Promise.all([loadWatchlist(), loadPositions()]); } catch (e) { console.warn("自选/持仓并发加载失败：", e); }
     // 让真实持仓立即出现在行情看板左侧（无需等自动优选扫描）
     try { if ((!state.view || state.view === "dashboard") && typeof renderSelfStocks === "function") renderSelfStocks(); } catch (e) {}
     try { setupWeights(cfg); } catch (e) {}
@@ -695,21 +695,7 @@ function renderAiAdvice(positions) {
     // 尾盘策略：30 秒刷新（r27 已删，保留空壳兼容旧调用）
     try { loadTailStrategy(); } catch (e) {}
     state.timers.push(setInterval(loadTailStrategy, 30000));
-    // 每日策略：开盘判断 / 四时点快照 / 收盘复盘（30 秒刷新，后端自动补齐缺失记录）
-    state.dailySnapTab = "09:30";
-    try { pollDailyStrategy(); } catch (e) {}
-    state.timers.push(setInterval(pollDailyStrategy, 30000));
-    // 四时点快照切换
-    const snapTabs = document.getElementById("dailySnapTabs");
-    if (snapTabs) {
-      snapTabs.addEventListener("click", e => {
-        const btn = e.target.closest(".ds-btn");
-        if (!btn) return;
-        state.dailySnapTab = btn.dataset.t || "09:30";
-        snapTabs.querySelectorAll(".ds-btn").forEach(b => b.classList.toggle("active", b === btn));
-        if (state.daily) renderDailySnap(state.daily);
-      });
-    }
+    // 每日策略已删除（用户反馈不需要）：pollDailyStrategy/renderDaily/renderDailySnap/_dsColor 函数定义保留作废代码，init() 不再触发
     // r27：旧 loadReview（每日复盘）已删，保留空函数避免旧引用报错；新版复盘在 review 视图按需拉取
     try { loadReview(); } catch (e) {}
     // r27：信号扫描页首次进入时预热尾盘买入法候选池
@@ -721,10 +707,10 @@ function renderAiAdvice(positions) {
         }
       }).catch(() => {});
     } catch (e) {}
-    // 自动优选：3 秒后异步触发，不阻塞首屏（再每 10 分钟重扫）
+    // 自动优选：8 秒后异步触发（延后避免抢首屏带宽；再每 10 分钟重扫）
     setTimeout(() => {
       autoScan().catch(e => console.warn("自动优选启动失败：", e));
-    }, 3000);
+    }, 8000);
     state.timers.push(setInterval(autoScan, 10 * 60 * 1000));
   }
 
