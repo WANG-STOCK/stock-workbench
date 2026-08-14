@@ -2061,6 +2061,12 @@ body.theme-dark { background: var(--bg); }
 .k4-label { font-size: 11px; color: var(--muted); }
 .k4-val { font-size: 18px; font-weight: 700; font-family: 'Consolas',monospace; margin-top: 2px; }
 .k4-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+/* r37：板块扫描区手动刷新按钮 + 状态 */
+.scan-fresh-btn { padding: 3px 10px; font-size: 12px; margin-right: 6px; }
+.scan-fresh-status { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.scan-fresh-status.running { color: #fbbf24; }
+.scan-fresh-status.done    { color: #6ee7a8; }
+.scan-fresh-status.fail    { color: #fca5a5; }
 .pos-table-wrap { flex: 1; min-height: 0; overflow: auto; }
 .hm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .hm-table th { position: sticky; top: 0; background: #161b22; color: var(--muted); font-weight: 400; padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); z-index: 1; }
@@ -2100,7 +2106,7 @@ body.theme-dark { background: var(--bg); }
 .ai-sent-val.lvl-hold { background: transparent; border: none; color: #aeb9c6; }
 .ai-sent-val.lvl-sell { background: transparent; border: none; color: #6ee7a8; }
 
-.ai-levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; flex: none; }
+.ai-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; flex: none; }
 .ail { background: #11151b; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; text-align: center; }
 .ail span { display: block; font-size: 11px; color: var(--muted); }
 .ail b { font-size: 14px; font-family: 'Consolas',monospace; }
