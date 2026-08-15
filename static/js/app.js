@@ -1861,57 +1861,137 @@ function renderAiAdvice(positions) {
     fillTpIndicators(indicators);
   }
 
-  // ---- 模式1【分时】line + areaStyle 渐变 + 1 根金黄 MA ----
-  function buildIntradayOption(bars, indicators) {
-    const cats = bars.map(b => b.date);
-    const closes = bars.map(b => +b.close);
-    const isUpAll = closes[closes.length - 1] >= closes[0];
-    const lineColor = isUpAll ? "#ff4c4c" : "#36d170";
-    const ma5 = (indicators && indicators.ma5) ? indicators.ma5 : smaArr(closes, 5);
-    const volData = bars.map(b => {
-      const up = +b.close >= +b.open;
-      return { value: +b.volume, itemStyle: { color: up ? "#ff4c4c" : "#36d170" } };
+  // ---- 均价（累计成交额/累计成交量）----
+  function _calcAvgPrice(bars) {
+    let cumVol = 0, cumPV = 0;
+    return (bars || []).map(b => {
+      const v = +b.volume || 0, p = +b.close || 0;
+      cumVol += v; cumPV += v * p;
+      return cumVol > 0 ? cumPV / cumVol : p;
     });
-    const tipColor = (b) => (+b.close >= +b.open) ? "#ff4c4c" : "#36d170";
+  }
+
+  // ---- 模式1【分时】line（蓝）+ 均价（金黄）+ area（蓝色渐变）+ 昨收 markLine + 当前价 markPoint + KDJ + MACD 子图 ----
+  function buildIntradayOption(bars, indicators) {
+    // x 类目：分时 HH:MM（兼容 "2026-08-14 09:30" 与 "09:30"）
+    const cats = bars.map(b => {
+      const d = b.date || "";
+      return d.length > 10 ? d.substring(11, 16) : d;
+    });
+    const closes = bars.map(b => +b.close);
+    const avgPrices = _calcAvgPrice(bars);
+
+    // 昨收近似：第一根 bar 的 open
+    const refPrice = bars[0] ? +bars[0].open : (closes[0] || 0);
+    const lastIdx = bars.length - 1;
+    const lastPrice = closes[lastIdx] || 0;
+    const chgPct = refPrice ? ((lastPrice - refPrice) / refPrice * 100) : 0;
+    const isUpLast = lastPrice >= refPrice;
+    const chgColor = isUpLast ? "#ff4c4c" : "#36d170";
+    const chgStr = (chgPct >= 0 ? "+" : "") + chgPct.toFixed(2) + "%";
+
+    // 量能柱（涨红跌绿）
+    const volData = bars.map(b => ({
+      value: +b.volume || 0,
+      itemStyle: { color: (+b.close >= +b.open) ? "#ff4c4c" : "#36d170" }
+    }));
+
+    // KDJ / MACD 数组（computeIndicatorsFull 已生成）
+    const kdj = (indicators && indicators.kdj) || { k: [], d: [], j: [] };
+    const macd = (indicators && indicators.macd) || { dif: [], dea: [], macd: [] };
+    const macdBarData = (macd.macd || []).map(v => ({
+      value: v == null ? 0 : v,
+      itemStyle: { color: (v == null || v < 0) ? "#36d170" : "#ff4c4c" }
+    }));
+
     return {
       backgroundColor: "#121214", animation: false,
       textStyle: { fontFamily: "Inter, sans-serif", color: "#aaaaaa" },
-      grid: [{ left: 52, right: 14, top: 14, height: "66%" }, { left: 52, right: 14, top: "76%", height: "18%" }],
+      // 4 个 grid：主图 50% / 量能 12% / KDJ 14% / MACD 12%
+      grid: [
+        { left: 50, right: 56, top: 14,    height: "50%" },
+        { left: 50, right: 56, top: "56%", height: "12%" },
+        { left: 50, right: 56, top: "70%", height: "14%" },
+        { left: 50, right: 56, top: "86%", height: "12%" }
+      ],
+      dataZoom: [{ type: "inside", xAxisIndex: [0, 1, 2, 3], start: 0, end: 100 }],
       tooltip: {
         trigger: "axis",
-        axisPointer: { type: "cross", lineStyle: { color: "#5a5a60", type: "dashed" }, crossStyle: { color: "#5a5a60" } },
-        backgroundColor: "rgba(15,15,15,0.95)", borderColor: "#444", textStyle: { color: "#e5e7eb", fontSize: 11 },
+        axisPointer: { type: "cross", lineStyle: { color: "#5a5a60", type: "dashed" }, crossStyle: { color: "#5a5a60" }, label: { backgroundColor: "#1e1e22" } },
+        backgroundColor: "rgba(15,15,15,0.95)", borderColor: "#444", textStyle: { color: "#e5e7eb", fontSize: 11, fontFamily: "Inter" },
         formatter: function (ps) {
-          const i = ps[0].dataIndex, b = bars[i], col = tipColor(b);
-          const mv = (indicators && indicators.ma5 && indicators.ma5[i] != null) ? (+indicators.ma5[i]).toFixed(2) : "--";
-          return '<div style="font-size:11px"><b style="color:#f3f4f6">' + b.date + '</b></div>'
-            + '<div style="font-size:11px">开 ' + (+b.open).toFixed(2) + ' 收 <b style="color:' + col + '">' + (+b.close).toFixed(2) + '</b></div>'
-            + '<div style="font-size:11px">高 ' + (+b.high).toFixed(2) + ' 低 ' + (+b.low).toFixed(2) + '</div>'
-            + '<div style="font-size:11px">量 ' + (+b.volume).toLocaleString("zh-CN") + '</div>'
-            + '<div style="font-size:11px;color:#d1d5db">MA5 ' + mv + '</div>';
+          const i = ps[0].dataIndex, b = bars[i];
+          const col = (+b.close >= +b.open) ? "#ff4c4c" : "#36d170";
+          const avg = avgPrices[i] != null ? (+avgPrices[i]).toFixed(2) : "--";
+          const kv = kdj.k && kdj.k[i] != null ? (+kdj.k[i]).toFixed(1) : "--";
+          const dv = kdj.d && kdj.d[i] != null ? (+kdj.d[i]).toFixed(1) : "--";
+          const jv = kdj.j && kdj.j[i] != null ? (+kdj.j[i]).toFixed(1) : "--";
+          const difv = macd.dif && macd.dif[i] != null ? (+macd.dif[i]).toFixed(3) : "--";
+          const deav = macd.dea && macd.dea[i] != null ? (+macd.dea[i]).toFixed(3) : "--";
+          const mhv = macd.macd && macd.macd[i] != null ? (+macd.macd[i]).toFixed(3) : "--";
+          return `<div style="font-size:11px;font-family:Inter"><b style="color:#f3f4f6">${b.date || ""}</b></div>`
+            + `<div style="font-size:11px">价 <b style="color:#3b82f6">${(+b.close).toFixed(2)}</b>  均 <b style="color:#ffc120">${avg}</b></div>`
+            + `<div style="font-size:11px;color:${col}">开 ${(+b.open).toFixed(2)}  收 ${(+b.close).toFixed(2)}</div>`
+            + `<div style="font-size:11px">高 ${(+b.high).toFixed(2)}  低 ${(+b.low).toFixed(2)}  量 ${(+b.volume).toLocaleString("zh-CN")}</div>`
+            + `<div style="font-size:11px;color:#9ca3af;border-top:1px dashed #444;margin-top:3px;padding-top:3px">KDJ ${kv} / ${dv} / ${jv}</div>`
+            + `<div style="font-size:11px;color:#9ca3af">MACD ${difv} / ${deav} / ${mhv}</div>`;
         }
       },
       axisPointer: { link: [{ xAxisIndex: "all" }] },
       xAxis: [
-        { type: "category", data: cats, boundaryGap: false, gridIndex: 0, axisLine: { lineStyle: { color: "#3a3a3f" } }, axisLabel: { color: "#aaaaaa", fontSize: 10, interval: Math.floor(cats.length / 6) }, axisTick: { show: false }, splitLine: { show: false } },
-        { type: "category", data: cats, boundaryGap: false, gridIndex: 1, axisLine: { lineStyle: { color: "#3a3a3f" } }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+        { type: "category", data: cats, boundaryGap: false, gridIndex: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+        { type: "category", data: cats, boundaryGap: false, gridIndex: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+        { type: "category", data: cats, boundaryGap: false, gridIndex: 2, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+        { type: "category", data: cats, boundaryGap: false, gridIndex: 3, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, splitLine: { show: false } }
       ],
       yAxis: [
-        { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10 }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a30", type: "dashed" } } },
-        { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+        { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a2f", type: "dashed" } } },
+        { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+        { scale: true, gridIndex: 2, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10 }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a2f", type: "dashed" } } },
+        { scale: true, gridIndex: 3, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10 }, axisTick: { show: false }, splitLine: { show: false } }
       ],
       series: [
-        { name: "price", type: "line", data: closes, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true,
-          lineStyle: { color: lineColor, width: 2 },
+        // 主图：价格线（蓝色固定 + 蓝色渐变 area）
+        { name: "price", type: "line", data: closes, xAxisIndex: 0, yAxisIndex: 0,
+          showSymbol: false, smooth: false,
+          lineStyle: { color: "#3b82f6", width: 2 },
           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: isUpAll ? "rgba(255,76,76,0.55)" : "rgba(54,209,112,0.55)" },
-            { offset: 1, color: isUpAll ? "rgba(255,76,76,0.02)" : "rgba(54,209,112,0.02)" } ]) } },
-        { name: "MA5", type: "line", data: ma5, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true, lineStyle: { color: "#ffc120", width: 1.8 } },
-        { name: "vol", type: "bar", data: volData, xAxisIndex: 1, yAxisIndex: 1 }
+            { offset: 0, color: "rgba(59,130,246,0.55)" },
+            { offset: 1, color: "rgba(59,130,246,0.02)" }
+          ]) },
+          markPoint: {
+            symbol: "rect", symbolSize: [62, 18], symbolOffset: [31, -10],
+            itemStyle: { color: chgColor },
+            label: { show: true, formatter: chgStr, color: "#ffffff", fontSize: 10, fontWeight: "bold", fontFamily: "Inter" },
+            data: [{ coord: [lastIdx, lastPrice] }]
+          },
+          markLine: {
+            symbol: "none",
+            lineStyle: { color: "#777", type: "dashed", width: 1 },
+            label: { show: true, formatter: refPrice.toFixed(2), position: "insideStartTop", color: "#888", fontSize: 10, fontFamily: "Inter" },
+            data: [{ yAxis: refPrice }]
+          },
+          z: 3
+        },
+        // 主图：均价线（金黄平滑）
+        { name: "avg", type: "line", data: avgPrices, xAxisIndex: 0, yAxisIndex: 0,
+          showSymbol: false, smooth: true,
+          lineStyle: { color: "#ffc120", width: 1.8 },
+          z: 2
+        },
+        // 量能柱（涨红跌绿）
+        { name: "vol", type: "bar", data: volData, xAxisIndex: 1, yAxisIndex: 1, barWidth: "70%" },
+        // KDJ 三线
+        { name: "K", type: "line", data: kdj.k || [], xAxisIndex: 2, yAxisIndex: 2, showSymbol: false, smooth: true, lineStyle: { color: "#ffc120", width: 1.4 } },
+        { name: "D", type: "line", data: kdj.d || [], xAxisIndex: 2, yAxisIndex: 2, showSymbol: false, smooth: true, lineStyle: { color: "#3488eb", width: 1.4 } },
+        { name: "J", type: "line", data: kdj.j || [], xAxisIndex: 2, yAxisIndex: 2, showSymbol: false, smooth: true, lineStyle: { color: "#a855f7", width: 1.4 } },
+        // MACD: DIF + DEA + MACD 柱
+        { name: "DIF", type: "line", data: macd.dif || [], xAxisIndex: 3, yAxisIndex: 3, showSymbol: false, smooth: false, lineStyle: { color: "#ffc120", width: 1.4 } },
+        { name: "DEA", type: "line", data: macd.dea || [], xAxisIndex: 3, yAxisIndex: 3, showSymbol: false, smooth: false, lineStyle: { color: "#3b82f6", width: 1.4 } },
+        { name: "MACD", type: "bar", data: macdBarData, xAxisIndex: 3, yAxisIndex: 3, barWidth: "50%" }
       ]
     };
   }
-
   // ---- 模式2【日K+指标】candlestick（无 areaStyle）+ MA5金/MA10蓝/MA20灰 + 量能随涨跌 ----
   function buildDailyOption(bars, indicators) {
     const cats = bars.map(b => b.date);
