@@ -1899,10 +1899,11 @@ function renderAiAdvice(positions) {
       return {
         backgroundColor: "#121214", animation: false,
         textStyle: { fontFamily: "Inter, sans-serif", color: "#aaaaaa" },
-        // 2 个 grid 顶满 100% 高度：主图 + 量能（不留白、不再画 KDJ/MACD 子图）
+        // 2 个 grid：K线主图在顶部（72%），量能在底部（22%），用纯百分比避开 ECharts 对 calc() 解析不稳的坑
+        // grid[0] = 主图（顶部），grid[1] = 量能（底部）—— gridIndex 顺序就是视觉上下顺序
         grid: [
-          { left: 50, right: 60, top: 8,                          height: "calc(100% - 108px)" },
-          { left: 50, right: 60, top: "calc(100% - 100px)",       height: 92 }
+          { left: 50, right: 60, top: 12,       height: "72%" },
+          { left: 50, right: 60, top: "76%",    height: "22%" }
         ],
         dataZoom: [{ type: "inside", xAxisIndex: [0, 1], start: 0, end: 100, zoomLock: false }],
         tooltip: {
@@ -1921,11 +1922,15 @@ function renderAiAdvice(positions) {
         },
         axisPointer: { link: [{ xAxisIndex: "all" }] },
         xAxis: [
+          // grid[0] 主图：顶部 x 轴不显示标签（避免与下方量能 x 轴重复）
           { type: "category", data: cats, boundaryGap: false, gridIndex: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+          // grid[1] 量能：底部 x 轴显示时间标签
           { type: "category", data: cats, boundaryGap: false, gridIndex: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, splitLine: { show: false } }
         ],
         yAxis: [
+          // grid[0] 主图 y 轴：右侧显示价格刻度 + 浅灰虚线网格
           { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a2f", type: "dashed" } } },
+          // grid[1] 量能 y 轴：右侧隐藏刻度（量能大小不需要数字）
           { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
         ],
         series: [
@@ -1957,7 +1962,7 @@ function renderAiAdvice(positions) {
             lineStyle: { color: "#ffc120", width: 1.8 },
             z: 2
           },
-          // 量能柱（涨红跌绿）
+          // 量能柱（涨红跌绿）—— grid[1] 在底部
           { name: "vol", type: "bar", data: volData, xAxisIndex: 1, yAxisIndex: 1, barWidth: "70%" }
         ]
       };
