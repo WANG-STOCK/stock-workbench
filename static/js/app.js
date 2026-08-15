@@ -1892,6 +1892,8 @@ function renderAiAdvice(positions) {
         // 把 data 合并到 layout（首次需要完整）—— 5 个 series：priceBg / price / avg / volBg / vol
         layout.xAxis[0].data = data.xAxis[0].data;
         layout.xAxis[1].data = data.xAxis[1].data;
+        layout.yAxis[0].min = data.yAxis[0].min;   // r40k：锚定昨收 ±5%，防"变大变小"
+        layout.yAxis[0].max = data.yAxis[0].max;
         layout.series[0].data = data.series[0].data;     // priceBg
         layout.series[0].areaStyle = data.series[0].areaStyle;
         layout.series[1].data = data.series[1].data;     // price
@@ -1905,9 +1907,10 @@ function renderAiAdvice(positions) {
         try { _tpChartInst.resize(); } catch (e) {}   // r40h：setOption(true) 后立即 resize，让 grid/canvas 按真实容器尺寸铺满
         _tpIntraInited = true;
       } else {
-        // 同模式：仅更新 series + xAxis.data，grid/yAxis/tooltip 全不动
+        // 同模式：仅更新 series + xAxis.data + yAxis[0].min/max，grid/yAxis[0]其它属性全不动
         _tpChartInst.setOption({
           xAxis: [{ data: data.xAxis[0].data }, { data: data.xAxis[1].data }],
+          yAxis: [{ min: data.yAxis[0].min, max: data.yAxis[0].max }, {}],
           series: [
             { name: "priceBg", data: data.series[0].data, areaStyle: data.series[0].areaStyle },
             { name: "price",   data: data.series[1].data, lineStyle: data.series[1].lineStyle, areaStyle: data.series[1].areaStyle },
@@ -1976,7 +1979,7 @@ function _tpIntraLayout() {
         { type: "category", data: [], boundaryGap: false, gridIndex: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter", margin: 0, padding: [0, 0, 0, 0] }, splitLine: { show: false } }
       ],
       yAxis: [
-        // grid[0] 主图 y 轴：右侧显示价格刻度 + 浅灰虚线网格
+        // grid[0] 主图 y 轴：右侧显示价格刻度 + 浅灰虚线网格 —— min/max 由 _tpIntraData 动态注入（锚定昨收 ±5%，只向外扩不缩）
         { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a2f", type: "dashed" } } },
         // grid[1] 量能 y 轴：右侧隐藏刻度（量能大小不需要数字）
         { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
@@ -2035,11 +2038,22 @@ function _tpIntraLayout() {
     const volData = bars.map(b => ({ value: +b.volume || 0,
       itemStyle: { color: (+b.close >= +b.open) ? "#ff4c4c" : "#36d170" } }));
 
+    // r40k：y 轴范围锚定到昨收 ±5%，只向外扩不缩 → 5 秒刷新时 y 轴范围稳定，画面不"变大变小"
+    const halfRange = refPrice * 0.05;
+    let minY = refPrice - halfRange;
+    let maxY = refPrice + halfRange;
+    const dataMin = Math.min(...closes);
+    const dataMax = Math.max(...closes);
+    // 真突破 ±5% 时才向外扩，且只扩不缩
+    if (dataMax > maxY) maxY = dataMax * 1.005;
+    if (dataMin < minY) minY = dataMin * 0.995;
+
     return {
       xAxis: [{ data: cats }, { data: cats }],
+      yAxis: [{ min: minY, max: maxY }, {}],   // yAxis[1] 量能不设范围
       series: [
-        // priceBg：涨跌色浅，平铺 maxPrice*1.05，area 从顶到底覆盖 grid[0]
-        { name: "priceBg", data: bars.map(() => maxPrice),
+        // priceBg：涨跌色浅，平铺在 y 轴顶部（maxY），area 从顶到底覆盖 grid[0]
+        { name: "priceBg", data: bars.map(() => maxY),
           areaStyle: { color: "rgba(" + chgRgb + ",0.18)" } },
         // price：涨跌色折线 + 涨跌色 area 渐变
         { name: "price", data: closes,
