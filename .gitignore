@@ -14,4 +14,9 @@ _srv.log
 data/_scheduler_heartbeat.json
 data/trade_log.json
 static/trade_log.json
+# 运行时缓存(非源码)
+data/account.json
+data/daily_strategy.json
+data/quote_cache.json
+data/strategy_calibration.json
 
