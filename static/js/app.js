@@ -1889,15 +1889,18 @@ function renderAiAdvice(positions) {
       const data = _tpIntraData(bars);
       // 首次 OR 跨模式：完整 layout + data 重建
       if (!_tpLastMode || _tpLastMode !== mode || !_tpIntraInited) {
-        // 把 data 合并到 layout（首次需要完整）
+        // 把 data 合并到 layout（首次需要完整）—— 5 个 series：priceBg / price / avg / volBg / vol
         layout.xAxis[0].data = data.xAxis[0].data;
         layout.xAxis[1].data = data.xAxis[1].data;
-        layout.series[0].data = data.series[0].data;
-        layout.series[0].markPoint = data.series[0].markPoint;
-        layout.series[0].markLine = data.series[0].markLine;
-        layout.series[1].data = data.series[1].data;
-        layout.series[2].data = data.series[2].data;
-        layout.series[3].data = data.series[3].data;
+        layout.series[0].data = data.series[0].data;     // priceBg
+        layout.series[0].areaStyle = data.series[0].areaStyle;
+        layout.series[1].data = data.series[1].data;     // price
+        layout.series[1].lineStyle = data.series[1].lineStyle;
+        layout.series[1].areaStyle = data.series[1].areaStyle;
+        layout.series[2].data = data.series[2].data;     // avg
+        layout.series[3].data = data.series[3].data;     // volBg
+        layout.series[3].areaStyle = data.series[3].areaStyle;
+        layout.series[4].data = data.series[4].data;     // vol
         _tpChartInst.setOption(layout, true);   // notMerge=true 强制重建
         try { _tpChartInst.resize(); } catch (e) {}   // r40h：setOption(true) 后立即 resize，让 grid/canvas 按真实容器尺寸铺满
         _tpIntraInited = true;
@@ -1906,12 +1909,11 @@ function renderAiAdvice(positions) {
         _tpChartInst.setOption({
           xAxis: [{ data: data.xAxis[0].data }, { data: data.xAxis[1].data }],
           series: [
-            { name: "price", data: data.series[0].data,
-              markPoint: data.series[0].markPoint,
-              markLine: data.series[0].markLine },
-            { name: "avg",    data: data.series[1].data },
-            { name: "volBg",  data: data.series[2].data },
-            { name: "vol",    data: data.series[3].data }
+            { name: "priceBg", data: data.series[0].data, areaStyle: data.series[0].areaStyle },
+            { name: "price",   data: data.series[1].data, lineStyle: data.series[1].lineStyle, areaStyle: data.series[1].areaStyle },
+            { name: "avg",     data: data.series[2].data },
+            { name: "volBg",   data: data.series[3].data, areaStyle: data.series[3].areaStyle },
+            { name: "vol",     data: data.series[4].data }
           ]
         }, { lazyUpdate: true });
       }
@@ -1980,27 +1982,31 @@ function _tpIntraLayout() {
         { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
       ],
       series: [
-        // 主图：价格线（蓝色固定 + 蓝色渐变 area + 当前价标记 + 昨收参考虚线）
+        // r40j：主图背景层（line 平铺在 maxPrice*1.05 + area 从顶到底覆盖整个 grid[0]，涨跌色淡）——
+        //      视觉上让 grid[0] 整片涨跌色铺底，参考中国平安图风格
+        { name: "priceBg", type: "line", data: [], xAxisIndex: 0, yAxisIndex: 0,
+          showSymbol: false, smooth: false, connectNulls: true,
+          lineStyle: { width: 0, color: "transparent" },
+          areaStyle: { color: "rgba(54,209,112,0.18)" },   // 默认跌绿（开跌场景），运行时由 _tpIntraData 改色
+          z: 0, silent: true },
+        // 主图：价格折线 + 涨跌色 area（涨红 #ff4c4c / 跌绿 #36d170）
         { name: "price", type: "line", data: [], xAxisIndex: 0, yAxisIndex: 0,
           showSymbol: false, smooth: false,
-          lineStyle: { color: "#3b82f6", width: 2 },
+          lineStyle: { color: "#36d170", width: 2 },   // 默认跌绿，运行时由 _tpIntraData 改色
           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(59,130,246,0.55)" },
-            { offset: 1, color: "rgba(59,130,246,0.02)" }
+            { offset: 0, color: "rgba(54,209,112,0.55)" },
+            { offset: 1, color: "rgba(54,209,112,0.02)" }
           ]) },
-          markPoint: { symbol: "rect", symbolSize: [62, 18], symbolOffset: [31, -10],
-            itemStyle: { color: "#ff4c4c" }, label: { show: true, formatter: "+0.00%", color: "#ffffff", fontSize: 10, fontWeight: "bold", fontFamily: "Inter" }, data: [] },
-          markLine: { symbol: "none", lineStyle: { color: "#777", type: "dashed", width: 1 },
-            label: { show: true, formatter: "--", position: "insideStartTop", color: "#888", fontSize: 10, fontFamily: "Inter" }, data: [] },
-          z: 3
-        },
-        // 主图：均价线（金黄平滑）
+          z: 3 },
+        // 主图：均价线（金黄平滑）—— 保留参考图的橙色均价
         { name: "avg", type: "line", data: [], xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true,
           lineStyle: { color: "#ffc120", width: 1.8 }, z: 2 },
-        // 量能背景层（line 平铺 gr[1] 顶部 + area 从顶到底覆盖整个 gr[1]，绕开柱子稀疏矮导致下方大片空白）—— silent 不响应交互
+        // 量能背景层（line 平铺在 maxVol + area 从顶到底覆盖整个 gr[1]，涨跌色淡）
         { name: "volBg", type: "line", data: [], xAxisIndex: 1, yAxisIndex: 1,
           showSymbol: false, smooth: false, connectNulls: true,
-          lineStyle: { width: 0, color: "transparent" }, areaStyle: { color: "rgba(110,120,140,0.22)" }, z: 0, silent: true },
+          lineStyle: { width: 0, color: "transparent" },
+          areaStyle: { color: "rgba(54,209,112,0.22)" },   // 默认跌绿，运行时改色
+          z: 0, silent: true },
         // 量能柱（涨红跌绿）—— grid[1] 在底部
         { name: "vol", type: "bar", data: [], xAxisIndex: 1, yAxisIndex: 1, barWidth: "80%", barCategoryGap: "20%" }
       ]
@@ -2013,13 +2019,18 @@ function _tpIntraLayout() {
     _tpLastAvg = _tpLastAvg2;   // 双别名，避免与下方 _tpLastAvg 冲突
     const cats = bars.map(b => { const d = b.date || ""; return d.length > 10 ? d.substring(11, 16) : d; });
     const closes = bars.map(b => +b.close);
-    const maxVol = Math.max(1, ...bars.map(b => +b.volume || 0));
+    const vols = bars.map(b => +b.volume || 0);
+    const maxVol = Math.max(1, ...vols);
+    // r40j：priceBg 平铺在 maxPrice*1.05，让 area 从顶到底覆盖整个 grid[0]
+    const maxPrice = Math.max(...closes, 0) * 1.05 || 1;
     const refPrice = bars[0] ? +bars[0].open : (closes[0] || 0);
     const lastIdx = bars.length - 1;
     const lastPrice = closes[lastIdx] || 0;
     const chgPct = refPrice ? ((lastPrice - refPrice) / refPrice * 100) : 0;
     const isUp = lastPrice >= refPrice;
+    // r40j：涨跌色统一（涨红 #ff4c4c / 跌绿 #36d170）—— 折线/area/量能背景/价格背景全用同一个色系
     const chgColor = isUp ? "#ff4c4c" : "#36d170";
+    const chgRgb = isUp ? "255,76,76" : "54,209,112";
     const chgStr = (chgPct >= 0 ? "+" : "") + chgPct.toFixed(2) + "%";
     const volData = bars.map(b => ({ value: +b.volume || 0,
       itemStyle: { color: (+b.close >= +b.open) ? "#ff4c4c" : "#36d170" } }));
@@ -2027,13 +2038,21 @@ function _tpIntraLayout() {
     return {
       xAxis: [{ data: cats }, { data: cats }],
       series: [
+        // priceBg：涨跌色浅，平铺 maxPrice*1.05，area 从顶到底覆盖 grid[0]
+        { name: "priceBg", data: bars.map(() => maxPrice),
+          areaStyle: { color: "rgba(" + chgRgb + ",0.18)" } },
+        // price：涨跌色折线 + 涨跌色 area 渐变
         { name: "price", data: closes,
-          markPoint: { data: [{ coord: [lastIdx, lastPrice] }],
-            itemStyle: { color: chgColor }, label: { formatter: chgStr } },
-          markLine: { data: [{ yAxis: refPrice }], label: { formatter: refPrice.toFixed(2) } }
+          lineStyle: { color: chgColor },
+          areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(" + chgRgb + ",0.55)" },
+            { offset: 1, color: "rgba(" + chgRgb + ",0.02)" }
+          ]) }
         },
         { name: "avg", data: _tpLastAvg },
-        { name: "volBg", data: bars.map(() => maxVol) },
+        // volBg：涨跌色浅，平铺 maxVol，area 覆盖 gr[1]
+        { name: "volBg", data: bars.map(() => maxVol),
+          areaStyle: { color: "rgba(" + chgRgb + ",0.22)" } },
         { name: "vol", data: volData }
       ]
     };
