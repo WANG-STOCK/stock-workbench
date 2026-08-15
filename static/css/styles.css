@@ -2029,9 +2029,9 @@ body.theme-dark { background: var(--bg); }
 .split2 { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 10px; height: 100%; min-height: 0; }
 .col { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
 .col > .panel { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-/* r36：左列 — K线面板缩到半高（用户要求），AI决策占下半 */
-.col-left > .g-kline    { flex: 1 1 48%; min-height: 320px; }
-.col-left > .g-decision { flex: 1 1 52%; min-height: 280px; }
+/* r36：左列 — K线面板占大半（顶天立地），AI决策占小半 */
+.col-left > .g-kline    { flex: 1 1 62%; min-height: 560px; }
+.col-left > .g-decision { flex: 1 1 38%; min-height: 260px; }
 /* r36：右列 — 账户+持仓占大半，扫描区占小半（用户要求缩小扫描区） */
 .col-right > .g-account { flex: 1 1 60%; min-height: 360px; }
 .col-right > .g-scan    { flex: 1 1 40%; min-height: 220px; max-height: 42%; }
@@ -2048,9 +2048,9 @@ body.theme-dark { background: var(--bg); }
 .tp-tab { border: 1px solid var(--line); background: #11151b; color: var(--muted); border-radius: 6px; padding: 4px 14px; cursor: pointer; font-size: 12px; transition: all .15s; }
 .tp-tab:hover { color: #f1f5f9; border-color: #3a3a3a; }
 .tp-tab.active { background: #1e40af; border-color: #1e40af; color: #fff; box-shadow: 0 0 0 1px #1e40af inset; }
-.tp-chart-wrap { position: relative; flex: 1; min-height: 0; background: #121214; border-radius: 4px; overflow: hidden; padding: 4px; }
+.tp-chart-wrap { position: relative; flex: 1 1 auto; min-height: 320px; background: #121214; border-radius: 4px; overflow: hidden; padding: 4px; display: flex; }
 .tp-chart { width: 100%; height: 100%; display: block; }
-.tp-chart-echarts { width: 100%; height: 320px; background: #121214; font-family: 'Inter','PingFang SC','Microsoft YaHei',-apple-system,sans-serif; }
+.tp-chart-echarts { width: 100%; height: 100%; flex: 1; background: #121214; font-family: 'Inter','PingFang SC','Microsoft YaHei',-apple-system,sans-serif; }
 .tp-skeleton { display: flex; align-items: center; justify-content: center; height: 320px; color: #64748b; font-size: 13px; font-family: 'Inter','PingFang SC','Microsoft YaHei',-apple-system,sans-serif; }
 .tp-chart-tooltip { position: absolute; pointer-events: none; background: rgba(0,0,0,.92); border: 1px solid #374151; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #e5e7eb; line-height: 1.6; z-index: 5; box-shadow: 0 6px 16px rgba(0,0,0,0.6); }
 .tp-indicators { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; flex: none; }

@@ -1717,6 +1717,8 @@ function renderAiAdvice(positions) {
   //  - 配色统一 A股：涨红 #ff4c4c / 跌绿 #36d170；背景 #121214
   let _tpChartInst = null;
   let _tpResizeBound = false;
+  let _tpLastMode = null;       // r40f：上次渲染的 mode（intraday/daily），用于决定 setOption 用 merge 还是 notMerge
+  let _tpIntraInited = false;   // r40g：分时 layout 是否已首次注入（首次完整 setOption 后只走 series 增量更新）
 
   // ---- 前端指标计算（仅用于"演示数据"兜底；真实数据由后端 /api/kline 的 indicators 提供） ----
   function _emaVals(vals, n) {
@@ -1851,13 +1853,74 @@ function renderAiAdvice(positions) {
     if (!_tpChartInst) {
       el.innerHTML = "";
       _tpChartInst = window.echarts.init(el, null, { renderer: "canvas" });
+      // r40h：容器初始 0 高度时 init 拿到空画布 → CSS 撑高后强制 resize 让 ECharts 重新测量
+      try { _tpChartInst.resize(); } catch (e) {}
       if (!_tpResizeBound) {
         _tpResizeBound = true;
-        window.addEventListener("resize", function () { if (_tpChartInst) _tpChartInst.resize(); });
+        // r40i：用 rAF 节流 resize，避免在 RO callback 里同步触发下一轮 ResizeObserver 循环警告
+        let _lastW = 0, _lastH = 0, _resizeRaf = 0;
+        function _doResize() {
+          _resizeRaf = 0;
+          if (!_tpChartInst || !el) return;
+          const w = el.clientWidth, h = el.clientHeight;
+          if (w === _lastW && h === _lastH) return;   // 尺寸未变不触发，斩断循环
+          _lastW = w; _lastH = h;
+          try { _tpChartInst.resize(); } catch (e) {}
+        }
+        window.addEventListener("resize", function () {
+          if (_resizeRaf) return;
+          _resizeRaf = requestAnimationFrame(_doResize);
+        }, { passive: true });
+        try {
+          if (window.ResizeObserver) {
+            const ro = new ResizeObserver(function () {
+              if (_resizeRaf) return;
+              _resizeRaf = requestAnimationFrame(_doResize);
+            });
+            ro.observe(el);
+          }
+        } catch (e) {}
       }
     }
-    const opt = (mode === "intraday") ? buildIntradayOption(bars, indicators) : buildDailyOption(bars, indicators);
-    _tpChartInst.setOption(opt, true);   // notMerge=true：分时只 line / 日K只 candlestick，参数零污染
+    // r40g：增量刷新 —— 首次/跨模式用 layout + data 完整 setOption(true) 重建；
+    //          同模式（分时↔分时）只 setOption({xAxis, series})，grid/yAxis/tooltip/dataZoom/backgroundColor 全跳过 → 不再"卡一下"
+    if (mode === "intraday") {
+      const layout = _tpIntraLayout();
+      const data = _tpIntraData(bars);
+      // 首次 OR 跨模式：完整 layout + data 重建
+      if (!_tpLastMode || _tpLastMode !== mode || !_tpIntraInited) {
+        // 把 data 合并到 layout（首次需要完整）
+        layout.xAxis[0].data = data.xAxis[0].data;
+        layout.xAxis[1].data = data.xAxis[1].data;
+        layout.series[0].data = data.series[0].data;
+        layout.series[0].markPoint = data.series[0].markPoint;
+        layout.series[0].markLine = data.series[0].markLine;
+        layout.series[1].data = data.series[1].data;
+        layout.series[2].data = data.series[2].data;
+        layout.series[3].data = data.series[3].data;
+        _tpChartInst.setOption(layout, true);   // notMerge=true 强制重建
+        try { _tpChartInst.resize(); } catch (e) {}   // r40h：setOption(true) 后立即 resize，让 grid/canvas 按真实容器尺寸铺满
+        _tpIntraInited = true;
+      } else {
+        // 同模式：仅更新 series + xAxis.data，grid/yAxis/tooltip 全不动
+        _tpChartInst.setOption({
+          xAxis: [{ data: data.xAxis[0].data }, { data: data.xAxis[1].data }],
+          series: [
+            { name: "price", data: data.series[0].data,
+              markPoint: data.series[0].markPoint,
+              markLine: data.series[0].markLine },
+            { name: "avg",    data: data.series[1].data },
+            { name: "volBg",  data: data.series[2].data },
+            { name: "vol",    data: data.series[3].data }
+          ]
+        }, { lazyUpdate: true });
+      }
+    } else {
+      // 日K模式仍然走旧路径（差异化较大，整体重建）
+      const opt = buildDailyOption(bars, indicators);
+      _tpChartInst.setOption(opt, true);
+    }
+    _tpLastMode = mode;
     fillTpIndicators(indicators);
   }
 
@@ -1871,102 +1934,126 @@ function renderAiAdvice(positions) {
     });
   }
 
-  // ---- 模式1【分时】line（蓝）+ 均价（金黄）+ area（蓝色渐变）+ 昨收 markLine + 当前价 markPoint + KDJ + MACD 子图 ----
-  function buildIntradayOption(bars, indicators) {
-      // x 类目：分时 HH:MM（兼容 "2026-08-14 09:30" 与 "09:30"）
-      const cats = bars.map(b => {
-        const d = b.date || "";
-        return d.length > 10 ? d.substring(11, 16) : d;
-      });
-      const closes = bars.map(b => +b.close);
-      const avgPrices = _calcAvgPrice(bars);
+  let _tpLastBars = [];   // 给 tooltip formatter 读最新 bars（闭包逃逸，避免每次重建 formatter 闭包）
+let _tpLastAvg = [];     // 同上，给 tooltip formatter 用均价
 
-      // 昨收近似：第一根 bar 的 open
-      const refPrice = bars[0] ? +bars[0].open : (closes[0] || 0);
-      const lastIdx = bars.length - 1;
-      const lastPrice = closes[lastIdx] || 0;
-      const chgPct = refPrice ? ((lastPrice - refPrice) / refPrice * 100) : 0;
-      const isUpLast = lastPrice >= refPrice;
-      const chgColor = isUpLast ? "#ff4c4c" : "#36d170";
-      const chgStr = (chgPct >= 0 ? "+" : "") + chgPct.toFixed(2) + "%";
-
-      // 量能柱（涨红跌绿）
-      const volData = bars.map(b => ({
-        value: +b.volume || 0,
-        itemStyle: { color: (+b.close >= +b.open) ? "#ff4c4c" : "#36d170" }
-      }));
-
-      return {
-        backgroundColor: "#121214", animation: false,
-        textStyle: { fontFamily: "Inter, sans-serif", color: "#aaaaaa" },
-        // 2 个 grid：K线主图在顶部（72%），量能在底部（22%），用纯百分比避开 ECharts 对 calc() 解析不稳的坑
-        // grid[0] = 主图（顶部），grid[1] = 量能（底部）—— gridIndex 顺序就是视觉上下顺序
-        grid: [
-          { left: 50, right: 60, top: 12,       height: "72%" },
-          { left: 50, right: 60, top: "76%",    height: "22%" }
-        ],
-        dataZoom: [{ type: "inside", xAxisIndex: [0, 1], start: 0, end: 100, zoomLock: false }],
-        tooltip: {
-          trigger: "axis",
-          axisPointer: { type: "cross", lineStyle: { color: "#5a5a60", type: "dashed" }, crossStyle: { color: "#5a5a60" }, label: { backgroundColor: "#1e1e22" } },
-          backgroundColor: "rgba(15,15,15,0.95)", borderColor: "#444", textStyle: { color: "#e5e7eb", fontSize: 11, fontFamily: "Inter" },
-          formatter: function (ps) {
-            const i = ps[0].dataIndex, b = bars[i];
-            const col = (+b.close >= +b.open) ? "#ff4c4c" : "#36d170";
-            const avg = avgPrices[i] != null ? (+avgPrices[i]).toFixed(2) : "--";
-            return `<div style="font-size:11px;font-family:Inter"><b style="color:#f3f4f6">${b.date || ""}</b></div>`
-              + `<div style="font-size:11px">价 <b style="color:#3b82f6">${(+b.close).toFixed(2)}</b>  均 <b style="color:#ffc120">${avg}</b></div>`
-              + `<div style="font-size:11px;color:${col}">开 ${(+b.open).toFixed(2)}  收 ${(+b.close).toFixed(2)}</div>`
-              + `<div style="font-size:11px">高 ${(+b.high).toFixed(2)}  低 ${(+b.low).toFixed(2)}  量 ${(+b.volume).toLocaleString("zh-CN")}</div>`;
-          }
+// ---- r40g：把 buildIntradayOption 拆为静态 layout + 动态 series，刷新时只更新 series/xAxis，grid/yAxis 完全不动 → 消"卡一下" ----
+function _tpIntraLayout() {
+    return {
+      backgroundColor: "#121214", animation: false,
+      textStyle: { fontFamily: "Inter, sans-serif", color: "#aaaaaa" },
+      // 2 个 grid 顶天立地填满容器（不留下方空白）：
+      //   grid[0] 主图：top 12 + height 78%   → 顶部 ~ 78%H
+      //   grid[1] 量能：top 80% + height 16%  → 80% ~ 96%H（紧贴下方）
+      //   顶部 12px 留价格坐标轴，底部 4% 给底部 xAxis 时间标签
+      grid: [
+        { left: 50, right: 60, top: 12,       height: "78%" },
+        { left: 50, right: 60, top: "80%",    height: "16%" }
+      ],
+      dataZoom: [{ type: "inside", xAxisIndex: [0, 1], start: 0, end: 100, zoomLock: false }],
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "cross", lineStyle: { color: "#5a5a60", type: "dashed" }, crossStyle: { color: "#5a5a60" }, label: { backgroundColor: "#1e1e22" } },
+        backgroundColor: "rgba(15,15,15,0.95)", borderColor: "#444", textStyle: { color: "#e5e7eb", fontSize: 11, fontFamily: "Inter" },
+        // formatter 用 _tpLastBars（模块级），避免每次重建闭包
+        formatter: function (ps) {
+          const i = ps[0].dataIndex, b = _tpLastBars[i];
+          if (!b) return "";
+          const col = (+b.close >= +b.open) ? "#ff4c4c" : "#36d170";
+          return '<div style="font-size:11px;font-family:Inter"><b style="color:#f3f4f6">' + (b.date || "") + '</b></div>'
+            + '<div style="font-size:11px">价 <b style="color:#3b82f6">' + (+b.close).toFixed(2) + '</b>  均 <b style="color:#ffc120">' + (((_tpLastAvg && _tpLastAvg[i]) != null) ? (+_tpLastAvg[i]).toFixed(2) : "--") + '</b></div>'
+            + '<div style="font-size:11px;color:' + col + '">开 ' + (+b.open).toFixed(2) + '  收 ' + (+b.close).toFixed(2) + '</div>'
+            + '<div style="font-size:11px">高 ' + (+b.high).toFixed(2) + '  低 ' + (+b.low).toFixed(2) + '  量 ' + (+b.volume).toLocaleString("zh-CN") + '</div>';
+        }
+      },
+      axisPointer: { link: [{ xAxisIndex: "all" }] },
+      xAxis: [
+        // grid[0] 主图：顶部 x 轴不显示标签（避免与下方量能 x 轴重复）
+        { type: "category", data: [], boundaryGap: false, gridIndex: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+        // grid[1] 量能：底部 x 轴显示时间标签，margin/padding 压紧不单独占行
+        { type: "category", data: [], boundaryGap: false, gridIndex: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter", margin: 0, padding: [0, 0, 0, 0] }, splitLine: { show: false } }
+      ],
+      yAxis: [
+        // grid[0] 主图 y 轴：右侧显示价格刻度 + 浅灰虚线网格
+        { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a2f", type: "dashed" } } },
+        // grid[1] 量能 y 轴：右侧隐藏刻度（量能大小不需要数字）
+        { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+      ],
+      series: [
+        // 主图：价格线（蓝色固定 + 蓝色渐变 area + 当前价标记 + 昨收参考虚线）
+        { name: "price", type: "line", data: [], xAxisIndex: 0, yAxisIndex: 0,
+          showSymbol: false, smooth: false,
+          lineStyle: { color: "#3b82f6", width: 2 },
+          areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(59,130,246,0.55)" },
+            { offset: 1, color: "rgba(59,130,246,0.02)" }
+          ]) },
+          markPoint: { symbol: "rect", symbolSize: [62, 18], symbolOffset: [31, -10],
+            itemStyle: { color: "#ff4c4c" }, label: { show: true, formatter: "+0.00%", color: "#ffffff", fontSize: 10, fontWeight: "bold", fontFamily: "Inter" }, data: [] },
+          markLine: { symbol: "none", lineStyle: { color: "#777", type: "dashed", width: 1 },
+            label: { show: true, formatter: "--", position: "insideStartTop", color: "#888", fontSize: 10, fontFamily: "Inter" }, data: [] },
+          z: 3
         },
-        axisPointer: { link: [{ xAxisIndex: "all" }] },
-        xAxis: [
-          // grid[0] 主图：顶部 x 轴不显示标签（避免与下方量能 x 轴重复）
-          { type: "category", data: cats, boundaryGap: false, gridIndex: 0, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
-          // grid[1] 量能：底部 x 轴显示时间标签
-          { type: "category", data: cats, boundaryGap: false, gridIndex: 1, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, splitLine: { show: false } }
-        ],
-        yAxis: [
-          // grid[0] 主图 y 轴：右侧显示价格刻度 + 浅灰虚线网格
-          { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10, fontFamily: "Inter" }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a2f", type: "dashed" } } },
-          // grid[1] 量能 y 轴：右侧隐藏刻度（量能大小不需要数字）
-          { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
-        ],
-        series: [
-          // 主图：价格线（蓝色固定 + 蓝色渐变 area + 当前价标记 + 昨收参考虚线）
-          { name: "price", type: "line", data: closes, xAxisIndex: 0, yAxisIndex: 0,
-            showSymbol: false, smooth: false,
-            lineStyle: { color: "#3b82f6", width: 2 },
-            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(59,130,246,0.55)" },
-              { offset: 1, color: "rgba(59,130,246,0.02)" }
-            ]) },
-            markPoint: {
-              symbol: "rect", symbolSize: [62, 18], symbolOffset: [31, -10],
-              itemStyle: { color: chgColor },
-              label: { show: true, formatter: chgStr, color: "#ffffff", fontSize: 10, fontWeight: "bold", fontFamily: "Inter" },
-              data: [{ coord: [lastIdx, lastPrice] }]
-            },
-            markLine: {
-              symbol: "none",
-              lineStyle: { color: "#777", type: "dashed", width: 1 },
-              label: { show: true, formatter: refPrice.toFixed(2), position: "insideStartTop", color: "#888", fontSize: 10, fontFamily: "Inter" },
-              data: [{ yAxis: refPrice }]
-            },
-            z: 3
-          },
-          // 主图：均价线（金黄平滑）
-          { name: "avg", type: "line", data: avgPrices, xAxisIndex: 0, yAxisIndex: 0,
-            showSymbol: false, smooth: true,
-            lineStyle: { color: "#ffc120", width: 1.8 },
-            z: 2
-          },
-          // 量能柱（涨红跌绿）—— grid[1] 在底部
-          { name: "vol", type: "bar", data: volData, xAxisIndex: 1, yAxisIndex: 1, barWidth: "70%" }
-        ]
-      };
-    }
+        // 主图：均价线（金黄平滑）
+        { name: "avg", type: "line", data: [], xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true,
+          lineStyle: { color: "#ffc120", width: 1.8 }, z: 2 },
+        // 量能背景层（line 平铺 gr[1] 顶部 + area 从顶到底覆盖整个 gr[1]，绕开柱子稀疏矮导致下方大片空白）—— silent 不响应交互
+        { name: "volBg", type: "line", data: [], xAxisIndex: 1, yAxisIndex: 1,
+          showSymbol: false, smooth: false, connectNulls: true,
+          lineStyle: { width: 0, color: "transparent" }, areaStyle: { color: "rgba(110,120,140,0.22)" }, z: 0, silent: true },
+        // 量能柱（涨红跌绿）—— grid[1] 在底部
+        { name: "vol", type: "bar", data: [], xAxisIndex: 1, yAxisIndex: 1, barWidth: "80%", barCategoryGap: "20%" }
+      ]
+    };
+  }
+
+  let _tpLastAvg2 = [];
+  function _tpIntraData(bars) {
+    _tpLastBars = bars; _tpLastAvg2 = _calcAvgPrice(bars);
+    _tpLastAvg = _tpLastAvg2;   // 双别名，避免与下方 _tpLastAvg 冲突
+    const cats = bars.map(b => { const d = b.date || ""; return d.length > 10 ? d.substring(11, 16) : d; });
+    const closes = bars.map(b => +b.close);
+    const maxVol = Math.max(1, ...bars.map(b => +b.volume || 0));
+    const refPrice = bars[0] ? +bars[0].open : (closes[0] || 0);
+    const lastIdx = bars.length - 1;
+    const lastPrice = closes[lastIdx] || 0;
+    const chgPct = refPrice ? ((lastPrice - refPrice) / refPrice * 100) : 0;
+    const isUp = lastPrice >= refPrice;
+    const chgColor = isUp ? "#ff4c4c" : "#36d170";
+    const chgStr = (chgPct >= 0 ? "+" : "") + chgPct.toFixed(2) + "%";
+    const volData = bars.map(b => ({ value: +b.volume || 0,
+      itemStyle: { color: (+b.close >= +b.open) ? "#ff4c4c" : "#36d170" } }));
+
+    return {
+      xAxis: [{ data: cats }, { data: cats }],
+      series: [
+        { name: "price", data: closes,
+          markPoint: { data: [{ coord: [lastIdx, lastPrice] }],
+            itemStyle: { color: chgColor }, label: { formatter: chgStr } },
+          markLine: { data: [{ yAxis: refPrice }], label: { formatter: refPrice.toFixed(2) } }
+        },
+        { name: "avg", data: _tpLastAvg },
+        { name: "volBg", data: bars.map(() => maxVol) },
+        { name: "vol", data: volData }
+      ]
+    };
+  }
+
+  // 兼容旧调用：buildIntradayOption(bars) = layout + data 合并（仅用于首次/跨模式完整重绘）
+  function buildIntradayOption(bars, indicators) {
+    const layout = _tpIntraLayout();
+    const data = _tpIntraData(bars);
+    // merge：data.xAxis/data.series 覆盖 layout.xAxis/layout.series 的 data 字段
+    layout.xAxis[0].data = data.xAxis[0].data;
+    layout.xAxis[1].data = data.xAxis[1].data;
+    layout.series[0].data = data.series[0].data;
+    layout.series[0].markPoint = data.series[0].markPoint;
+    layout.series[0].markLine = data.series[0].markLine;
+    layout.series[1].data = data.series[1].data;
+    layout.series[2].data = data.series[2].data;
+    layout.series[3].data = data.series[3].data;
+    return layout;
+  }
   // ---- 模式2【日K+指标】candlestick（无 areaStyle）+ MA5金/MA10蓝/MA20灰 + 量能随涨跌 ----
   function buildDailyOption(bars, indicators) {
     const cats = bars.map(b => b.date);
@@ -3008,7 +3095,7 @@ function renderAiAdvice(positions) {
     function applyAutoRefresh() {
       if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
       if (arEl && arEl.checked) {
-        const sec = Math.max(5, parseInt(riEl && riEl.value, 10) || 5);
+        const sec = Math.max(1, parseInt(riEl && riEl.value, 10) || 5);   // r40f：允许 1 秒刷新，配合 merge 模式做实时平滑更新
         autoTimer = setInterval(async () => {
           if (__tpCurrent.code) {
             renderStockDetail(__tpCurrent.code, __tpCurrent.name);
@@ -3022,7 +3109,7 @@ function renderAiAdvice(positions) {
       arEl.addEventListener('change', () => {
         applyAutoRefresh();
         if (arEl.checked) {
-          const sec = Math.max(5, parseInt(riEl && riEl.value, 10) || 5);
+          const sec = Math.max(1, parseInt(riEl && riEl.value, 10) || 5);
           toast('已开启自动刷新（每 ' + sec + ' 秒）');
         } else {
           toast('已关闭自动刷新');
