@@ -8,11 +8,11 @@
   <meta http-equiv="Expires" content="0">
   <title>婷婷量化AI · 超短线交易工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E📈%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/css/styles.css?v=r39">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r40">
 </head>
 <body class="theme-dark">
   <div id="errToast" style="display:none;position:fixed;left:0;top:0;right:0;z-index:999999;background:#7a1f1f;color:#fff;font:13px/1.5 monospace;padding:8px 14px;border-bottom:2px solid #ff5252;max-height:35vh;overflow:auto;white-space:pre-wrap;word-break:break-all;"></div>
-  <script>window.__WB_VERSION__='r39';console.log('%c[wb] HTML r39 loaded (K线1:1复刻 + 默认5分+自动刷新5s + 6档切换)','color:#3b82f6;font-weight:bold');</script>
+  <script>window.__WB_VERSION__='r40';console.log('%c[wb] HTML r40 loaded (ECharts 双标签：分时 / 日K+指标)','color:#3b82f6;font-weight:bold');</script>
 
   <div class="app-shell">
     <!-- ===== 左侧可收起导航 ===== -->
@@ -79,24 +79,19 @@
             <div class="col col-left">
               <div class="panel g-kline">
                 <div class="panel-title">
-                  <span id="klineTitle">📉 K线图</span>
+                  <span id="klineTitle">📈 个股详情与交易计划</span>
                   <span class="panel-extra" id="tradePlanMeta">请在左侧点击任意股票</span>
                 </div>
                 <div class="kline-head">
                   <div class="kline-name"><b id="tpName">--</b><i id="tpCode">--</i></div>
                   <div class="kline-price"><span class="tp-price" id="tpPrice">--</span><span class="tp-chg" id="tpChg">--</span></div>
                   <div class="kline-tabs" id="klineTabs">
-                    <button type="button" class="tp-tab" data-p="1m" title="分时(1分钟)">分时</button>
-                    <button type="button" class="tp-tab active" data-p="5m" title="5分钟K线(默认)">5分</button>
-                    <button type="button" class="tp-tab" data-p="15m" title="15分钟K线">15分</button>
-                    <button type="button" class="tp-tab" data-p="30m" title="30分钟K线">30分</button>
-                    <button type="button" class="tp-tab" data-p="daily" title="日K线">日K</button>
-                    <button type="button" class="tp-tab" data-p="weekly" title="周K线">周K</button>
+                    <button type="button" class="tp-tab active" data-mode="intraday" title="分时（1分钟折线）">分时</button>
+                    <button type="button" class="tp-tab" data-mode="daily" title="日K线 + 指标">日K+指标</button>
                   </div>
                 </div>
                 <div class="tp-chart-wrap">
-                  <svg id="tpChart" class="tp-chart" viewBox="0 0 600 320" preserveAspectRatio="none"></svg>
-                  <div class="tp-chart-tooltip" id="tpChartTip" style="display:none"></div>
+                  <div id="tpChart" class="tp-chart-echarts"></div>
                 </div>
                 <div class="tp-indicators" id="tpIndicators">
                   <span class="tp-ind">MA5 <b>--</b></span>
@@ -340,6 +335,7 @@
   <div class="reminder-bar" id="reminderBar" style="display:none"></div>
 
   <div id="toast" class="toast"></div>
-  <script src="/static/js/app.js?v=r39"></script>
+  <script src="/static/echarts.min.js"></script>
+  <script src="/static/js/app.js?v=r40"></script>
 </body>
 </html>

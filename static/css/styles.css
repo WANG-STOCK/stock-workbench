@@ -22,7 +22,7 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: "Inter", -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   background: var(--bg);
   color: var(--ink);
   font-size: 13px;
@@ -2045,10 +2045,13 @@ body.theme-dark { background: var(--bg); }
 .tp-chg { font-size: 13px; font-family: 'Consolas',monospace; }
 .tp-down { color: var(--down); }
 .kline-tabs { display: flex; gap: 4px; margin-left: 8px; }
-.tp-tab { border: 1px solid var(--line); background: #11151b; color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
-.tp-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.tp-chart-wrap { position: relative; flex: 1; min-height: 0; background: #000000; border-radius: 4px; overflow: hidden; }
+.tp-tab { border: 1px solid var(--line); background: #11151b; color: var(--muted); border-radius: 6px; padding: 4px 14px; cursor: pointer; font-size: 12px; transition: all .15s; }
+.tp-tab:hover { color: #f1f5f9; border-color: #3a3a3a; }
+.tp-tab.active { background: #1e40af; border-color: #1e40af; color: #fff; box-shadow: 0 0 0 1px #1e40af inset; }
+.tp-chart-wrap { position: relative; flex: 1; min-height: 0; background: #121214; border-radius: 4px; overflow: hidden; padding: 4px; }
 .tp-chart { width: 100%; height: 100%; display: block; }
+.tp-chart-echarts { width: 100%; height: 320px; background: #121214; font-family: 'Inter','PingFang SC','Microsoft YaHei',-apple-system,sans-serif; }
+.tp-skeleton { display: flex; align-items: center; justify-content: center; height: 320px; color: #64748b; font-size: 13px; font-family: 'Inter','PingFang SC','Microsoft YaHei',-apple-system,sans-serif; }
 .tp-chart-tooltip { position: absolute; pointer-events: none; background: rgba(0,0,0,.92); border: 1px solid #374151; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #e5e7eb; line-height: 1.6; z-index: 5; box-shadow: 0 6px 16px rgba(0,0,0,0.6); }
 .tp-indicators { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; flex: none; }
 .tp-ind { font-size: 12px; color: var(--muted); }

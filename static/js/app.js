@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
-/* r39 版本自检：K线图 1:1 复刻参考图3（背景 #121214 + 涨红 #ff4c4c 跌绿 #36d170 + 单根金黄 MA #ffc120 1.8px + 区域渐变填充 + 量能颜色跟随 + Inter 12px）+ 6档周期切换（分时/5分/15分/30分/日/周，默认5分）+ 自动刷新默认5s开启 + 三层缓存（实时秒出） */
-console.log('%c[wb] app.js r39 loaded (K线1:1复刻 + 默认5分+自动刷新5s + 6档切换 + 三层缓存)','color:#ef4444;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r39') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r39。请强制刷新或清缓存。');
+/* r40 版本自检：K线区改为 ECharts 双标签（【分时】折线面积图 / 【日K+指标】蜡烛图），两套 series 完全独立（setOption(opt,true) 不合并），背景 #121214，涨红 #ff4c4c 跌绿 #36d170（A股统一），分时 1 根金黄 MA #ffc120，日K MA5金/MA10蓝 #3488eb/MA20灰 #aaaaaa，量能随涨跌，接口空时演示数据兜底。 */
+console.log('%c[wb] app.js r40 loaded (ECharts 双标签：分时 / 日K+指标)','color:#ef4444;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -1347,6 +1347,8 @@ function renderAiAdvice(positions) {
   // r29：完全照参考图重做。拉 /api/signal，里面已有 indicators + tight + tech_short
   // 直接映射到 UI：头部价 / SVG折线 / 指标横排 / 评分 / 6 维 / 三框 / 参数 / 按钮
   let __tpCurrent = { code: null, name: null, period: "5m", buy: null, stop: null, tgt: null, price: null };
+  // r40：K线双标签模式（与顶部"周期"解耦）。intraday=分时(拉1m) / daily=日K+指标(拉daily)
+  let __klineMode = "intraday";
 
   // /api/signal 里的 indicators.* 已经是最后一个值的 float，直接返回即可
   function lastNonNull(v) {
@@ -1387,22 +1389,13 @@ function renderAiAdvice(positions) {
     const reset = ["tpName","tpCode","tpPrice","tpChg"];
     reset.forEach(id => { const e = $(id); if (e) e.textContent = "--"; });
     document.querySelectorAll("#tpIndicators .tp-ind b").forEach(b => b.textContent = "--");
-    // r37：先用缓存渲染 K 线底稿，避免切股票后 K 线图"空白一片"等待接口
-    const cached = _klineCache[code];
-    if (cached && cached.bars && cached.bars.length) {
-      try { _drawTpChart(cached.bars, cached.series || {}); } catch (e) {}
-      // 头部占位也用缓存：让切换瞬间价格先有数字
-      if (cached.last) {
-        if (cached.last.name) $("tpName").textContent = cached.last.name;
-        if (cached.last.code) $("tpCode").textContent = cached.last.code;
-        if (cached.last.price != null) $("tpPrice").textContent = (+cached.last.price).toFixed(2);
-        if (cached.last.chg != null) {
-          const cEl = $("tpChg");
-          cEl.textContent = (cached.last.chg >= 0 ? "+" : "") + (+cached.last.chg).toFixed(2) + "%";
-        }
-      }
+    // r40：优先用 K线周期缓存（按 mode 取）秒出，避免切股票后空白等待接口
+    const _mode = __klineMode || "intraday";
+    const _kc = _klineCachePeriod[code + "|" + _mode];
+    if (_kc && _kc.bars && _kc.bars.length) {
+      try { renderTpChart(_kc.bars, _kc.indicators || {}, _mode, !!_kc.isDemo); } catch (e) {}
     } else {
-      const tpChart = $("tpChart"); if (tpChart) tpChart.innerHTML = `<text x="300" y="160" text-anchor="middle" fill="#64748b" font-size="14">K 线加载中…</text>`;
+      const tpChart = $("tpChart"); if (tpChart) tpChart.innerHTML = '<div class="tp-skeleton">K 线加载中…</div>';
     }
     // 短线策略占位
     const tsBody = $("tpStrategyBody");
@@ -1717,223 +1710,257 @@ function renderAiAdvice(positions) {
     if (conn) conn.innerHTML = '<i class="dot dot-green"></i> 行情连接：正常 · 情绪更新 ' + (d.ts || '');
   }
 
-  function _drawTpChart(bars, series) {
-    series = series || {};
-    const svg = document.getElementById("tpChart");
-    if (!svg) return;
-    if (!bars || bars.length === 0) {
-      svg.innerHTML = `<rect x="0" y="0" width="600" height="320" fill="#121214"/><text x="300" y="160" text-anchor="middle" fill="#aaaaaa" font-size="13" font-family="Inter,'PingFang SC',-apple-system,sans-serif">暂无 K 线数据</text>`;
-      return;
+  // ====================== r40：ECharts 双标签渲染（替换原手绘 SVG _drawTpChart） ======================
+  // 设计要点：
+  //  - 分时 = line + areaStyle 渐变 + 1 根金黄 MA(#ffc120)；日K = candlestick（无 areaStyle）+ MA5金/MA10蓝/MA20灰
+  //  - 两套 series 完全独立，用 setOption(opt, true) 不合并，参数零污染
+  //  - 配色统一 A股：涨红 #ff4c4c / 跌绿 #36d170；背景 #121214
+  let _tpChartInst = null;
+  let _tpResizeBound = false;
+
+  // ---- 前端指标计算（仅用于"演示数据"兜底；真实数据由后端 /api/kline 的 indicators 提供） ----
+  function _emaVals(vals, n) {
+    const out = new Array(vals.length).fill(null);
+    if (!vals.length) return out;
+    const k = 2 / (n + 1); let prev = vals[0]; out[0] = vals[0];
+    for (let i = 1; i < vals.length; i++) { prev = vals[i] * k + prev * (1 - k); out[i] = prev; }
+    return out;
+  }
+  function _rsiVals(closes, n) {
+    const out = new Array(closes.length).fill(null);
+    let g = 0, l = 0;
+    for (let i = 1; i < closes.length; i++) {
+      const ch = closes[i] - closes[i - 1];
+      const gg = ch > 0 ? ch : 0, ll = ch < 0 ? -ch : 0;
+      if (i <= n) {
+        g += gg; l += ll;
+        if (i === n) { const rs = l === 0 ? 100 : g / l; out[i] = l === 0 ? 100 : +(100 - 100 / (1 + rs)).toFixed(2); }
+      } else {
+        g = (g * (n - 1) + gg) / n; l = (l * (n - 1) + ll) / n;
+        const rs = l === 0 ? 100 : g / l; out[i] = l === 0 ? 100 : +(100 - 100 / (1 + rs)).toFixed(2);
+      }
     }
-    // ====================== r39: 严格复刻参考图3 的视觉规格 ======================
-    // 背景 #121214；折/K线主体 涨红 #ff4c4c 跌绿 #36d170；
-    // 单根金黄 MA #ffc120 1.8px 平滑曲线；渐变区域填充；
-    // 量能柱颜色跟随；网格 #3a3a3f 极细虚线；字体 Inter 12px。
-    const W = 600, H = 320;
-    const PAD_L = 48, PAD_R = 8, PAD_T = 4, PAD_B = 4;
-    const x0 = PAD_L, w = W - PAD_L - PAD_R;
-    const N = bars.length;
-    const px = (i) => x0 + (i / Math.max(1, N - 1)) * w;
-    // 主图 + 量能 布局（量能高度加大 更醒目）
-    const mainH = 220, gap = 4;
-    const volH  = 92;
-    let yCursor = PAD_T;
-    const regMain = { top: yCursor, bot: yCursor + mainH };             yCursor = regMain.bot + gap;
-    const regVol  = { top: yCursor, bot: yCursor + volH  };
-    const pyV = (v, reg, lo, hi) => reg.top + (reg.bot - reg.top) * (1 - (v - lo) / (hi - lo || 1));
-
-    // 取值
-    const closes = bars.map(b => +b.close);
-    const opens  = bars.map(b => +b.open);
-    const highs  = bars.map(b => +b.high);
-    const lows   = bars.map(b => +b.low);
-    const minC = Math.min.apply(null, lows.concat(closes));
-    const maxC = Math.max.apply(null, highs.concat(closes));
-    const padC = (maxC - minC) * 0.05 || 0.05;
-    const loMain = minC - padC, hiMain = maxC + padC;
-    const pyMain = (v) => pyV(v, regMain, loMain, hiMain);
-
-    // 整体颜色：首根 close → 末根 close 决定主色（涨 vs 跌）
-    const isUpAll = closes[N - 1] >= closes[0];
-    const UP = "#ff4c4c";          // 涨红
-    const DN = "#36d170";          // 跌绿
-    const mainColor = isUpAll ? UP : DN;
-    const gradUpId = "tpGradUp";
-    const gradDnId = "tpGradDn";
-
-    // 单根 MA：金黄色 #ffc120（按用户规格：仅此一根均线，平滑曲线 1.8px）
-    const alignSeries = (arr) => {
-      const len = arr.length;
-      if (len === N) return arr;
-      if (len < N) return new Array(N - len).concat(arr);
-      return arr.slice(arr.length - N);
+    return out;
+  }
+  function _macdFull(closes) {
+    const e12 = _emaVals(closes, 12), e26 = _emaVals(closes, 26);
+    const dif = closes.map((_, i) => (e12[i] != null && e26[i] != null) ? +(e12[i] - e26[i]).toFixed(3) : null);
+    const dense = dif.filter(x => x != null);
+    const deaDense = _emaVals(dense, 9);
+    let j = 0;
+    const dea = dif.map(x => x == null ? null : (deaDense[j] != null ? +(deaDense[j++]).toFixed(3) : null));
+    const hist = dif.map((x, i) => (x != null && dea[i] != null) ? +(x - dea[i]).toFixed(3) : null);
+    return { dif, dea, hist };
+  }
+  function _bollFull(closes, n, m) {
+    n = n || 20; m = m || 2;
+    const mid = smaArr(closes, n);
+    const upper = new Array(closes.length).fill(null), lower = new Array(closes.length).fill(null);
+    for (let i = n - 1; i < closes.length; i++) {
+      const s = closes.slice(i - n + 1, i + 1);
+      const m2 = s.reduce((a, b) => a + b, 0) / n;
+      const sd = Math.sqrt(s.reduce((a, b) => a + (b - m2) * (b - m2), 0) / n);
+      upper[i] = +(m2 + m * sd).toFixed(2); lower[i] = +(m2 - m * sd).toFixed(2);
+    }
+    return { upper, lower, mid };
+  }
+  function _kdjFull(closes, highs, lows, n) {
+    n = n || 9;
+    const k = new Array(closes.length).fill(null), d = new Array(closes.length).fill(null), j = new Array(closes.length).fill(null);
+    let pK = 50, pD = 50;
+    for (let i = n - 1; i < closes.length; i++) {
+      const H = Math.max.apply(null, highs.slice(i - n + 1, i + 1));
+      const L = Math.min.apply(null, lows.slice(i - n + 1, i + 1));
+      const c = closes[i];
+      const rsv = H === L ? 50 : (c - L) / (H - L) * 100;
+      const K = pK * 2 / 3 + rsv / 3, D = pD * 2 / 3 + K / 3;
+      k[i] = +K.toFixed(2); d[i] = +D.toFixed(2); j[i] = +(3 * K - 2 * D).toFixed(2);
+      pK = K; pD = D;
+    }
+    return { k, d, j };
+  }
+  function computeIndicatorsFull(closes, highs, lows) {
+    return {
+      ma5: smaArr(closes, 5), ma10: smaArr(closes, 10), ma20: smaArr(closes, 20),
+      kdj: _kdjFull(closes, highs, lows, 9),
+      macd: _macdFull(closes),
+      rsi: { rsi6: _rsiVals(closes, 6), rsi12: _rsiVals(closes, 12), rsi24: _rsiVals(closes, 24) },
+      boll: _bollFull(closes, 20, 2)
     };
-    const aMa5 = alignSeries(series.ma5 || []);
-    // 平滑曲线（Catmull-Rom → 三次贝塞尔）——视觉更顺
-    function smoothPath(arr, pyFn) {
-      // 把 (x,y) 序列转为带 Catmull-Rom 张力的 cubic bezier
-      const pts = [];
-      for (let i = 0; i < N; i++) {
-        const v = arr[i];
-        if (v == null) continue;
-        pts.push([px(i), pyFn(v)]);
+  }
+
+  // ---- 演示数据兜底（接口暂不可达时，避免空白） ----
+  function buildDemoBars(mode) {
+    const n = mode === "intraday" ? 240 : 180;
+    const base = 1685 + Math.random() * 40;
+    let price = base;
+    const bars = [];
+    let t = mode === "intraday"
+      ? new Date(2026, 7, 14, 9, 30, 0, 0).getTime()
+      : (function () { const d = new Date(2026, 7, 14); d.setDate(d.getDate() - 260); return d.getTime(); })();
+    for (let i = 0; i < n; i++) {
+      const open = price;
+      const step = (Math.random() - 0.48) * (mode === "intraday" ? 1.3 : 3.5);
+      let close = open + step; if (close <= 0) close = open;
+      const hi = Math.max(open, close) + Math.random() * (mode === "intraday" ? 0.8 : 2.2);
+      const lo = Math.min(open, close) - Math.random() * (mode === "intraday" ? 0.8 : 2.2);
+      const vol = Math.round((mode === "intraday" ? 1800 : 9000) * (0.5 + Math.random()) * (0.6 + Math.abs(step) * 0.4)) * 100;
+      let dateStr, nd;
+      if (mode === "intraday") {
+        const d = new Date(t);
+        dateStr = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+        nd = new Date(t); nd.setMinutes(nd.getMinutes() + 1);
+        if (nd.getHours() === 11 && nd.getMinutes() > 30) { nd.setHours(13, 0, 0, 0); }
+      } else {
+        const d = new Date(t);
+        dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        nd = new Date(t); nd.setDate(nd.getDate() + 1);
+        while (nd.getDay() === 0 || nd.getDay() === 6) { nd.setDate(nd.getDate() + 1); }
       }
-      if (pts.length === 0) return "";
-      let d = "M" + pts[0][0].toFixed(1) + "," + pts[0][1].toFixed(1);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[i - 1] || pts[i];
-        const p1 = pts[i];
-        const p2 = pts[i + 1];
-        const p3 = pts[i + 2] || p2;
-        const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-        const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-        const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-        const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-        d += " C" + c1x.toFixed(1) + "," + c1y.toFixed(1)
-           + " " + c2x.toFixed(1) + "," + c2y.toFixed(1)
-           + " " + p2[0].toFixed(1) + "," + p2[1].toFixed(1);
+      bars.push({ date: dateStr, open: +open.toFixed(2), close: +close.toFixed(2), high: +hi.toFixed(2), low: +lo.toFixed(2), volume: vol });
+      price = close; t = nd.getTime();
+    }
+    const closes = bars.map(b => b.close), highs = bars.map(b => b.high), lows = bars.map(b => b.low);
+    return { bars, indicators: computeIndicatorsFull(closes, highs, lows) };
+  }
+
+  // ---- 指标胶囊（MA5/MA10/MA20/MACD/KDJ/RSI/BOLL）填末值 ----
+  function fillTpIndicators(ind) {
+    if (!ind) return;
+    const inds = document.querySelectorAll("#tpIndicators .tp-ind");
+    if (!inds || inds.length < 7) return;
+    const ln = (a) => { if (!a) return null; for (let i = a.length - 1; i >= 0; i--) { const v = a[i]; if (v != null && !isNaN(v)) return +v; } return null; };
+    const setB = (idx, txt) => { const e = inds[idx].querySelector("b"); if (e) e.textContent = txt; };
+    const m5 = ln(ind.ma5), m10 = ln(ind.ma10), m20 = ln(ind.ma20);
+    setB(0, m5 == null ? "--" : m5.toFixed(2));
+    setB(1, m10 == null ? "--" : m10.toFixed(2));
+    setB(2, m20 == null ? "--" : m20.toFixed(2));
+    if (ind.macd) { const d = ln(ind.macd.dif), a = ln(ind.macd.dea); setB(3, (d == null ? "--" : d.toFixed(2)) + " / " + (a == null ? "--" : a.toFixed(2))); }
+    if (ind.kdj) { const k = ln(ind.kdj.k), d = ln(ind.kdj.d), j = ln(ind.kdj.j); setB(4, (k == null ? "--" : k.toFixed(1)) + " / " + (d == null ? "--" : d.toFixed(1)) + " / " + (j == null ? "--" : j.toFixed(1))); }
+    if (ind.rsi) { const r = ln(ind.rsi.rsi6) != null ? ln(ind.rsi.rsi6) : ln(ind.rsi.rsi12); setB(5, r == null ? "--" : r.toFixed(1)); }
+    if (ind.boll) { const u = ln(ind.boll.upper), l = ln(ind.boll.lower); setB(6, (u == null ? "--" : u.toFixed(2)) + " / " + (l == null ? "--" : l.toFixed(2))); }
+  }
+
+  // ---- 主渲染入口 ----
+  function renderTpChart(bars, indicators, mode, isDemo) {
+    const el = document.getElementById("tpChart");
+    if (!el || !window.echarts) return;
+    if (!bars || bars.length === 0) { if (_tpChartInst) _tpChartInst.clear(); return; }
+    // 仅看板可见时绘制（隐藏时容器尺寸为 0，先缓存，切回看板时由 renderStockDetail 重绘）
+    if (!_docQuery(".view-dashboard:not([hidden])")) return;
+    if (!_tpChartInst) {
+      el.innerHTML = "";
+      _tpChartInst = window.echarts.init(el, null, { renderer: "canvas" });
+      if (!_tpResizeBound) {
+        _tpResizeBound = true;
+        window.addEventListener("resize", function () { if (_tpChartInst) _tpChartInst.resize(); });
       }
-      return d;
     }
+    const opt = (mode === "intraday") ? buildIntradayOption(bars, indicators) : buildDailyOption(bars, indicators);
+    _tpChartInst.setOption(opt, true);   // notMerge=true：分时只 line / 日K只 candlestick，参数零污染
+    fillTpIndicators(indicators);
+  }
 
-    // 价格折线 polyline points
-    let pricePts = "";
-    for (let i = 0; i < N; i++) pricePts += px(i).toFixed(1) + "," + pyMain(bars[i].close).toFixed(1) + " ";
-    // 区域填充 path：折线 + 底部闭合
-    const areaPathD = "M" + px(0).toFixed(1) + "," + pyMain(bars[0].close).toFixed(1)
-      + " " + bars.map((b, i) => "L" + px(i).toFixed(1) + "," + pyMain(b.close).toFixed(1)).join(" ")
-      + " L" + px(N - 1).toFixed(1) + "," + regMain.bot.toFixed(1)
-      + " L" + px(0).toFixed(1) + "," + regMain.bot.toFixed(1) + " Z";
-
-    // 横向网格（极细浅灰虚线；r39 规格 #3a3a3f dasharray 2 4）
-    let gridLines = "";
-    for (let i = 0; i <= 3; i++) {
-      const y = regMain.top + (i / 3) * mainH;
-      gridLines += `<line x1="${x0}" y1="${y.toFixed(1)}" x2="${x0+w}" y2="${y.toFixed(1)}" stroke="#3a3a3f" stroke-dasharray="2 4" stroke-width="0.6"/>`;
-    }
-
-    // 蜡烛 OHLC（按用户截图 涨红跌绿）
-    let candles = "";
-    const cw = Math.max(1, (w / N) * 0.62);
-    for (let i = 0; i < N; i++) {
-      const o = opens[i], c = closes[i], h = highs[i], l = lows[i];
-      if (o == null || c == null) continue;
-      const up = c >= o;
-      const col = up ? UP : DN;
-      const xc = px(i);
-      // 影线
-      candles += `<line x1="${xc.toFixed(1)}" y1="${pyMain(h).toFixed(1)}" x2="${xc.toFixed(1)}" y2="${pyMain(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
-      // 实体
-      const top = pyMain(Math.max(o, c));
-      const bot = pyMain(Math.min(o, c));
-      const bodyH = Math.max(1, bot - top);
-      candles += `<rect x="${(xc - cw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" opacity="0.95"/>`;
-    }
-
-    // 金黄 MA 平滑曲线
-    const maPathD = smoothPath(aMa5, pyMain);
-
-    // 量能柱
-    const vols = bars.map(b => +b.volume || 0);
-    const maxV = Math.max.apply(null, vols);
-    const yVolBase = regVol.bot;
-    let volBars = "";
-    const vw = Math.max(1, (w / N) * 0.62);
-    for (let i = 0; i < N; i++) {
-      const up = closes[i] >= opens[i];
-      const col = up ? UP : DN;
-      const h = (vols[i] / (maxV || 1)) * (regVol.bot - regVol.top - 2);
-      const xc = px(i);
-      const y = yVolBase - h;
-      volBars += `<rect x="${(xc - vw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${vw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" fill="${col}" opacity="0.85"/>`;
-    }
-
-    // Y 轴价格标签（r39：#aaaaaa 12px Inter 字族）
-    let yLabels = "";
-    for (let i = 0; i <= 3; i++) {
-      const v = loMain + (hiMain - loMain) * (i / 3);
-      const y = pyMain(v);
-      yLabels += `<text x="${x0-6}" y="${y+4}" text-anchor="end" fill="#aaaaaa" font-size="12" font-family="Inter,'PingFang SC',-apple-system,sans-serif">${v.toFixed(2)}</text>`;
-    }
-    // 量能最大值
-    yLabels += `<text x="${x0-6}" y="${regVol.top+11}" text-anchor="end" fill="#7a7a85" font-size="10" font-family="Inter,'PingFang SC',-apple-system,sans-serif">量 ${maxV ? (maxV/1e4).toFixed(0)+"万" : "—"}</text>`;
-
-    // 主图与量能分隔线
-    const separatorLine = `<line x1="${x0}" y1="${regMain.bot}" x2="${x0+w}" y2="${regMain.bot}" stroke="#2a2a30" stroke-width="1"/>`;
-
-    // 十字光标
-    const crosshair = `<line id="tpChartCross" x1="0" y1="0" x2="0" y2="0" stroke="#5a5a60" stroke-dasharray="2 3" stroke-width="0.8" style="display:none"/>`;
-
-    // ====================== 组装 SVG ======================
-    // 渐变定义：涨红 60% → 2%；跌绿 60% → 2%（按用户规格）
-    svg.innerHTML = `
-      <defs>
-        <linearGradient id="${gradUpId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#ff4c4c" stop-opacity="0.60"/>
-          <stop offset="100%" stop-color="#ff4c4c" stop-opacity="0.02"/>
-        </linearGradient>
-        <linearGradient id="${gradDnId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#36d170" stop-opacity="0.60"/>
-          <stop offset="100%" stop-color="#36d170" stop-opacity="0.02"/>
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="${W}" height="${H}" fill="#121214"/>
-      ${separatorLine}
-      ${gridLines}
-      <path d="${areaPathD}" fill="${isUpAll ? "url(#" + gradUpId + ")" : "url(#" + gradDnId + ")"}"/>
-      ${candles}
-      <path d="${maPathD}" fill="none" stroke="#ffc120" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-      ${volBars}
-      ${yLabels}
-      ${crosshair}
-    `;
-
-    // ====================== 鼠标十字光标 + Tooltip ======================
-    if (!svg.__tpBound) {
-      svg.__tpBound = true;
-      svg.addEventListener("mousemove", (ev) => {
-        const rect = svg.getBoundingClientRect();
-        const xRel = (ev.clientX - rect.left) / rect.width;
-        const pxSvg = xRel * W;
-        const idx = Math.round((pxSvg - PAD_L) / (W - PAD_L - PAD_R) * (N - 1));
-        if (idx < 0 || idx >= N) { hideTip(); return; }
-        const b = bars[idx];
-        const cross = svg.querySelector("#tpChartCross");
-        if (cross) {
-          cross.setAttribute("x1", pxSvg); cross.setAttribute("x2", pxSvg);
-          cross.setAttribute("y1", 0);      cross.setAttribute("y2", H);
-          cross.style.display = "";
+  // ---- 模式1【分时】line + areaStyle 渐变 + 1 根金黄 MA ----
+  function buildIntradayOption(bars, indicators) {
+    const cats = bars.map(b => b.date);
+    const closes = bars.map(b => +b.close);
+    const isUpAll = closes[closes.length - 1] >= closes[0];
+    const lineColor = isUpAll ? "#ff4c4c" : "#36d170";
+    const ma5 = (indicators && indicators.ma5) ? indicators.ma5 : smaArr(closes, 5);
+    const volData = bars.map(b => {
+      const up = +b.close >= +b.open;
+      return { value: +b.volume, itemStyle: { color: up ? "#ff4c4c" : "#36d170" } };
+    });
+    const tipColor = (b) => (+b.close >= +b.open) ? "#ff4c4c" : "#36d170";
+    return {
+      backgroundColor: "#121214", animation: false,
+      textStyle: { fontFamily: "Inter, sans-serif", color: "#aaaaaa" },
+      grid: [{ left: 52, right: 14, top: 14, height: "66%" }, { left: 52, right: 14, top: "76%", height: "18%" }],
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "cross", lineStyle: { color: "#5a5a60", type: "dashed" }, crossStyle: { color: "#5a5a60" } },
+        backgroundColor: "rgba(15,15,15,0.95)", borderColor: "#444", textStyle: { color: "#e5e7eb", fontSize: 11 },
+        formatter: function (ps) {
+          const i = ps[0].dataIndex, b = bars[i], col = tipColor(b);
+          const mv = (indicators && indicators.ma5 && indicators.ma5[i] != null) ? (+indicators.ma5[i]).toFixed(2) : "--";
+          return '<div style="font-size:11px"><b style="color:#f3f4f6">' + b.date + '</b></div>'
+            + '<div style="font-size:11px">开 ' + (+b.open).toFixed(2) + ' 收 <b style="color:' + col + '">' + (+b.close).toFixed(2) + '</b></div>'
+            + '<div style="font-size:11px">高 ' + (+b.high).toFixed(2) + ' 低 ' + (+b.low).toFixed(2) + '</div>'
+            + '<div style="font-size:11px">量 ' + (+b.volume).toLocaleString("zh-CN") + '</div>'
+            + '<div style="font-size:11px;color:#d1d5db">MA5 ' + mv + '</div>';
         }
-        showTip(ev, b, idx, { ma5: aMa5[idx], vol: b.volume, opens: opens[idx] });
-      });
-      svg.addEventListener("mouseleave", () => {
-        hideTip();
-        const cross = svg.querySelector("#tpChartCross");
-        if (cross) cross.style.display = "none";
-      });
-    }
-    function showTip(ev, b, i, indNow) {
-      const tip = document.getElementById("tpChartTip");
-      if (!tip) return;
-      const rect = svg.getBoundingClientRect();
-      const upCol = b.close >= b.open;
-      const color = upCol ? UP : DN;
-      const f = (v, n = 2) => v == null ? "--" : (+v).toFixed(n);
-      tip.innerHTML = `<div style="font-size:12px"><b style="color:#f3f4f6">${b.date || ""}</b></div>
-        <div style="font-size:12px;margin-top:2px">开 ${f(b.open)} · 收 <b style="color:${color};font-weight:700">${f(b.close)}</b></div>
-        <div style="font-size:12px">高 ${f(b.high)} · 低 ${f(b.low)}</div>
-        <div style="font-size:12px">量 ${b.volume != null ? (+b.volume).toLocaleString("zh-CN") : "--"}</div>
-        <div style="color:#d1d5db;font-size:11px;margin-top:4px;border-top:1px solid #2a2a30;padding-top:4px">MA5 ${f(indNow.ma5)}</div>`;
-      tip.style.display = "block";
-      const x = ev.clientX - rect.left + 10;
-      const y = ev.clientY - rect.top + 10;
-      tip.style.left = Math.min(rect.width - 220, x) + "px";
-      tip.style.top  = Math.min(rect.height - 110, y) + "px";
-    }
-    function hideTip() {
-      const tip = document.getElementById("tpChartTip");
-      if (tip) tip.style.display = "none";
-    }
+      },
+      axisPointer: { link: [{ xAxisIndex: "all" }] },
+      xAxis: [
+        { type: "category", data: cats, boundaryGap: false, gridIndex: 0, axisLine: { lineStyle: { color: "#3a3a3f" } }, axisLabel: { color: "#aaaaaa", fontSize: 10, interval: Math.floor(cats.length / 6) }, axisTick: { show: false }, splitLine: { show: false } },
+        { type: "category", data: cats, boundaryGap: false, gridIndex: 1, axisLine: { lineStyle: { color: "#3a3a3f" } }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+      ],
+      yAxis: [
+        { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10 }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a30", type: "dashed" } } },
+        { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+      ],
+      series: [
+        { name: "price", type: "line", data: closes, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true,
+          lineStyle: { color: lineColor, width: 2 },
+          areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: isUpAll ? "rgba(255,76,76,0.55)" : "rgba(54,209,112,0.55)" },
+            { offset: 1, color: isUpAll ? "rgba(255,76,76,0.02)" : "rgba(54,209,112,0.02)" } ]) } },
+        { name: "MA5", type: "line", data: ma5, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true, lineStyle: { color: "#ffc120", width: 1.8 } },
+        { name: "vol", type: "bar", data: volData, xAxisIndex: 1, yAxisIndex: 1 }
+      ]
+    };
+  }
+
+  // ---- 模式2【日K+指标】candlestick（无 areaStyle）+ MA5金/MA10蓝/MA20灰 + 量能随涨跌 ----
+  function buildDailyOption(bars, indicators) {
+    const cats = bars.map(b => b.date);
+    const ohlc = bars.map(b => [+b.open, +b.close, +b.low, +b.high]);
+    const closes = bars.map(b => +b.close);
+    const ma5 = (indicators && indicators.ma5) ? indicators.ma5 : smaArr(closes, 5);
+    const ma10 = (indicators && indicators.ma10) ? indicators.ma10 : smaArr(closes, 10);
+    const ma20 = (indicators && indicators.ma20) ? indicators.ma20 : smaArr(closes, 20);
+    const volData = bars.map(b => {
+      const up = +b.close >= +b.open;
+      return { value: +b.volume, itemStyle: { color: up ? "#ff4c4c" : "#36d170" } };
+    });
+    const tipColor = (b) => (+b.close >= +b.open) ? "#ff4c4c" : "#36d170";
+    const g = (arr, i) => (arr && arr[i] != null) ? (+arr[i]).toFixed(2) : "--";
+    return {
+      backgroundColor: "#121214", animation: false,
+      textStyle: { fontFamily: "Inter, sans-serif", color: "#aaaaaa" },
+      grid: [{ left: 52, right: 14, top: 14, height: "66%" }, { left: 52, right: 14, top: "76%", height: "18%" }],
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "cross", lineStyle: { color: "#5a5a60", type: "dashed" } },
+        backgroundColor: "rgba(15,15,15,0.95)", borderColor: "#444", textStyle: { color: "#e5e7eb", fontSize: 11 },
+        formatter: function (ps) {
+          const i = ps[0].dataIndex, b = bars[i], col = tipColor(b);
+          return '<div style="font-size:11px"><b style="color:#f3f4f6">' + b.date + '</b></div>'
+            + '<div style="font-size:11px">开 ' + (+b.open).toFixed(2) + ' 收 <b style="color:' + col + '">' + (+b.close).toFixed(2) + '</b></div>'
+            + '<div style="font-size:11px">高 ' + (+b.high).toFixed(2) + ' 低 ' + (+b.low).toFixed(2) + '</div>'
+            + '<div style="font-size:11px">量 ' + (+b.volume).toLocaleString("zh-CN") + '</div>'
+            + '<div style="font-size:11px;color:#d1d5db">MA5 ' + g(ma5, i) + ' · MA10 ' + g(ma10, i) + ' · MA20 ' + g(ma20, i) + '</div>';
+        }
+      },
+      axisPointer: { link: [{ xAxisIndex: "all" }] },
+      xAxis: [
+        { type: "category", data: cats, boundaryGap: true, gridIndex: 0, axisLine: { lineStyle: { color: "#3a3a3f" } }, axisLabel: { color: "#aaaaaa", fontSize: 10, interval: Math.floor(cats.length / 6) }, axisTick: { show: false }, splitLine: { show: false } },
+        { type: "category", data: cats, boundaryGap: true, gridIndex: 1, axisLine: { lineStyle: { color: "#3a3a3f" } }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+      ],
+      yAxis: [
+        { scale: true, gridIndex: 0, position: "right", axisLine: { show: false }, axisLabel: { color: "#aaaaaa", fontSize: 10 }, axisTick: { show: false }, splitLine: { lineStyle: { color: "#2a2a30", type: "dashed" } } },
+        { scale: true, gridIndex: 1, position: "right", axisLine: { show: false }, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+      ],
+      series: [
+        { name: "K", type: "candlestick", data: ohlc, xAxisIndex: 0, yAxisIndex: 0,
+          itemStyle: { color: "#ff4c4c", color0: "#36d170", borderColor: "#ff4c4c", borderColor0: "#36d170" } },
+        { name: "MA5", type: "line", data: ma5, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true, lineStyle: { color: "#ffc120", width: 1.6 } },
+        { name: "MA10", type: "line", data: ma10, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true, lineStyle: { color: "#3488eb", width: 1.6 } },
+        { name: "MA20", type: "line", data: ma20, xAxisIndex: 0, yAxisIndex: 0, showSymbol: false, smooth: true, lineStyle: { color: "#aaaaaa", width: 1.6 } },
+        { name: "vol", type: "bar", data: volData, xAxisIndex: 1, yAxisIndex: 1 }
+      ]
+    };
   }
 
   function _normCodeForTp(code) { return (code || "").toLowerCase(); }
@@ -2850,31 +2877,35 @@ function renderAiAdvice(positions) {
   }
 
   // r39：按 (code + period) 拉 K 线（顶层函数，被 renderStockDetail 与周期切换共用）
+  // r40：按双标签模式拉 K 线（分时=1m / 日K+指标=daily），与顶部"周期"按钮解耦
   async function renderKlineAtPeriod() {
     const code = __tpCurrent.code;
     if (!code) return;
-    const p = __tpCurrent.period || "5m";
-    // 不同周期拉不同长度：分时 240 根够看一天；30分/60分 80 根；日/周 180 根
-    let limit = 120;
-    if (p === "1m") limit = 240;
-    else if (p === "30m" || p === "60m") limit = 80;
-    else if (p === "daily" || p === "weekly") limit = 180;
-    // 切股票时先查缓存（同 period）—— 立即出图
-    const cached = _klineCachePeriod[code + "|" + p];
+    const mode = __klineMode || "intraday";
+    const period = (mode === "intraday") ? "1m" : "daily";
+    const limit  = (mode === "intraday") ? 240 : 180;
+    const cacheKey = code + "|" + mode;
+    // 缓存秒出（按模式存）
+    const cached = _klineCachePeriod[cacheKey];
     if (cached && cached.bars && cached.bars.length) {
-      try { _drawTpChart(cached.bars, cached.series || {}); } catch (e) {}
+      try { renderTpChart(cached.bars, cached.indicators || {}, mode, !!cached.isDemo); } catch (e) {}
     }
     try {
       const r = await api("GET", "/api/kline?code=" + encodeURIComponent(code)
-                             + "&period=" + p + "&limit=" + limit);
-      if (r && r.bars && r.bars.length) {
-        _drawTpChart(r.bars, r.series || {});
-        // 按 period 缓存
-        _klineCachePeriod[code + "|" + p] = { bars: r.bars, series: r.series || {} };
+                             + "&period=" + period + "&limit=" + limit);
+      let bars = (r && r.bars) || [];
+      let indicators = (r && r.indicators) || {};
+      let isDemo = false;
+      if (!bars.length) {
+        // 演示兜底：接口暂不可达时避免空白
+        const demo = buildDemoBars(mode);
+        bars = demo.bars; indicators = demo.indicators; isDemo = true;
       }
+      renderTpChart(bars, indicators, mode, isDemo);
+      _klineCachePeriod[cacheKey] = { bars, indicators, isDemo };
+      const meta = document.getElementById("tradePlanMeta");
+      if (meta) meta.textContent = isDemo ? "⚠️ 演示数据（接口暂不可达）" : "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
     } catch (e) { console.warn("[wb] kline period:", e && e.message); }
-    const title = document.getElementById("klineTitle");
-    if (title) title.textContent = "📉 K线图 · " + (PERIOD_LABEL[p] || p);
   }
 
   function bindNav() {
@@ -2887,36 +2918,31 @@ function renderAiAdvice(positions) {
   function bindTopbar() {
     let autoTimer = null;  // 自动刷新定时器句柄
 
-    // 顶部"周期"按钮（5m/15m/daily/weekly）
+    // 顶部"周期"按钮（5分/15分/日/周）：仅控制 AI 决策所用周期，不再联动 K 线图表（与双标签解耦）
     document.querySelectorAll('#periodSwitch .tb-chip').forEach(b => {
       b.addEventListener('click', () => {
         document.querySelectorAll('#periodSwitch .tb-chip').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
-        __tpCurrent.period = b.dataset.period || "5m";
-        // 同步更新 K 线区 tab
-        document.querySelectorAll('#klineTabs .tp-tab').forEach(x => {
-          x.classList.toggle('active', x.dataset.p === __tpCurrent.period);
-        });
-        renderKlineAtPeriod();
+        const newP = b.dataset.period || "5m";
+        if (__tpCurrent.period === newP) return;
+        __tpCurrent.period = newP;
+        // 按所选周期重新拉信号、刷新 AI 决策（不影响 K 线双标签）
+        if (__tpCurrent.code) {
+          api("GET", "/api/signal?code=" + encodeURIComponent(__tpCurrent.code) + "&period=" + newP + "&limit=180")
+            .then(sig => { if (sig && sig.ok) _renderTradePlan(sig, __tpCurrent.code, __tpCurrent.name); })
+            .catch(() => {});
+        }
       });
     });
 
-    // r39：K线区 tab 切换（分时/5分/15分/30分/日K/周K）
+    // r40：K线区双标签（分时 / 日K+指标）—— 控制图表渲染模式，互相独立
     document.querySelectorAll('#klineTabs .tp-tab').forEach(b => {
       b.addEventListener('click', () => {
         document.querySelectorAll('#klineTabs .tp-tab').forEach(x => x.classList.remove('active'));
         b.classList.add('active');
-        const newP = b.dataset.p || "5m";
-        if (__tpCurrent.period === newP) {
-          // 同周期：强行刷新一次
-          renderKlineAtPeriod();
-          return;
-        }
-        __tpCurrent.period = newP;
-        // 同步更新顶部"周期"按钮
-        document.querySelectorAll('#periodSwitch .tb-chip').forEach(x => {
-          x.classList.toggle('active', x.dataset.period === newP);
-        });
+        const newMode = b.dataset.mode || "intraday";
+        if (__klineMode === newMode) { renderKlineAtPeriod(); return; }  // 同模式：刷新
+        __klineMode = newMode;
         renderKlineAtPeriod();
       });
     });
@@ -3283,7 +3309,7 @@ function renderAiAdvice(positions) {
         if (__tpCurrent.code && (period === 'm5')) {
           // 切到分时：从 /api/kline 取 5 分钟折线重画
           api('GET', '/api/kline?code=' + encodeURIComponent(__tpCurrent.code) + '&period=5m&limit=120')
-            .then(r => { if (r && r.bars) _drawTpChart(r.bars, r.series || {}); })
+            .then(r => { if (r && r.bars) renderTpChart(r.bars, (r.indicators || {}), 'intraday', false); })
             .catch(() => {});
         } else if (__tpCurrent.code) {
           // 切回日K：重渲染
