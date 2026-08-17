@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
 /* r40 版本自检：K线区改为 ECharts 双标签（【分时】折线面积图 / 【日K+指标】蜡烛图），两套 series 完全独立（setOption(opt,true) 不合并），背景 #121214，涨红 #ff4c4c 跌绿 #36d170（A股统一），分时 1 根金黄 MA #ffc120，日K MA5金/MA10蓝 #3488eb/MA20灰 #aaaaaa，量能随涨跌，接口空时演示数据兜底。 */
-console.log('%c[wb] app.js r40s loaded (首屏秒开：非阻塞+轮询补数 / 尾盘缓存落盘 / 手机适配)','color:#ef4444;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40s') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40s。请强制刷新或清缓存。');
+console.log('%c[wb] app.js r40t loaded (首屏秒开：非阻塞+轮询补数 / 尾盘缓存落盘 / 手机适配 / 每日定时调度)','color:#ef4444;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40t') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40t。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -3166,7 +3166,7 @@ function _tpIntraLayout() {
     }
   }
 
-  // r40s：首屏数据后台生成时，每 2.5s 轮询补齐，直到 building=false 且数据更新
+  // r40t：首屏数据后台生成时，每 2.5s 轮询补齐，直到 building=false 且数据更新
   function _wbPollBrief() {
     if (_wbBriefPollTimer) clearTimeout(_wbBriefPollTimer);
     _wbBriefPollTimer = setTimeout(async () => {

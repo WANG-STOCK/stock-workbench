@@ -3855,6 +3855,59 @@ class Handler(BaseHTTPRequestHandler):
         return triggered
 
 
+# r40t：每日定时调度（自动跑）
+_SCHED_SLOTS = {
+    "0930": {"h": 9,  "m": 30, "done": False},
+    "1450": {"h": 14, "m": 50, "done": False},
+    "1800": {"h": 18, "m": 0,  "done": False},
+}
+_SCHED_LOG_PATH = os.path.join(DATA_DIR, "scheduler.log")
+
+def _is_trading_day():
+    # A股交易日：周一~周五（跳过周末）。法定节假日暂未接入。
+    return time.localtime().tm_wday < 5  # 0=Mon ... 4=Fri
+
+def _sched_log(msg):
+    line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    print("[scheduler]", line)
+    try:
+        if os.path.isfile(_SCHED_LOG_PATH) and os.path.getsize(_SCHED_LOG_PATH) > 100000:
+            with open(_SCHED_LOG_PATH, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            with open(_SCHED_LOG_PATH, "w", encoding="utf-8") as f:
+                f.write("".join(lines[-600:]))
+        with open(_SCHED_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+def _scheduler_fire(key):
+    if key == "0930":
+        _sched_log("▶ 09:30 触发：重建每日晨报（持仓预测 + 信号扫描）")
+        threading.Thread(target=_rebuild_daily_brief, daemon=True).start()
+    elif key == "1450":
+        _sched_log("▶ 14:50 触发：尾盘选股（强制重扫）+ 记录今日候选")
+        try:
+            _tail_buy_scan(force=True)
+        except Exception as e:
+            _sched_log(f"  ! 尾盘扫描失败: {e}")
+        try:
+            _record_today_tail()
+        except Exception as e:
+            _sched_log(f"  ! 记录今日尾盘候选失败: {e}")
+    elif key == "1800":
+        _sched_log("▶ 18:00 触发：全池预测(纯主板) + 复盘核对昨日尾盘")
+        try:
+            _check_tail_yesterday()
+        except Exception as e:
+            _sched_log(f"  ! 尾盘复盘核对失败: {e}")
+        try:
+            r = _start_predict_task('all_main')
+            _sched_log(f"  全池预测已启动: {r}")
+        except Exception as e:
+            _sched_log(f"  ! 全池预测启动失败: {e}")
+
+
 def main():
     port = int(os.environ.get("PORT", "8723"))
     # 绑定 0.0.0.0 以便同一局域网内手机/其他设备访问（公网暴露请务必加反代与鉴权）
@@ -3891,9 +3944,9 @@ def main():
                 time.sleep(300)
     threading.Thread(target=_sector_warmer, daemon=True).start()
 
-    # 服务端后台调度：自动生成开盘判断 + 四时点快照 + 收盘复盘（不依赖浏览器是否打开）
-    # 交易时段(9:00-15:10)每 20 秒检查一次，更敏捷（原来 60s 偶发延迟到时点后 60s 才出现）；
-    # 30 分钟无变化（scheduler_heartbeat 留住证据），如崩了重启即补。其余时间 5 分钟一次，省资源
+    # r40t：每日定时调度（自动跑，不依赖浏览器是否打开）
+    # 09:30 重建每日晨报(持仓预测+信号扫描) / 14:50 尾盘选股+记录 / 18:00 全池预测+复盘核对
+    # 心跳文件 _scheduler_heartbeat.json 留存证据；明细见 data/scheduler.log
     import os as _os
     HEARTBEAT_FILE = _os.path.join(DATA_DIR, "_scheduler_heartbeat.json")
 
@@ -3904,22 +3957,45 @@ def main():
             pass
 
     def _daily_scheduler():
-        last_alive = 0
+        """每日定时调度（自动跑）：
+        09:30 重建每日晨报(持仓预测+信号扫描)
+        14:50 尾盘选股(强制重扫)+记录今日候选
+        18:00 全池预测(纯主板)+复盘核对昨日尾盘
+        错过的时点(服务未启动)不补跑，次日正常；非交易日(周末)暂停。"""
+        init_day = None
+        non_trade_noted = False
         while True:
             try:
                 _write_heartbeat("tick")
-                run_daily("auto")
+                today = _today_str()
+                now = time.localtime()
+                cur_min = now.tm_hour * 60 + now.tm_min
+                if today != init_day:
+                    # 新的一天：把"已经过去的时点"标记完成(错过的不再补跑)，未来的等待触发
+                    init_day = today
+                    non_trade_noted = False
+                    for key, slot in _SCHED_SLOTS.items():
+                        slot_min = slot["h"] * 60 + slot["m"]
+                        if cur_min >= slot_min:
+                            if not slot["done"]:
+                                _sched_log(f"○ {key} 已过时(服务启动于 {cur_min//60:02d}:{cur_min%60:02d})，本日跳过")
+                            slot["done"] = True
+                        else:
+                            slot["done"] = False
+                if _is_trading_day():
+                    for key, slot in _SCHED_SLOTS.items():
+                        if not slot["done"] and cur_min >= slot["h"] * 60 + slot["m"]:
+                            slot["done"] = True
+                            _scheduler_fire(key)
+                elif not non_trade_noted:
+                    non_trade_noted = True
+                    _sched_log("○ 今日非交易日(周末)，定时任务暂停")
             except Exception as e:
-                _write_beat_error = True
                 try:
                     _save_json(HEARTBEAT_FILE, {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "error": str(e)})
                 except Exception:
                     pass
-            h, m = time.localtime().tm_hour, time.localtime().tm_min
-            if 9 <= h < 15 or (h == 15 and m <= 10):
-                time.sleep(20)
-            else:
-                time.sleep(300)
+            time.sleep(60)
     _write_heartbeat("started")
     threading.Thread(target=_daily_scheduler, daemon=True).start()
 
