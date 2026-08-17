@@ -12,7 +12,7 @@ def curl_json(url, timeout=90):
     try:
         r = subprocess.run(
             ["curl", "-s", "--max-time", str(timeout), "-w", "\n%{http_code}", url],
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding='utf-8', errors='replace')  # utf-8/replace 避免 Windows gbk 解码子进程输出崩溃
         out = r.stdout
         if not out.strip():
             return None, "EMPTY"

@@ -19,7 +19,7 @@ cmd = [edge, "--headless=new", "--no-sandbox", "--disable-gpu",
        "--screenshot=" + out,
        url]
 print("RUN:", " ".join(cmd[:5]) + " ...")
-r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)  # utf-8/replace 避免 Windows gbk 解码子进程输出崩溃
 print("rc:", r.returncode)
 print("stderr:", r.stderr[-200:] if r.stderr else "")
 time.sleep(3)

@@ -79,7 +79,8 @@ def fetch_kline_em(code, period="1m", limit=60, end="20500101"):
             ):
                 cmd = f'curl -s --max-time 5 {hdr_args} "{url}"'.strip()
                 try:
-                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=7, shell=True)
+                    # utf-8/replace 避免 Windows 默认 gbk 解码 curl 输出时崩
+                    out = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=7, shell=True)
                 except Exception:
                     out = None
                 if out is not None and out.returncode == 0 and out.stdout and '"klines"' in out.stdout and len(out.stdout) > 1000:
