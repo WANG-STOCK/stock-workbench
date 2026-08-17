@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
 /* r40 版本自检：K线区改为 ECharts 双标签（【分时】折线面积图 / 【日K+指标】蜡烛图），两套 series 完全独立（setOption(opt,true) 不合并），背景 #121214，涨红 #ff4c4c 跌绿 #36d170（A股统一），分时 1 根金黄 MA #ffc120，日K MA5金/MA10蓝 #3488eb/MA20灰 #aaaaaa，量能随涨跌，接口空时演示数据兜底。 */
-console.log('%c[wb] app.js r40r loaded (去掉盯盘/K线，改为今日晨报首屏 + 持仓预测 + 复盘加尾盘选股tab)','color:#ef4444;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40r') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40r。请强制刷新或清缓存。');
+console.log('%c[wb] app.js r40s loaded (首屏秒开：非阻塞+轮询补数 / 尾盘缓存落盘 / 手机适配)','color:#ef4444;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40s') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40s。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -3033,7 +3033,10 @@ function _tpIntraLayout() {
   document.addEventListener("DOMContentLoaded", init);
 
   // ========== r40r 今日晨报（持仓预测+尾盘选股+信号扫描，一屏搞定） ==========
-  async function renderBrief(forceRefresh) {
+  let _wbBriefPollTimer = null;
+  let _wbBriefLastTs = 0;
+
+  function _renderBriefData(b) {
     const dateEl = document.getElementById('briefDate');
     const subEl = document.getElementById('briefSubtitle');
     const updatedEl = document.getElementById('briefUpdatedAt');
@@ -3045,107 +3048,116 @@ function _tpIntraLayout() {
     const k5D = document.getElementById('briefKpiDown');
     const k5T = document.getElementById('briefKpiTail');
     const k5S = document.getElementById('briefKpiScan');
-    const refreshBtn = document.getElementById('briefRefreshBtn');
+    if (dateEl) dateEl.textContent = (b.date || '--') + ' (' + (b.weekday || '--') + ')';
+    if (subEl) subEl.textContent = b.building
+      ? '数据生成中…（行情拉取中，稍候自动刷新）'
+      : ('今日建议：' + `持仓 ${b.counts?.holdings || 0} 只 · 涨≥2% ${b.counts?.pred_up || 0} · 跌≤-2% ${b.counts?.pred_down || 0}`) + (b.error ? '（行情拉取失败，显示空/上次数据）' : '');
+    if (updatedEl) updatedEl.textContent = b.generated_at ? '更新于 ' + b.generated_at : '--';
+    if (k5H) k5H.textContent = b.counts?.holdings ?? '--';
+    if (k5U) k5U.textContent = b.counts?.pred_up ?? '--';
+    if (k5D) k5D.textContent = b.counts?.pred_down ?? '--';
+    if (k5T) k5T.textContent = (b.tail_picks || []).length;
+    if (k5S) k5S.textContent = (b.scan_buy || []).length;
+
+    // 持仓预测
+    const holdings = b.holdings || [];
+    if (body) {
+      if (!holdings.length) {
+        body.innerHTML = '<tr><td colspan="10" class="empty-cell">暂无持仓，请到「持仓建议」页录入</td></tr>';
+      } else {
+        body.innerHTML = holdings.map(h => {
+          const px = h.price != null ? Number(h.price).toFixed(2) : '--';
+          const chg = h.change_pct != null ? ((h.change_pct >= 0 ? '+' : '') + Number(h.change_pct).toFixed(2) + '%') : '--';
+          const chgCls = h.change_pct == null ? '' : (h.change_pct >= 0 ? 'up' : 'down');
+          const dirLabel = h.action_label || '持有';
+          const dirCls = h.action === '买入' ? 'up' : h.action === '卖出' ? 'down' : '';
+          const amp = h.amp_pred != null ? ((h.amp_pred >= 0 ? '+' : '') + Number(h.amp_pred).toFixed(2) + '%') : '--';
+          const ampCls = h.amp_pred == null ? '' : (h.amp_pred >= 0 ? 'up' : 'down');
+          const buy = h.buy_price != null ? Number(h.buy_price).toFixed(2) : '--';
+          const sell = h.sell_price != null ? Number(h.sell_price).toFixed(2) : '--';
+          const sl = h.stop_loss != null ? Number(h.stop_loss).toFixed(2) : '--';
+          const tp = h.take_profit != null ? Number(h.take_profit).toFixed(2) : '--';
+          const qty = h.op_qty ? (h.op_qty + ' 股') : '--';
+          const basis = (h.op_basis || h.reason || '').slice(0, 80);
+          return `<tr>
+            <td><b>${h.name || h.code}</b> <i style="color:#888">${h.code}</i></td>
+            <td class="r">¥${px}</td>
+            <td class="r ${chgCls}">${chg}</td>
+            <td class="${dirCls}">${dirLabel}</td>
+            <td class="r ${ampCls}">${amp}</td>
+            <td class="r">${buy === '--' ? '--' : '¥' + buy}</td>
+            <td class="r">${sl === '--' ? '--' : '¥' + sl}</td>
+            <td class="r">${tp === '--' ? '--' : '¥' + tp}</td>
+            <td class="r">${qty}</td>
+            <td style="font-size:11px;color:#aaa">${basis || '—'}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+    // 尾盘
+    const tail = b.tail_picks || [];
+    if (tailList) {
+      if (!tail.length) tailList.innerHTML = '<div class="empty-cell">今日暂无尾盘选股（14:50 后或主板无满足条件票）</div>';
+      else tailList.innerHTML = tail.map(r => {
+        const px = r.price != null ? Number(r.price).toFixed(2) : '--';
+        const chg = r.change_pct != null ? ((r.change_pct >= 0 ? '+' : '') + Number(r.change_pct).toFixed(2) + '%') : '--';
+        const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
+        const tags = (r.rules_hit || []).map(t => `<span class="tb-rule-tag">${t}</span>`).join('') +
+                     (r.rules_miss || []).map(t => `<span class="tb-rule-tag no">${t}</span>`).join('');
+        return `<div class="brief-tail-card">
+          <div class="brief-tail-row">
+            <span class="brief-tail-name"><b>${r.name || r.code}</b> <i>${r.code}</i></span>
+            <span class="brief-tail-px">¥${px}</span>
+            <span class="brief-tail-chg ${chgCls}">${chg}</span>
+          </div>
+          <div class="brief-tail-meta">振幅 ${r.amp_pct != null ? Number(r.amp_pct).toFixed(1) + '%' : '--'} · 量比 ${r.vol_ratio != null ? Number(r.vol_ratio).toFixed(2) : '--'} · 换手 ${r.turnover != null ? Number(r.turnover).toFixed(1) + '%' : '--'}</div>
+          <div class="brief-tail-tags">${tags}</div>
+        </div>`;
+      }).join('');
+    }
+    // 扫描 Top 5
+    const scan = b.scan_buy || [];
+    if (scanList) {
+      if (!scan.length) scanList.innerHTML = '<div class="empty-cell">暂无扫描结果（先到「选股扫描」点刷新）</div>';
+      else scanList.innerHTML = scan.slice(0, 5).map((r, i) => {
+        const px = r.price != null ? Number(r.price).toFixed(2) : '--';
+        const chg = r.change_pct != null ? ((r.change_pct >= 0 ? '+' : '') + Number(r.change_pct).toFixed(2) + '%') : '';
+        const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
+        const sc = r.score != null ? Number(r.score).toFixed(0) : (r.combined != null ? Number(r.combined).toFixed(0) : '--');
+        const act = r.action || '买入';
+        return `<div class="brief-scan-row">
+          <span class="brief-scan-idx">${i + 1}</span>
+          <span class="brief-scan-name">${r.name || r.code}<i>${r.code}</i></span>
+          <span class="brief-scan-px">¥${px}</span>
+          <span class="brief-scan-chg ${chgCls}">${chg}</span>
+          <span class="brief-scan-act">${act}</span>
+          <span class="brief-scan-score">${sc}</span>
+        </div>`;
+      }).join('');
+    }
+    const tailMetaEl = document.getElementById('briefTailMeta');
+    if (tailMetaEl) tailMetaEl.textContent = b.tail_meta || '—';
+  }
+
+  async function renderBrief(forceRefresh) {
+    const body = document.getElementById('briefHoldingsBody');
+    const tailList = document.getElementById('briefTailList');
+    const scanList = document.getElementById('briefScanList');
+    const subEl = document.getElementById('briefSubtitle');
     if (body) body.innerHTML = '<tr><td colspan="10" class="empty-cell">加载晨报中…</td></tr>';
     if (tailList) tailList.innerHTML = '<div class="empty-cell">加载中…</div>';
     if (scanList) scanList.innerHTML = '<div class="empty-cell">加载中…</div>';
-    if (dateEl) dateEl.textContent = '--';
     if (subEl) subEl.textContent = '加载中…';
+    if (_wbBriefPollTimer) { clearTimeout(_wbBriefPollTimer); _wbBriefPollTimer = null; }
     const url = '/api/daily_brief' + (forceRefresh ? '?force=1' : '');
     try {
       const r = await api('GET', url);
       if (!r || !r.ok) throw new Error((r && r.error) || '接口 ok=false');
       const b = r.brief || {};
-      // 头部
-      if (dateEl) dateEl.textContent = (b.date || '--') + ' (' + (b.weekday || '--') + ')';
-      if (subEl) subEl.textContent = '今日建议：'
-        + `持仓 ${b.counts?.holdings || 0} 只 · 涨≥2% ${b.counts?.pred_up || 0} · 跌≤-2% ${b.counts?.pred_down || 0}`;
-      if (updatedEl) updatedEl.textContent = b.generated_at ? '更新于 ' + b.generated_at : '--';
-      // KPI
-      if (k5H) k5H.textContent = b.counts?.holdings ?? '--';
-      if (k5U) k5U.textContent = b.counts?.pred_up ?? '--';
-      if (k5D) k5D.textContent = b.counts?.pred_down ?? '--';
-      if (k5T) k5T.textContent = (b.tail_picks || []).length;
-      if (k5S) k5S.textContent = (b.scan_buy || []).length;
-
-      // 持仓预测
-      const holdings = b.holdings || [];
-      if (body) {
-        if (!holdings.length) {
-          body.innerHTML = '<tr><td colspan="10" class="empty-cell">暂无持仓，请到「持仓建议」页录入</td></tr>';
-        } else {
-          body.innerHTML = holdings.map(h => {
-            const px = h.price != null ? Number(h.price).toFixed(2) : '--';
-            const chg = h.change_pct != null ? ((h.change_pct >= 0 ? '+' : '') + Number(h.change_pct).toFixed(2) + '%') : '--';
-            const chgCls = h.change_pct == null ? '' : (h.change_pct >= 0 ? 'up' : 'down');
-            const dirLabel = h.action_label || '持有';
-            const dirCls = h.action === '买入' ? 'up' : h.action === '卖出' ? 'down' : '';
-            const amp = h.amp_pred != null ? ((h.amp_pred >= 0 ? '+' : '') + Number(h.amp_pred).toFixed(2) + '%') : '--';
-            const ampCls = h.amp_pred == null ? '' : (h.amp_pred >= 0 ? 'up' : 'down');
-            const buy = h.buy_price != null ? Number(h.buy_price).toFixed(2) : '--';
-            const sell = h.sell_price != null ? Number(h.sell_price).toFixed(2) : '--';
-            const sl = h.stop_loss != null ? Number(h.stop_loss).toFixed(2) : '--';
-            const tp = h.take_profit != null ? Number(h.take_profit).toFixed(2) : '--';
-            const qty = h.op_qty ? (h.op_qty + ' 股') : '--';
-            const basis = (h.op_basis || h.reason || '').slice(0, 80);
-            return `<tr>
-              <td><b>${h.name || h.code}</b> <i style="color:#888">${h.code}</i></td>
-              <td class="r">¥${px}</td>
-              <td class="r ${chgCls}">${chg}</td>
-              <td class="${dirCls}">${dirLabel}</td>
-              <td class="r ${ampCls}">${amp}</td>
-              <td class="r">${buy === '--' ? '--' : '¥' + buy}</td>
-              <td class="r">${sl === '--' ? '--' : '¥' + sl}</td>
-              <td class="r">${tp === '--' ? '--' : '¥' + tp}</td>
-              <td class="r">${qty}</td>
-              <td style="font-size:11px;color:#aaa">${basis || '—'}</td>
-            </tr>`;
-          }).join('');
-        }
-      }
-      // 尾盘
-      const tail = b.tail_picks || [];
-      if (tailList) {
-        if (!tail.length) tailList.innerHTML = '<div class="empty-cell">今日暂无尾盘选股（14:50 后或主板无满足条件票）</div>';
-        else tailList.innerHTML = tail.map(r => {
-          const px = r.price != null ? Number(r.price).toFixed(2) : '--';
-          const chg = r.change_pct != null ? ((r.change_pct >= 0 ? '+' : '') + Number(r.change_pct).toFixed(2) + '%') : '--';
-          const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
-          const tags = (r.rules_hit || []).map(t => `<span class="tb-rule-tag">${t}</span>`).join('') +
-                       (r.rules_miss || []).map(t => `<span class="tb-rule-tag no">${t}</span>`).join('');
-          return `<div class="brief-tail-card">
-            <div class="brief-tail-row">
-              <span class="brief-tail-name"><b>${r.name || r.code}</b> <i>${r.code}</i></span>
-              <span class="brief-tail-px">¥${px}</span>
-              <span class="brief-tail-chg ${chgCls}">${chg}</span>
-            </div>
-            <div class="brief-tail-meta">振幅 ${r.amp_pct != null ? Number(r.amp_pct).toFixed(1) + '%' : '--'} · 量比 ${r.vol_ratio != null ? Number(r.vol_ratio).toFixed(2) : '--'} · 换手 ${r.turnover != null ? Number(r.turnover).toFixed(1) + '%' : '--'}</div>
-            <div class="brief-tail-tags">${tags}</div>
-          </div>`;
-        }).join('');
-      }
-      // 扫描 Top 5
-      const scan = b.scan_buy || [];
-      if (scanList) {
-        if (!scan.length) scanList.innerHTML = '<div class="empty-cell">暂无扫描结果（先到「选股扫描」点刷新）</div>';
-        else scanList.innerHTML = scan.slice(0, 5).map((r, i) => {
-          const px = r.price != null ? Number(r.price).toFixed(2) : '--';
-          const chg = r.change_pct != null ? ((r.change_pct >= 0 ? '+' : '') + Number(r.change_pct).toFixed(2) + '%') : '';
-          const chgCls = r.change_pct == null ? '' : (r.change_pct >= 0 ? 'up' : 'down');
-          const sc = r.score != null ? Number(r.score).toFixed(0) : (r.combined != null ? Number(r.combined).toFixed(0) : '--');
-          const act = r.action || '买入';
-          return `<div class="brief-scan-row">
-            <span class="brief-scan-idx">${i + 1}</span>
-            <span class="brief-scan-name">${r.name || r.code}<i>${r.code}</i></span>
-            <span class="brief-scan-px">¥${px}</span>
-            <span class="brief-scan-chg ${chgCls}">${chg}</span>
-            <span class="brief-scan-act">${act}</span>
-            <span class="brief-scan-score">${sc}</span>
-          </div>`;
-        }).join('');
-      }
-      const tailMetaEl = document.getElementById('briefTailMeta');
-      if (tailMetaEl) tailMetaEl.textContent = b.tail_meta || '—';
+      _renderBriefData(b);
+      _wbBriefLastTs = b.ts || 0;
+      // 数据还在后台生成 → 轮询补齐（首屏秒开的关键）
+      if (b.building) _wbPollBrief();
     } catch (e) {
       if (subEl) subEl.textContent = '加载失败：' + (e.message || e);
       if (body) body.innerHTML = `<tr><td colspan="10" class="empty-cell">${e.message || e}</td></tr>`;
@@ -3154,19 +3166,46 @@ function _tpIntraLayout() {
     }
   }
 
-  async function renderHoldingsPredict() {
+  // r40s：首屏数据后台生成时，每 2.5s 轮询补齐，直到 building=false 且数据更新
+  function _wbPollBrief() {
+    if (_wbBriefPollTimer) clearTimeout(_wbBriefPollTimer);
+    _wbBriefPollTimer = setTimeout(async () => {
+      try {
+        const r = await api('GET', '/api/daily_brief');
+        if (r && r.ok) {
+          const b = r.brief || {};
+          const ts = b.ts || 0;
+          if (!b.building && ts > _wbBriefLastTs) {
+            _renderBriefData(b);
+            _wbBriefLastTs = ts;
+            _wbBriefPollTimer = null;
+            return; // 拿到新数据，停止轮询
+          }
+          if (!b.building && ts === _wbBriefLastTs) {
+            _wbBriefPollTimer = null;
+            return; // 已是最新，停止
+          }
+        }
+      } catch (e) { /* 忽略，继续轮询 */ }
+      _wbPollBrief(); // 继续轮询
+    }, 2500);
+  }
+
+  async function renderHoldingsPredict(isPoll) {
     // 持仓建议视图（账户总览 + 持仓预测 + 录入交易）
     try { await renderAccount(); } catch (e) { console.warn('[wb] renderAccount:', e); }
     // 复用 _daily_brief 的持仓数据填充到该视图的"持仓预测"表
     const body = document.getElementById('holdingsPredictBody');
     if (!body) return;
-    body.innerHTML = '<tr><td colspan="10" class="empty-cell">加载中…</td></tr>';
+    if (!isPoll) body.innerHTML = '<tr><td colspan="10" class="empty-cell">加载中…</td></tr>';
     try {
       const r = await api('GET', '/api/daily_brief');
       if (!r || !r.ok) throw new Error((r && r.error) || '接口 ok=false');
-      const holdings = (r.brief && r.brief.holdings) || [];
+      const b = r.brief || {};
+      const holdings = b.holdings || [];
       if (!holdings.length) {
         body.innerHTML = '<tr><td colspan="10" class="empty-cell">暂无持仓</td></tr>';
+        if (b.building) setTimeout(() => renderHoldingsPredict(true), 2500);
         return;
       }
       body.innerHTML = holdings.map(h => {
@@ -3197,6 +3236,8 @@ function _tpIntraLayout() {
       }).join('');
       const updEl = document.getElementById('holdingsUpdated');
       if (updEl && r.brief && r.brief.generated_at) updEl.textContent = '更新于 ' + r.brief.generated_at;
+      // 数据仍在后台生成 → 轻量轮询补齐（避免冷启打开此视图空白）
+      if (b.building) setTimeout(() => renderHoldingsPredict(true), 2500);
     } catch (e) {
       body.innerHTML = `<tr><td colspan="10" class="empty-cell">加载失败：${e.message || e}</td></tr>`;
     }

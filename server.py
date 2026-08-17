@@ -1356,7 +1356,35 @@ def _tail_market_strategy():
 # ---------- 请求处理 ----------
 # ========== r27 尾盘买入法（14:50 推荐 2-3 只大A纯主板，次日超短线） ==========
 _TAIL_BUY_CACHE = {"ts": 0.0, "data": None}
-_TAIL_BUY_TTL = 300  # 5 分钟缓存（避免重复扫几千只股票）
+_TAIL_BUY_TTL = 300  # 5 分钟内存缓存（避免重复扫几千只股票）
+# r40s：尾盘扫描结果落盘，重启服务也秒出（不再每次冷启全量重扫）
+_TAIL_BUY_CACHE_PATH = os.path.join(DATA_DIR, "tail_buy_cache.json")
+
+def _load_tail_cache():
+    """启动 / 冷启时从磁盘恢复尾盘扫描结果，使首屏秒出。"""
+    global _TAIL_BUY_CACHE
+    try:
+        if os.path.isfile(_TAIL_BUY_CACHE_PATH):
+            with open(_TAIL_BUY_CACHE_PATH, "r", encoding="utf-8") as f:
+                d = json.load(f) or {}
+            if d.get("data"):
+                _TAIL_BUY_CACHE["data"] = d["data"]
+                _TAIL_BUY_CACHE["ts"] = d.get("ts", 0.0)
+    except Exception:
+        pass
+
+def _save_tail_cache():
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(_TAIL_BUY_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(_TAIL_BUY_CACHE, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def _tail_cache_is_today():
+    d = _TAIL_BUY_CACHE.get("data") or {}
+    ga = d.get("generated_at") or ""
+    return ga.startswith(_today_str())
 
 def _is_main_board(code):
     """大A纯主板：沪 60x/601x/603x/605x；深 000x/001x/002x
@@ -1493,9 +1521,10 @@ def _tail_buy_score_row(q, ind):
 def _tail_buy_scan(force=False, top_n=3, pool_n=80):
     """扫描大A纯主板，按 r27 尾盘买入法策略评分，返回 top_n 推荐 + pool_n 候选池。"""
     global _TAIL_BUY_CACHE
-    # 缓存命中
-    if not force and _TAIL_BUY_CACHE["data"] and time.time() - _TAIL_BUY_CACHE["ts"] < _TAIL_BUY_TTL:
-        return _TAIL_BUY_CACHE["data"]
+    # 缓存命中（内存 5 分钟内，或当天磁盘缓存都算有效 → 重启也秒出）
+    if not force and _TAIL_BUY_CACHE["data"]:
+        if time.time() - _TAIL_BUY_CACHE["ts"] < _TAIL_BUY_TTL or _tail_cache_is_today():
+            return _TAIL_BUY_CACHE["data"]
 
     # 1) 取全 A 股代码池
     try:
@@ -1593,6 +1622,7 @@ def _tail_buy_scan(force=False, top_n=3, pool_n=80):
     }
     _TAIL_BUY_CACHE["data"] = out
     _TAIL_BUY_CACHE["ts"] = time.time()
+    _save_tail_cache()  # 落盘，重启秒出
     return out
 
 
@@ -2146,19 +2176,21 @@ def _daily_brief():
         # 简版 KPI（前端用）
         "counts": {"holdings": 0, "pred_up": 0, "pred_down": 0},
     }
-    # 1) 持仓预测
+    # 1) 持仓预测（并行：5 只一起算，10 次串行联网 → 1~2 次批量的时间）
     try:
         positions = _load_positions()
-        for p in positions:
-            code = p.get("code")
-            if not code:
-                continue
-            try:
-                rec = _predict_with_advice(code, p.get("name"))
-                if rec:
-                    out["holdings"].append(rec)
-            except Exception as e:
-                out["holdings"].append({"code": code, "name": p.get("name") or code, "error": str(e)})
+        tasks = [(p.get("code"), p.get("name")) for p in positions if p.get("code")]
+        if tasks:
+            def _safe_predict(cp):
+                code, name = cp
+                try:
+                    return _predict_with_advice(code, name)
+                except Exception as e:
+                    return {"code": code, "name": name or code, "error": str(e)}
+            with ThreadPoolExecutor(max_workers=min(5, len(tasks))) as ex:
+                for rec in ex.map(_safe_predict, tasks):
+                    if rec:
+                        out["holdings"].append(rec)
         out["counts"]["holdings"] = len(out["holdings"])
         out["counts"]["pred_up"] = sum(1 for h in out["holdings"] if (h.get("amp_pred") or 0) >= 2)
         out["counts"]["pred_down"] = sum(1 for h in out["holdings"] if (h.get("amp_pred") or 0) <= -2)
@@ -2180,6 +2212,75 @@ def _daily_brief():
         out["scan_sell"] = results[-5:][::-1] if len(results) > 5 else []
     except Exception as e:
         out["scan_err"] = str(e)
+    out["ts"] = time.time()  # 供前端轮询判断"数据是否已更新"
+    return out
+
+
+# r40s：今日晨报非阻塞秒开
+# 接口立即返回磁盘缓存（或空骨架）+ building 标志，同时后台线程重建完整 brief 落盘；
+# 前端轮询补最新数据，首屏不再干等。
+_DAILY_BRIEF_PATH = os.path.join(DATA_DIR, "daily_brief.json")
+_DAILY_BRIEF_BUILDING = False
+_DAILY_BRIEF_LOCK = threading.Lock()
+
+def _load_daily_brief_cache():
+    try:
+        if os.path.isfile(_DAILY_BRIEF_PATH):
+            with open(_DAILY_BRIEF_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+def _save_daily_brief_cache(d):
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(_DAILY_BRIEF_PATH, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def _rebuild_daily_brief():
+    """后台线程：重建完整晨报并落盘（不阻塞请求线程）。"""
+    global _DAILY_BRIEF_BUILDING
+    with _DAILY_BRIEF_LOCK:
+        if _DAILY_BRIEF_BUILDING:
+            return
+        _DAILY_BRIEF_BUILDING = True
+    try:
+        brief = _daily_brief()
+        brief["building"] = False
+        _save_daily_brief_cache(brief)
+    except Exception as e:
+        print("[daily_brief] rebuild failed:", e)
+        # 失败也写缓存（带 error + ts），避免首屏永远 building + 无限重建
+        try:
+            _save_daily_brief_cache({
+                "date": _today_str(), "weekday": "", "generated_at": "--",
+                "holdings": [], "tail_picks": [], "scan_buy": [], "scan_sell": [],
+                "counts": {"holdings": 0, "pred_up": 0, "pred_down": 0},
+                "building": False, "error": str(e), "ts": time.time(),
+            })
+        except Exception:
+            pass
+    finally:
+        _DAILY_BRIEF_BUILDING = False
+
+def _daily_brief_serve(force=False):
+    """首屏接口：秒回缓存/骨架 + 必要时后台重建。"""
+    cached = _load_daily_brief_cache()
+    ts = (cached or {}).get("ts") or 0
+    fresh = (time.time() - ts) < 300  # 5 分钟内算新鲜
+    need_rebuild = force or (cached is None) or (not fresh)
+    if need_rebuild and not _DAILY_BRIEF_BUILDING:
+        threading.Thread(target=_rebuild_daily_brief, daemon=True).start()
+    if cached:
+        out = dict(cached)
+    else:
+        out = {"date": _today_str(), "weekday": "", "generated_at": "--",
+               "holdings": [], "tail_picks": [], "scan_buy": [], "scan_sell": [],
+               "counts": {"holdings": 0, "pred_up": 0, "pred_down": 0}}
+    out["building"] = bool(_DAILY_BRIEF_BUILDING) or bool(need_rebuild)
     return out
 
 
@@ -2991,10 +3092,11 @@ class Handler(BaseHTTPRequestHandler):
             # r40o：预测任务进度（前端 1 秒轮询）
             self._send(200, _load_progress())
             return
-        # r40r：今日晨报（持仓预测 + 尾盘选股 + 信号扫描 Top）—— 首屏用
+        # r40r：今日晨报（持仓预测 + 尾盘选股 + 信号扫描 Top）—— 首屏用（r40s 改为非阻塞秒开）
         if route == "/api/daily_brief":
             try:
-                self._send(200, {"ok": True, "brief": _daily_brief()})
+                force = (qs.get("force") or ["0"])[0] == "1"
+                self._send(200, {"ok": True, "brief": _daily_brief_serve(force)})
             except Exception as e:
                 self._send(200, {"ok": False, "error": str(e), "brief": {}})
             return
@@ -3770,6 +3872,9 @@ def main():
     print(f"通达信数据源： {'已启用 ' + _tdx_path if _tdx_available else '未配置（使用在线行情）'}")
     # 后台预生成全 A 股代码池，使首次「在线全市场」扫描即时可用
     threading.Thread(target=_get_universe, daemon=True).start()
+    # r40s：启动即恢复尾盘磁盘缓存 + 后台预生成今日晨报，使首屏秒开
+    _load_tail_cache()
+    threading.Thread(target=_rebuild_daily_brief, daemon=True).start()
 
     # 板块强弱预热的守护线程：启动时先拉一次（避免首屏 30s 冷启），
     # 之后在交易时段每 50s 续热（略低于 60s TTL，保证不回冷），非交易时段 5min 一次。

@@ -926,6 +926,46 @@ button.mini:hover { background: #dde7f0; }
   .right { flex-direction: column; }
 }
 
+/* ---------- 手机适配（≤768px）：侧栏转顶部横滑导航，主区纵向滚动，宽表横向滚动 ---------- */
+@media (max-width: 768px) {
+  body { font-size: 14px; }
+  .app-shell { flex-direction: column; height: 100vh; overflow: hidden; }
+  /* 侧栏 → 顶部横向导航条 */
+  .sidebar {
+    width: 100%; flex: none; flex-direction: row; align-items: center;
+    border-right: none; border-bottom: 1px solid var(--line); overflow: hidden;
+  }
+  .sidebar.collapsed { width: 100%; }
+  .sb-top { border-bottom: none; padding: 8px 10px; }
+  .sb-title, .sb-logo, .sb-collapse, .sb-foot { display: none; }
+  .sidebar > nav { display: flex; flex: 1; min-width: 0; }
+  .sb-nav { flex-direction: row; flex: 1; padding: 6px 8px; gap: 4px; overflow-x: auto; }
+  .sb-nav li { padding: 9px 14px; font-size: 13px; border-radius: 18px; }
+  .sb-nav li.active { border-left: none; }
+  /* 主区 */
+  .main-col { height: auto; min-height: 0; overflow-y: auto; }
+  .topbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .tb-left { max-width: 100%; width: 100%; }
+  .panel { padding: 10px; }
+  .brief-head-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .brief-actions { width: 100%; display: flex; gap: 8px; }
+  .brief-kpi-row { grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .brief-kpi { padding: 6px 4px; }
+  .brief-grid { grid-template-columns: 1fr; }
+  .kpi4, .kpi4.kpi3 { grid-template-columns: repeat(2, 1fr); }
+  .kpi5 { grid-template-columns: repeat(3, 1fr); }
+  .scan-grid { grid-template-columns: 1fr; }
+  .account-body { grid-template-columns: 1fr; }
+  .rv-tabs { flex-wrap: wrap; gap: 6px; }
+  /* 宽表格：容器横向滚动，表最小宽度触发滚动 */
+  .pos-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .brief-hold-tbl, .rv-table, .tl-table { min-width: 680px; }
+  .trade-log { overflow-x: auto; }
+  /* 触控目标放大 */
+  .tp-btn-primary, .btn, .qty-step, .sb-nav li { min-height: 36px; }
+  .tb-theme { min-width: 36px; min-height: 36px; }
+}
+
 /* ---------- 自选股新表头（添加时间/价/增长/荐买） ---------- */
 .watch-item { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .wi-meta { flex: 1 1 100%; display: flex; gap: 10px; flex-wrap: wrap; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
