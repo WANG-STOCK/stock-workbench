@@ -8,11 +8,11 @@
   <meta http-equiv="Expires" content="0">
   <title>婷婷量化AI · 超短线交易工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E📈%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/css/styles.css?v=r40">
+  <link rel="stylesheet" href="/static/css/styles.css?v=r40q">
 </head>
 <body class="theme-dark">
   <div id="errToast" style="display:none;position:fixed;left:0;top:0;right:0;z-index:999999;background:#7a1f1f;color:#fff;font:13px/1.5 monospace;padding:8px 14px;border-bottom:2px solid #ff5252;max-height:35vh;overflow:auto;white-space:pre-wrap;word-break:break-all;"></div>
-  <script>window.__WB_VERSION__='r40';console.log('%c[wb] HTML r40 loaded (ECharts 双标签：分时 / 日K+指标)','color:#3b82f6;font-weight:bold');</script>
+  <script>window.__WB_VERSION__='r40q';console.log('%c[wb] HTML r40q loaded (视图1+视图2 双面板 + errToast 去重)','color:#3b82f6;font-weight:bold');</script>
 
   <div class="app-shell">
     <!-- ===== 左侧可收起导航 ===== -->
@@ -230,7 +230,7 @@
             </div>
           </div>
           <div class="panel panel-tailbuy">
-            <div class="panel-title"><span>🌙 尾盘买入法 · 次日超短</span><span class="panel-extra"><button id="tailbuyRefresh" class="btn btn-tiny">刷新</button><span id="tailbuyStatus">未运行</span></span></div>
+            <div class="panel-title"><span>🌙 尾盘买入法 · 次日超短</span><span class="panel-extra"><button id="tailbuyRefresh2" class="btn btn-tiny">刷新</button><span id="tailbuyStatus2">未运行</span></span></div>
             <div class="tailbuy-rules"><b>选股条件（综合打分 ≥ 60 才入选）：</b><span class="rule">①振幅≤3%</span>·<span class="rule">②涨幅-2%~+3%</span>·<span class="rule">③量比≥1.2 且近20日均量1.2~1.8倍</span>·<span class="rule">④5/10/20均线多头</span>·<span class="rule">⑤主力净流入>0</span>·<span class="rule">⑥大A纯主板</span></div>
             <div class="tailbuy-grid">
               <div class="tailbuy-col"><div class="tailbuy-col-title">🎯 明日重点关注 <span class="cnt" id="tailbuyPickCount2">0</span></div><div id="tailbuyPickList2" class="tailbuy-list"></div></div>
@@ -359,6 +359,6 @@
 
   <div id="toast" class="toast"></div>
   <script src="/static/echarts.min.js"></script>
-  <script src="/static/js/app.js?v=r40p"></script>
+  <script src="/static/js/app.js?v=r40q"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 /* 股票工作台前端控制器 */
 /* r40 版本自检：K线区改为 ECharts 双标签（【分时】折线面积图 / 【日K+指标】蜡烛图），两套 series 完全独立（setOption(opt,true) 不合并），背景 #121214，涨红 #ff4c4c 跌绿 #36d170（A股统一），分时 1 根金黄 MA #ffc120，日K MA5金/MA10蓝 #3488eb/MA20灰 #aaaaaa，量能随涨跌，接口空时演示数据兜底。 */
-console.log('%c[wb] app.js r40 loaded (ECharts 双标签：分时 / 日K+指标)','color:#ef4444;font-weight:bold');
-if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40') {
-  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40。请强制刷新或清缓存。');
+console.log('%c[wb] app.js r40q loaded (视图1+视图2 信号扫描/尾盘双面板 + errToast 去重)','color:#ef4444;font-weight:bold');
+if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40q') {
+  console.warn('[wb] HTML/JS 版本不一致！HTML=' + window.__WB_VERSION__ + ' JS=r40q。请强制刷新或清缓存。');
 }
 (function () {
   /* 用函数声明(而非 const=箭头函数)避免 TDZ；并把所有 selector 失败的情况用 stub-div
@@ -15,14 +15,24 @@ if (window.__WB_VERSION__ && window.__WB_VERSION__ !== 'r40') {
     if (!_stubEl) _stubEl = document.createElement('div');
     return _stubEl;
   }
-  /* 把启动期错误抛到页面顶部红条（不用开 F12 也能看到） */
+  /* 把启动期错误抛到页面顶部红条（不用开 F12 也能看到）
+     r40q：去重 + 上限，避免反复 append 堆成屎山 */
+  const _errToastSeen = new Set();
+  const _ERR_TOAST_MAX = 8;
   function _showErrAtTop(label, info) {
     try {
       const bar = document.getElementById('errToast');
       if (!bar) return;
-      bar.style.display = 'block';
       const txt = (info && info.stack) ? info.stack : String(info || '');
-      bar.textContent += '[' + label + '] ' + txt.slice(0, 1500) + '\n---\n';
+      const key = label + '|' + txt.slice(0, 200);
+      if (_errToastSeen.has(key)) return;            // 同源错误只显示一次
+      _errToastSeen.add(key);
+      // 超过上限就清空从头开始
+      const lines = (bar.textContent || '').split('\n---\n').filter(Boolean);
+      if (lines.length >= _ERR_TOAST_MAX) lines.splice(0, lines.length - _ERR_TOAST_MAX + 1);
+      lines.push('[' + label + '] ' + txt.slice(0, 1500));
+      bar.textContent = lines.join('\n---\n') + '\n---\n';
+      bar.style.display = 'block';
     } catch (e) { /* ignore */ }
   }
   window.addEventListener('error', (ev) => _showErrAtTop('onerror @ ' + (ev.filename||'?') + ':' + (ev.lineno||'?') + ':' + (ev.colno||'?'), ev.error || ev.message));
@@ -715,8 +725,8 @@ function renderAiAdvice(positions) {
     try {
       api('GET', '/api/tail_buy').then(d => {
         if (d && d.ok) {
-          const statEl = document.getElementById('tailbuyStatus');
-          if (statEl) statEl.textContent = d.generated_at ? '更新于 ' + d.generated_at : '已生成';
+          const statEls = document.querySelectorAll('[id^="tailbuyStatus"]');
+          statEls.forEach(el => el.textContent = d.generated_at ? '更新于 ' + d.generated_at : '已生成');
         }
       }).catch(() => {});
     } catch (e) {}
@@ -3217,13 +3227,14 @@ function _tpIntraLayout() {
   }
 
   // 简易信号扫描双列（适配 v3.1 详情页：买入候选红色 / 卖出候选绿色）
+  // r40q：视图1 (scanBuyList) + 视图2 (scanBuyList2) 同时填，避免侧栏切到「选股扫描」后整个面板永远空
   function renderScanView() {
-    const buyEl  = document.getElementById('scanBuyList');
-    const sellEl = document.getElementById('scanSellList');
-    if (!buyEl || !sellEl) return;
+    const buyEls  = Array.from(document.querySelectorAll('[id^="scanBuyList"]'));
+    const sellEls = Array.from(document.querySelectorAll('[id^="scanSellList"]'));
+    if (!buyEls.length || !sellEls.length) return;
     const paint = (msg) => {
-      buyEl.innerHTML  = `<div class="empty-v3">${msg}</div>`;
-      sellEl.innerHTML = `<div class="empty-v3">${msg}</div>`;
+      buyEls.forEach(el  => el.innerHTML  = `<div class="empty-v3">${msg}</div>`);
+      sellEls.forEach(el => el.innerHTML = `<div class="empty-v3">${msg}</div>`);
     };
     paint('加载中…');
     fetch('/api/scan_status').then(r => r.json()).then(data => {
@@ -3258,38 +3269,41 @@ function _tpIntraLayout() {
         </div>`;
       };
       const headerHtml = (total) => `<div class="scan-header"><span>#</span><span>名称</span><span>代码</span><span class="r">现价</span><span class="r">涨跌</span><span class="r">评分</span></div>`;
-      // r28：把头部"5"改成动态真实命中数
-      const buyCntEl  = document.getElementById('scanBuyCount');
-      const sellCntEl = document.getElementById('scanSellCount');
-      if (buyCntEl)  buyCntEl.textContent  = buyAll.length;
-      if (sellCntEl) sellCntEl.textContent = sellAll.length;
-      buyEl.innerHTML  = (buy.length  ? headerHtml(buyAll.length) + buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>');
-      sellEl.innerHTML = (sell.length ? headerHtml(sellAll.length) + sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>');
+      // r28：把头部"5"改成动态真实命中数（视图1 + 视图2 两套 count 一起更）
+      const buyCntEls  = Array.from(document.querySelectorAll('[id^="scanBuyCount"]'));
+      const sellCntEls = Array.from(document.querySelectorAll('[id^="scanSellCount"]'));
+      buyCntEls.forEach(el  => el.textContent  = buyAll.length);
+      sellCntEls.forEach(el => el.textContent = sellAll.length);
+      const buyHtml  = buy.length  ? headerHtml(buyAll.length)  + buy.map(rowHtml).join('')  : '<div class="empty-v3">暂无买入候选</div>';
+      const sellHtml = sell.length ? headerHtml(sellAll.length) + sell.map(rowHtml).join('') : '<div class="empty-v3">暂无卖出候选</div>';
+      buyEls.forEach(el  => el.innerHTML = buyHtml);
+      sellEls.forEach(el => el.innerHTML = sellHtml);
     }).catch(e => paint('信号扫描失败：' + (e.message || e)));
   }
 
   // ========== r27 尾盘买入法 ==========
   // 每天 14:50~14:58 推荐 2-3 只大A纯主板（沪 60/601/603/605；深 000/001/002），
   // 排除创业板（30x）、北交所（83x/87x/43x）、可转债等；策略详见 HTML 注释
+  // r40q：视图1 (tailbuyPickList) + 视图2 (tailbuyPickList2) 同时填
   async function renderTailBuy(forceRefresh) {
-    const pickEl = document.getElementById('tailbuyPickList');
-    const poolEl = document.getElementById('tailbuyPoolList');
-    const pickCnt = document.getElementById('tailbuyPickCount');
-    const poolCnt = document.getElementById('tailbuyPoolCount');
-    const statEl = document.getElementById('tailbuyStatus');
-    if (!pickEl || !poolEl) return;
-    pickEl.innerHTML = '<div class="tailbuy-empty">加载中…（扫全主板约 5-10 秒）</div>';
-    poolEl.innerHTML = '<div class="tailbuy-empty">加载中…</div>';
-    if (statEl) statEl.textContent = '运行中…';
+    const pickEls = Array.from(document.querySelectorAll('[id^="tailbuyPickList"]'));
+    const poolEls = Array.from(document.querySelectorAll('[id^="tailbuyPoolList"]'));
+    const pickCnts = Array.from(document.querySelectorAll('[id^="tailbuyPickCount"]'));
+    const poolCnts = Array.from(document.querySelectorAll('[id^="tailbuyPoolCount"]'));
+    const statEls  = Array.from(document.querySelectorAll('[id^="tailbuyStatus"]'));
+    if (!pickEls.length || !poolEls.length) return;
+    pickEls.forEach(el => el.innerHTML = '<div class="tailbuy-empty">加载中…（扫全主板约 5-10 秒）</div>');
+    poolEls.forEach(el => el.innerHTML = '<div class="tailbuy-empty">加载中…</div>');
+    statEls.forEach(el => el.textContent = '运行中…');
     try {
       const url = '/api/tail_buy' + (forceRefresh ? '?force=1' : '');
       const data = await api('GET', url);
       if (!data || !data.ok) throw new Error((data && data.error) || '无响应');
       const picks = data.picks || [];
       const pool = data.pool || [];
-      if (pickCnt) pickCnt.textContent = picks.length;
-      if (poolCnt) poolCnt.textContent = pool.length;
-      if (statEl) statEl.textContent = data.generated_at ? '更新于 ' + data.generated_at : '已生成';
+      pickCnts.forEach(el => el.textContent = picks.length);
+      poolCnts.forEach(el => el.textContent = pool.length);
+      statEls.forEach(el => el.textContent = data.generated_at ? '更新于 ' + data.generated_at : '已生成');
       const card = (r, isPick) => {
         const px = r.price != null ? fmt(r.price) : '--';
         const chg = r.change_pct != null ? (r.change_pct >= 0 ? '+' : '') + r.change_pct.toFixed(2) + '%' : '';
@@ -3323,22 +3337,25 @@ function _tpIntraLayout() {
           <div class="tb-rules-hit">${tags}${noTags}</div>
         </div>`;
       };
-      pickEl.innerHTML = picks.length
+      const pickHtml = picks.length
         ? picks.map(r => card(r, true)).join('')
         : '<div class="tailbuy-empty">暂无达标（可能不在 14:50 后或主板无满足全部条件的票）</div>';
-      poolEl.innerHTML = pool.length
+      const poolHtml = pool.length
         ? pool.slice(0, 30).map(r => card(r, false)).join('')
         : '<div class="tailbuy-empty">候选池为空</div>';
-      // 点击卡片打开个股详情
-      [pickEl, poolEl].forEach(box => {
+      pickEls.forEach(el => el.innerHTML = pickHtml);
+      poolEls.forEach(el => el.innerHTML = poolHtml);
+      // 点击卡片打开个股详情（两套 panel 都绑一次）
+      [].concat(pickEls, poolEls).forEach(box => {
         box.querySelectorAll('.tailbuy-card').forEach(c => {
           c.addEventListener('click', () => openStock(c.dataset.code, c.dataset.code));
         });
       });
     } catch (e) {
-      pickEl.innerHTML = `<div class="tailbuy-empty">尾盘买入法加载失败：${(e && e.message) || e}<br><span style="font-size:11px">首次会缓存股票池，1-2 分钟后重试</span></div>`;
-      poolEl.innerHTML = '';
-      if (statEl) statEl.textContent = '加载失败';
+      const errHtml = `<div class="tailbuy-empty">尾盘买入法加载失败：${(e && e.message) || e}<br><span style="font-size:11px">首次会缓存股票池，1-2 分钟后重试</span></div>`;
+      pickEls.forEach(el => el.innerHTML = errHtml);
+      poolEls.forEach(el => el.innerHTML = '');
+      statEls.forEach(el => el.textContent = '加载失败');
     }
   }
 
@@ -3463,7 +3480,7 @@ function _tpIntraLayout() {
     const btnStop = document.getElementById('rvPredictStopBtn');
     const btnC = document.getElementById('rvCheckBtn');
     const scopeEl = document.getElementById('rvPredictScope');
-    const refresh = document.getElementById('tailbuyRefresh');
+    const refresh = document.querySelectorAll('[id^="tailbuyRefresh"]');
 
     const showProgress = (show) => {
       const panel = document.getElementById('rvProgressPanel');
@@ -3531,7 +3548,7 @@ function _tpIntraLayout() {
       btnC.disabled = false; btnC.textContent = '核对今日实际';
     });
 
-    if (refresh) refresh.addEventListener('click', () => renderTailBuy(true));
+    if (refresh && refresh.length) refresh.forEach(b => b.addEventListener('click', () => renderTailBuy(true)));
 
     // 视图打开时：若后台有未完成任务，恢复进度面板
     (async () => {
