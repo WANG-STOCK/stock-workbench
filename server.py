@@ -50,6 +50,15 @@ STATIC_TRADE_LOG = os.path.join(BASE, "static", "trade_log.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
+
+def _ensure_dir(d):
+    """兼容旧调用：空操作（os.makedirs(..., exist_ok=True) 已在外层处理）。"""
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+
+
 # ---------- 配置 ----------
 _config = {"tdx_path": "", "kline_ttl": {"1m": 15, "5m": 30, "15m": 60, "30m": 120, "60m": 300,
                                          "daily": 300, "weekly": 600},
@@ -1590,6 +1599,8 @@ def _tail_buy_scan(force=False, top_n=3, pool_n=80):
 # ========== r27 复盘视图：每日 9:25 预测 + 收盘核对 + 累计统计 ==========
 REVIEW_HISTORY = os.path.join(DATA_DIR, "review_history.json")
 STATIC_REVIEW_HISTORY = os.path.join(BASE, "static", "review_history.json")
+REVIEW_PROGRESS = os.path.join(DATA_DIR, "review_progress.json")
+STATIC_REVIEW_PROGRESS = os.path.join(BASE, "static", "review_progress.json")
 
 
 def _load_review_history():
@@ -1706,8 +1717,15 @@ def _predict_one_stock(code, name):
     }
 
 
-def _predict_review_today():
-    """为当前持仓生成今日 9:25 预测；保存到 review_history。"""
+def _predict_review_today(scope="positions"):
+    """为指定范围生成今日 9:25 预测；保存到 review_history。
+    scope ∈ {positions, watchlist, all_main}；positions 保持同步（5 只内秒出），
+    其它 scope 走异步任务（5000+ 只全主板不会卡死接口）。"""
+    return _start_predict_task(scope) if scope != "positions" else _predict_review_today_sync()
+
+
+def _predict_review_today_sync():
+    """同步版：仅对当前持仓生成今日预测（原 r27 行为，保留兼容性）。"""
     positions = _load_positions()
     today = _today_str()
     rh = _load_review_history()
@@ -1730,10 +1748,185 @@ def _predict_review_today():
         "market_note": "",
         "confidence": 65 if rows else 0,
         "rows": rows,
-        "stats": {},   # check 后再填
+        "stats": {},
     }
     _save_review_history(rh)
-    return {"ok": True, "date": today, "count": len(rows)}
+    return {"ok": True, "date": today, "count": len(rows), "scope": "positions"}
+
+
+# ==================== r40o：异步预测任务（断点续跑 + 进度持久化） ====================
+def _load_progress():
+    """读进度（运行时优先 git 排除的 data/，云端兜底用 static/）。"""
+    p = _load_json(REVIEW_PROGRESS, None)
+    if p is not None:
+        return p
+    return _load_json(STATIC_REVIEW_PROGRESS, {})
+
+
+def _save_progress(prog):
+    """写进度：本地运行时写 data/，云端只读时写 static/ 兜底。"""
+    try:
+        _ensure_dir(DATA_DIR)
+        with open(REVIEW_PROGRESS, "w", encoding="utf-8") as f:
+            json.dump(prog, f, ensure_ascii=False, indent=2)
+        return
+    except Exception:
+        pass
+    try:
+        os.makedirs(os.path.dirname(STATIC_REVIEW_PROGRESS), exist_ok=True)
+        with open(STATIC_REVIEW_PROGRESS, "w", encoding="utf-8") as f:
+            json.dump(prog, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("[WARN] static review_progress write failed:", e)
+
+
+def _predict_pool_for_scope(scope):
+    """根据 scope 返回股票代码列表（含 name）。
+    - positions: 持仓（5 只）
+    - watchlist: 自选股
+    - all_main: 纯主板 1788 只（沪市 600/601/603/605，按王总偏好）
+    - all_market: 全 A 5407 只（含科创板/创业板/中小板）"""
+    if scope in ("all_main", "all_market"):
+        try:
+            p = os.path.join(DATA_DIR, "universe.txt")
+            raw = _load_json(p, "")  # 文本文件不能 json 读，回退
+            if not raw:
+                # 文本读取
+                if os.path.exists(p):
+                    with open(p, "r", encoding="utf-8") as f:
+                        raw = [ln.strip() for ln in f if ln.strip() and not ln.startswith("#")]
+                else:
+                    raw = []
+        except Exception:
+            raw = []
+        if not raw:
+            try:
+                raw = ds.refresh_universe(p) if 'p' in dir() else []
+            except Exception:
+                raw = []
+        if scope == "all_main":
+            # 沪市主板 600/601/603/605（王总偏好"纯主板"：不含科创板 688、创业板 300/301、中小板 002/003）
+            raw = [c for c in raw if c.startswith("sh") and c[2:5] in ("600", "601", "603", "605")]
+        # all_market: 全 A 5407 只（含科创板/创业板/中小板）
+        return [{"code": c, "name": c} for c in raw]
+    if scope == "watchlist":
+        return [{"code": w.get("code", ""), "name": w.get("name") or w.get("code", "")}
+                for w in _load_watchlist() if w.get("code")]
+    # 默认 positions
+    return [{"code": p.get("code", ""), "name": p.get("name") or p.get("code", "")}
+            for p in _load_positions() if p.get("code")]
+
+
+# 单例任务状态
+_predict_task = {"running": False, "stop": False, "thread": None, "scope": None, "started_at": None}
+
+
+def _start_predict_task(scope):
+    """启动异步预测任务；已在跑则返回 ongoing。"""
+    if _predict_task["running"]:
+        return {"ok": True, "running": True, "scope": _predict_task["scope"]}
+    _predict_task["stop"] = False
+    _predict_task["scope"] = scope
+    _predict_task["started_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    t = threading.Thread(target=_run_predict_async, args=(scope,), daemon=True)
+    _predict_task["thread"] = t
+    _predict_task["running"] = True
+    t.start()
+    return {"ok": True, "running": True, "scope": scope, "started_at": _predict_task["started_at"]}
+
+
+def _stop_predict_task():
+    _predict_task["stop"] = True
+    return {"ok": True, "stop_requested": True}
+
+
+def _run_predict_async(scope):
+    """异步执行：循环预测池子里的代码，结果增量写入 review_history.json。
+    断点续跑：跳过已 done（rh[today]["rows"] 里已有）的 code。"""
+    today = _today_str()
+    pool = _predict_pool_for_scope(scope)
+    total = len(pool)
+    rh = _load_review_history()
+    day = rh.get(today, {}) or {}
+    rows = day.get("rows", []) or []
+    done_codes = {r.get("code") for r in rows if r.get("code")}
+
+    prog = {
+        "scope": scope,
+        "today": today,
+        "running": True,
+        "started_at": _predict_task["started_at"],
+        "total": total,
+        "done": len(done_codes),
+        "failed": 0,
+        "last_code": None,
+        "eta_sec": None,
+        "progress_pct": (len(done_codes) / max(1, total) * 100) if total else 0,
+    }
+    _save_progress(prog)
+
+    start_t = time.time()
+    processed = 0
+    for item in pool:
+        if _predict_task["stop"]:
+            break
+        code = item["code"]
+        name = item.get("name") or code
+        if code in done_codes:
+            continue
+        try:
+            pred = _predict_one_stock(code, name)
+            if pred:
+                row = {"code": code, "name": name}
+                row.update(pred)
+                rows.append(row)
+                done_codes.add(code)
+        except Exception as e:
+            prog["failed"] = prog.get("failed", 0) + 1
+            print(f"[predict] {code} failed: {e}")
+        processed += 1
+
+        # 每 10 只写一次 review_history（避免磁盘 IO 风暴）
+        if processed % 10 == 0:
+            day["rows"] = rows
+            day["date"] = today
+            day["generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            day["confidence"] = 65 if rows else 0
+            day["stats"] = day.get("stats", {})
+            rh[today] = day
+            _save_review_history(rh)
+
+        # 进度更新（每次）
+        elapsed = time.time() - start_t
+        i = prog["done"] + processed
+        remaining = max(0, total - i)
+        eta_sec = (elapsed / max(1, processed)) * remaining if processed > 0 else None
+        prog.update({
+            "done": len(done_codes),
+            "last_code": code,
+            "eta_sec": int(eta_sec) if eta_sec and eta_sec < 1e8 else None,
+            "progress_pct": (i / max(1, total) * 100) if total else 0,
+            "running": True,
+        })
+        _save_progress(prog)
+
+    # 最终完整保存
+    day["rows"] = rows
+    day["date"] = today
+    day["generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    day["confidence"] = 65 if rows else 0
+    day["stats"] = day.get("stats", {})
+    rh[today] = day
+    _save_review_history(rh)
+
+    prog["running"] = False
+    prog["done"] = len(done_codes)
+    prog["progress_pct"] = 100.0 if total else 0
+    _save_progress(prog)
+    _predict_task["running"] = False
+
+
+# 末尾再保留旧 _predict_review_today 同步主体（已被 _predict_review_today_sync 包装）
 
 
 def _check_review_today(date=None):
@@ -2506,6 +2699,10 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/review/stats":
             self._send(200, {"stats": _review_stats()})
             return
+        if route == "/api/review/progress":
+            # r40o：预测任务进度（前端 1 秒轮询）
+            self._send(200, _load_progress())
+            return
 
         self._send(404, {"error": "unknown route"})
 
@@ -2787,9 +2984,30 @@ class Handler(BaseHTTPRequestHandler):
         # ========== r27 复盘视图 2 个 POST 端点 ==========
         if route == "/api/review/predict":
             # 立即生成今日 9:25 预测（基于当前持仓 + 当前技术指标）
+            # r40o：支持 scope 参数：positions（同步，5 只秒出）/ watchlist / all_main（异步，断点续跑）
             try:
-                result = _predict_review_today()
+                scope = "positions"
+                if self.command == "POST":
+                    length = int(self.headers.get("Content-Length", 0) or 0)
+                    body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                else:
+                    body = {}
+                scope = (body.get("scope") or qs.get("scope", ["positions"])[0] or "positions").strip()
+                if scope not in ("positions", "watchlist", "all_main", "all_market"):
+                    scope = "positions"
+                result = _predict_review_today(scope=scope)
                 self._send(200, result)
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
+            return
+        if route == "/api/review/progress":
+            # r40o：查询预测任务进度（前端轮询）
+            self._send(200, _load_progress())
+            return
+        if route == "/api/review/predict/stop":
+            # r40o：停止预测任务
+            try:
+                self._send(200, _stop_predict_task())
             except Exception as e:
                 self._send(200, {"ok": False, "error": str(e)})
             return

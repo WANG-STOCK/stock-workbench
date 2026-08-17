@@ -1384,13 +1384,15 @@ function renderAiAdvice(positions) {
     __tpCurrent.name = name || code;
     const $ = (s) => document.getElementById(s);
     const meta = $("tradePlanMeta");
-    if (meta) meta.textContent = "加载中…";
+    const _mode = __klineMode || "intraday";
+    const _kc0 = _klineCachePeriod[code + "|" + _mode];
+    // r40m：5 秒自动刷新时，缓存已存在 → meta 不要每次倒退到"加载中…"再前进，直接保留为缓存时间
+    if (meta) meta.textContent = _kc0 ? _kc0.metaText : "加载中…";
     // 切换瞬间：先把右侧头部价格/涨跌/指标占位清空，避免上一个股票的数据残留
     const reset = ["tpName","tpCode","tpPrice","tpChg"];
     reset.forEach(id => { const e = $(id); if (e) e.textContent = "--"; });
     document.querySelectorAll("#tpIndicators .tp-ind b").forEach(b => b.textContent = "--");
     // r40：优先用 K线周期缓存（按 mode 取）秒出，避免切股票后空白等待接口
-    const _mode = __klineMode || "intraday";
     const _kc = _klineCachePeriod[code + "|" + _mode];
     if (_kc && _kc.bars && _kc.bars.length) {
       try { renderTpChart(_kc.bars, _kc.indicators || {}, _mode, !!_kc.isDemo); } catch (e) {}
@@ -1921,9 +1923,13 @@ function renderAiAdvice(positions) {
         }, { lazyUpdate: true });
       }
     } else {
-      // 日K模式仍然走旧路径（差异化较大，整体重建）
+      // 日K模式：同模式且已初始化 → merge 只更新 series（candlestick 数据平滑跟随，不整图重建闪动）；跨模式/首次才 notMerge 重建
       const opt = buildDailyOption(bars, indicators);
-      _tpChartInst.setOption(opt, true);
+      if (_tpIntraInited && _tpLastMode === "daily") {
+        _tpChartInst.setOption({ xAxis: opt.xAxis, yAxis: opt.yAxis, series: opt.series }, { lazyUpdate: true });
+      } else {
+        _tpChartInst.setOption(opt, true);
+      }
     }
     _tpLastMode = mode;
     fillTpIndicators(indicators);
@@ -3077,9 +3083,10 @@ function _tpIntraLayout() {
         bars = demo.bars; indicators = demo.indicators; isDemo = true;
       }
       renderTpChart(bars, indicators, mode, isDemo);
-      _klineCachePeriod[cacheKey] = { bars, indicators, isDemo };
+      const metaText = isDemo ? "⚠️ 演示数据（接口暂不可达）" : "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      _klineCachePeriod[cacheKey] = { bars, indicators, isDemo, metaText };
       const meta = document.getElementById("tradePlanMeta");
-      if (meta) meta.textContent = isDemo ? "⚠️ 演示数据（接口暂不可达）" : "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      if (meta) meta.textContent = metaText;
     } catch (e) { console.warn("[wb] kline period:", e && e.message); }
   }
 
@@ -3128,11 +3135,21 @@ function _tpIntraLayout() {
     function applyAutoRefresh() {
       if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
       if (arEl && arEl.checked) {
-        const sec = Math.max(1, parseInt(riEl && riEl.value, 10) || 5);   // r40f：允许 1 秒刷新，配合 merge 模式做实时平滑更新
+        const sec = Math.max(1, parseInt(riEl && riEl.value, 10) || 2);   // r40n：默认 2 秒；允许 1 秒 → 配合 renderTpChart 的 merge 模式做"实时跟随不刷新整图"
         autoTimer = setInterval(async () => {
-          if (__tpCurrent.code) {
-            renderStockDetail(__tpCurrent.code, __tpCurrent.name);
-          }
+          if (!__tpCurrent.code) return;
+          // r40n：轻量实时通道 —— 不调 renderStockDetail（那套会重拉信号/策略、重画 AI 决策区、header 倒退为"加载中…"）
+          //       只轮询最新 K 线，直接走 renderTpChart 的 merge 模式：只更新折线/量能 series，grid/yAxis/header 完全不动 → 界面平滑跟随、不闪、不卡
+          const mode = __klineMode || "intraday";
+          const period = (mode === "intraday") ? "1m" : "daily";
+          const limit  = (mode === "intraday") ? 240 : 180;
+          try {
+            const r = await api("GET", "/api/kline?code=" + encodeURIComponent(__tpCurrent.code)
+                                       + "&period=" + period + "&limit=" + limit);
+            const bars = (r && r.bars) || [];
+            if (!bars.length) return;   // 接口空 → 保持当前图，不降级、不闪
+            renderTpChart(bars, (r && r.indicators) || {}, mode, false);
+          } catch (e) {}
           try { loadMarketSentiment(); } catch (e) {}
         }, sec * 1000);
         // 默认静默开启，不弹 toast
@@ -3439,19 +3456,71 @@ function _tpIntraLayout() {
     }
   }
   // r27：复盘视图的"立即生成今日预测" / "核对今日实际"两个按钮
+  // r40o：支持 scope（持仓/自选股/全部精选池）+ 异步任务进度面板 + 停止
+  let _rvProgressTimer = null;
   function bindReviewButtons() {
     const btnP = document.getElementById('rvPredictBtn');
+    const btnStop = document.getElementById('rvPredictStopBtn');
     const btnC = document.getElementById('rvCheckBtn');
+    const scopeEl = document.getElementById('rvPredictScope');
     const refresh = document.getElementById('tailbuyRefresh');
+
+    const showProgress = (show) => {
+      const panel = document.getElementById('rvProgressPanel');
+      if (panel) panel.hidden = !show;
+      if (btnP) btnP.disabled = show;
+      if (btnStop) btnStop.hidden = !show;
+    };
+
+    const updateProgress = (p) => {
+      if (!p) return;
+      const fill = document.getElementById('rvProgressFill');
+      const counter = document.getElementById('rvProgressCounter');
+      const eta = document.getElementById('rvProgressEta');
+      const lastCode = document.getElementById('rvProgressLastCode');
+      const failed = document.getElementById('rvProgressFailed');
+      const title = document.getElementById('rvProgressTitle');
+      const pct = p.progress_pct || 0;
+      if (fill) fill.style.width = pct.toFixed(1) + '%';
+      if (counter) counter.textContent = (p.done || 0) + ' / ' + (p.total || 0) + ' (' + pct.toFixed(1) + '%)';
+      if (eta) eta.textContent = p.eta_sec ? '预计剩余：' + _fmtSec(p.eta_sec) : '预计剩余：--';
+      if (lastCode) lastCode.textContent = p.last_code ? ('当前：' + p.last_code) : '当前：--';
+      if (failed) failed.textContent = '失败：' + (p.failed || 0);
+      const scopeLabel = { positions: '持仓', watchlist: '自选股', all_main: '纯主板', all_market: '全 A' }[p.scope] || p.scope;
+      if (title) title.textContent = (p.running ? '⏳ 预测中' : '✅ 已完成') + ' · ' + scopeLabel;
+    };
+
     if (btnP) btnP.addEventListener('click', async () => {
-      btnP.disabled = true; btnP.textContent = '生成中…';
+      const scope = (scopeEl && scopeEl.value) || 'positions';
+      btnP.disabled = true;
+      const origText = btnP.textContent;
+      btnP.textContent = '启动中…';
       try {
-        const r = await api('POST', '/api/review/predict', {});
-        toast(r && r.ok ? '已生成今日预测（' + (r.count || 0) + ' 只）' : '生成失败：' + (r && r.error || '未知'));
-        renderReview();
+        const r = await api('POST', '/api/review/predict', { scope });
+        if (scope === 'positions') {
+          // 同步模式：直接出结果
+          toast(r && r.ok ? ('已生成今日预测（' + (r.count || 0) + ' 只）') : '生成失败：' + (r && r.error || '未知'));
+          renderReview();
+        } else {
+          // 异步模式：显示进度面板，启动轮询
+          toast('已启动预测任务（' + scope + '），后台继续…');
+          showProgress(true);
+          _startProgressPoll();
+        }
       } catch (e) { toast('生成失败：' + (e && e.message || e)); }
-      btnP.disabled = false; btnP.textContent = '立即生成今日预测';
+      btnP.disabled = false;
+      btnP.textContent = origText;
     });
+
+    if (btnStop) btnStop.addEventListener('click', async () => {
+      btnStop.disabled = true;
+      try {
+        await api('POST', '/api/review/predict/stop', {});
+        toast('已请求停止任务');
+      } catch (e) { toast('停止失败：' + (e && e.message || e)); }
+      btnStop.disabled = false;
+    });
+
     if (btnC) btnC.addEventListener('click', async () => {
       btnC.disabled = true; btnC.textContent = '核对中…';
       try {
@@ -3461,7 +3530,48 @@ function _tpIntraLayout() {
       } catch (e) { toast('核对失败：' + (e && e.message || e)); }
       btnC.disabled = false; btnC.textContent = '核对今日实际';
     });
+
     if (refresh) refresh.addEventListener('click', () => renderTailBuy(true));
+
+    // 视图打开时：若后台有未完成任务，恢复进度面板
+    (async () => {
+      try {
+        const p = await api('GET', '/api/review/progress');
+        if (p && p.running) {
+          showProgress(true);
+          updateProgress(p);
+          _startProgressPoll();
+        } else if (p && p.scope) {
+          // 已完成，留记录可查，但不显示进度条
+          updateProgress(p);
+        }
+      } catch (e) {}
+    })();
+
+    function _startProgressPoll() {
+      if (_rvProgressTimer) return;
+      _rvProgressTimer = setInterval(async () => {
+        try {
+          const p = await api('GET', '/api/review/progress');
+          if (!p) return;
+          updateProgress(p);
+          if (!p.running) {
+            clearInterval(_rvProgressTimer);
+            _rvProgressTimer = null;
+            toast('预测完成（' + (p.done || 0) + ' / ' + (p.total || 0) + '）');
+            renderReview();
+            // 完成后 3 秒自动隐藏进度条
+            setTimeout(() => showProgress(false), 3000);
+          }
+        } catch (e) {}
+      }, 1000);
+    }
+
+    function _fmtSec(sec) {
+      if (sec < 60) return sec + ' 秒';
+      if (sec < 3600) return Math.floor(sec / 60) + ' 分 ' + (sec % 60) + ' 秒';
+      return Math.floor(sec / 3600) + ' 小时 ' + Math.floor((sec % 3600) / 60) + ' 分';
+    }
   }
 
   // ========== r28 行情看板·短线 K 线图 ==========

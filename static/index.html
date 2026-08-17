@@ -55,8 +55,9 @@
             <span class="tb-lbl">自动刷新</span>
             <label class="tb-switch"><input type="checkbox" id="autoRefresh" checked><span class="tb-slider"></span></label>
             <select id="refreshInterval" class="input tb-sel">
+              <option value="1" selected>1s</option>
               <option value="2">2s</option>
-              <option value="5" selected>5s</option>
+              <option value="5">5s</option>
               <option value="10">10s</option>
               <option value="30">30s</option>
               <option value="60">60s</option>
@@ -252,9 +253,30 @@
               <div class="rv-card"><div class="rv-lbl">最低价准确率</div><div class="rv-val" id="rvLoAcc">--</div><div class="rv-sub">预测低点命中</div></div>
             </div>
             <div class="rv-actions">
+              <span class="rv-lbl-inline">预测范围</span>
+              <select id="rvPredictScope" class="input tb-sel">
+                <option value="positions" selected>持仓（5 只，秒出）</option>
+                <option value="watchlist">自选股</option>
+                <option value="all_main">纯主板 1788 只（推荐）</option>
+                <option value="all_market">全 A 5407 只</option>
+              </select>
               <button type="button" class="tp-btn-primary" id="rvPredictBtn">立即生成今日预测</button>
+              <button type="button" class="tp-btn-ghost" id="rvPredictStopBtn" hidden>停止</button>
               <button type="button" class="tp-btn-ghost" id="rvCheckBtn">核对今日实际</button>
               <span class="rv-meta" id="todayPredMeta">加载中…</span>
+            </div>
+            <!-- r40o：异步预测进度面板 -->
+            <div id="rvProgressPanel" class="rv-progress" hidden>
+              <div class="rv-progress-head">
+                <span id="rvProgressTitle">预测中…</span>
+                <span id="rvProgressEta">预计剩余：--</span>
+              </div>
+              <div class="rv-progress-bar"><div id="rvProgressFill" class="rv-progress-fill"></div></div>
+              <div class="rv-progress-foot">
+                <span id="rvProgressCounter">0 / 0</span>
+                <span id="rvProgressLastCode">当前：--</span>
+                <span id="rvProgressFailed">失败：0</span>
+              </div>
             </div>
           </div>
 
@@ -337,6 +359,6 @@
 
   <div id="toast" class="toast"></div>
   <script src="/static/echarts.min.js"></script>
-  <script src="/static/js/app.js?v=r40g"></script>
+  <script src="/static/js/app.js?v=r40p"></script>
 </body>
 </html>
