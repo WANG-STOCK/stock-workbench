@@ -2054,6 +2054,294 @@ def _review_history(days=60):
     return {"history": items}
 
 
+# r40r：单只股票"明日预测 + 买卖价"合并输出（晨报每天调一次）
+def _predict_with_advice(code, name=None):
+    """把 _predict_one_stock 的涨跌预测 和 _advise_position 的日内操作建议/价 合并：
+    返回 { code, name, price, change_pct, dir(买/卖/不动), action_label,
+           amp_pred, confidence,
+           buy_price, sell_price, stop_loss, take_profit, op_qty,
+           op_basis, reason }"""
+    try:
+        positions = _load_positions()
+        pos = next((p for p in positions if (p.get("code") or "") == code), {})
+        name = name or pos.get("name") or code
+    except Exception:
+        name = name or code
+    # 1) 明日涨跌幅预测
+    pred = _predict_one_stock(code, name) or {}
+    amp_pred = pred.get("amp_pred")
+    dir_pred = pred.get("dir_pred")
+    confidence = pred.get("confidence")
+    # 2) 日内操作建议（含买卖价）
+    capital = float(_config.get("available_capital", 100000))
+    rt = {}
+    try:
+        rt = ds.fetch_realtime([code]).get(code) or {}
+    except Exception:
+        pass
+    rt_price = rt.get("price")
+    rt_prev = rt.get("prev_close")
+    advice = _advise_position(code, capital, rt_price, rt_prev) or {}
+    action = advice.get("action") or "不动"
+    op_price = advice.get("op_price")
+    op_qty = int(advice.get("op_qty") or 0)
+    fc = advice.get("forecast") or {}
+    fc_hi = fc.get("forecast_high")
+    fc_lo = fc.get("forecast_low")
+    # 3) 合并成"明日买卖价 + 止损目标"
+    price = advice.get("price") or rt_price
+    change_pct = advice.get("change_pct")
+    if price is None and pred.get("ref_prev_close"):
+        price = pred["ref_prev_close"]
+    if action == "买入":
+        # 建议：回调到预测低点附近买；止损在预测低再下 1%；目标在预测高
+        buy_price = op_price or fc_lo or (price and round(price * 0.99, 2))
+        stop_loss = fc_lo and round(fc_lo * 0.985, 2) or (price and round(price * 0.97, 2))
+        take_profit = fc_hi or (price and round(price * 1.05, 2))
+        sell_price = None
+    elif action == "卖出":
+        # 建议：拉高到预测高点附近卖；止损在预测高再上 0.5%；目标在预测低
+        sell_price = op_price or fc_hi or (price and round(price * 1.01, 2))
+        stop_loss = fc_hi and round(fc_hi * 1.005, 2) or (price and round(price * 1.03, 2))
+        take_profit = fc_lo or (price and round(price * 0.95, 2))
+        buy_price = None
+    else:
+        buy_price = sell_price = stop_loss = take_profit = None
+    return {
+        "code": code,
+        "name": name,
+        "price": price,
+        "change_pct": change_pct,
+        "action": action,
+        "action_label": advice.get("action_label") or ("加仓" if action == "买入" else ("减仓" if action == "卖出" else "持有")),
+        "amp_pred": amp_pred,
+        "dir_pred": dir_pred,
+        "confidence": confidence,
+        "buy_price": buy_price,
+        "sell_price": sell_price,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "op_qty": op_qty,
+        "op_basis": advice.get("op_basis") or "",
+        "reason": advice.get("reason") or "",
+    }
+
+
+# r40r：今日晨报（持仓预测 + 尾盘选股 + 信号扫描 Top）
+def _daily_brief():
+    """聚合今天给王总的晨报：
+    - holdings: 每只持仓的"明日预测+买卖价"
+    - tail_picks: 尾盘买入法的 Picks Top 3
+    - scan_buy: 信号扫描的买入候选 Top 5"""
+    import datetime as _dt
+    today = _today_str()
+    out = {
+        "date": today,
+        "weekday": _dt.datetime.strptime(today, "%Y-%m-%d").strftime("%A"),
+        "generated_at": _dt.datetime.now().strftime("%H:%M:%S"),
+        "holdings": [],
+        "tail_picks": [],
+        "scan_buy": [],
+        "scan_sell": [],
+        # 简版 KPI（前端用）
+        "counts": {"holdings": 0, "pred_up": 0, "pred_down": 0},
+    }
+    # 1) 持仓预测
+    try:
+        positions = _load_positions()
+        for p in positions:
+            code = p.get("code")
+            if not code:
+                continue
+            try:
+                rec = _predict_with_advice(code, p.get("name"))
+                if rec:
+                    out["holdings"].append(rec)
+            except Exception as e:
+                out["holdings"].append({"code": code, "name": p.get("name") or code, "error": str(e)})
+        out["counts"]["holdings"] = len(out["holdings"])
+        out["counts"]["pred_up"] = sum(1 for h in out["holdings"] if (h.get("amp_pred") or 0) >= 2)
+        out["counts"]["pred_down"] = sum(1 for h in out["holdings"] if (h.get("amp_pred") or 0) <= -2)
+    except Exception as e:
+        out["holdings_err"] = str(e)
+    # 2) 尾盘选股：复用 _tail_buy_scan 的磁盘缓存（force=False 不会再扫一次，避免首屏慢）
+    try:
+        data = _tail_buy_scan(force=False, top_n=3, pool_n=20)
+        out["tail_picks"] = (data or {}).get("picks", [])[:3]
+        if (data or {}).get("generated_at"):
+            out["tail_meta"] = data["generated_at"]
+    except Exception as e:
+        out["tail_err"] = str(e)
+    # 3) 信号扫描 Top 5
+    try:
+        scan = _scan or {}
+        results = scan.get("results") or []
+        out["scan_buy"] = results[:5]
+        out["scan_sell"] = results[-5:][::-1] if len(results) > 5 else []
+    except Exception as e:
+        out["scan_err"] = str(e)
+    return out
+
+
+# r40r：尾盘选股复盘（核对昨日选股实际涨跌）
+_TAIL_BUY_LOG = os.path.join(BASE, "data", "tail_buy_log.json")
+
+def _load_tail_log():
+    try:
+        if os.path.isfile(_TAIL_BUY_LOG):
+            with open(_TAIL_BUY_LOG, "r", encoding="utf-8") as f:
+                return json.load(f) or {}
+    except Exception:
+        pass
+    return {}
+
+def _save_tail_log(d):
+    try:
+        os.makedirs(os.path.dirname(_TAIL_BUY_LOG), exist_ok=True)
+        with open(_TAIL_BUY_LOG, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def _record_today_tail():
+    """每天收盘后，把今日尾盘选股记到 log（首次跑时记录推荐时数据）"""
+    log = _load_tail_log()
+    today = _today_str()
+    if today in log:
+        return  # 已记录
+    try:
+        data = _tail_buy_scan(force=False, top_n=3, pool_n=20)
+        picks = (data or {}).get("picks") or []
+        log[today] = {
+            "ts": int(time.time()),
+            "picks": picks,
+            "checked": False,
+            "checked_at": None,
+            "checks": [],
+            "stats": {},
+        }
+        _save_tail_log(log)
+        return log[today]
+    except Exception as e:
+        print("[tail buy log] record failed:", e)
+        return None
+
+def _check_tail_yesterday():
+    """核对昨日（或更早未核对）尾盘选股的次日实际涨跌。"""
+    log = _load_tail_log()
+    today = _today_str()
+    import datetime as _dt
+    out = {"checked_days": [], "new_hits": 0, "misses": 0, "items": []}
+    for date in sorted(log.keys(), reverse=True):
+        day = log[date]
+        if day.get("checked"):
+            continue  # 已核对
+        # 必须是"过去日期"才能核对（次日才有实际涨跌）
+        if date >= today:
+            continue
+        picks = day.get("picks") or []
+        if not picks:
+            day["checked"] = True
+            day["checked_at"] = int(time.time())
+            day["stats"] = {"n": 0, "hits": 0, "hit_rate": 0, "avg_gain_pct": 0}
+            log[date] = day
+            continue
+        # 拉次日 (date+1) 的实际 OHLC
+        codes = [p.get("code") for p in picks if p.get("code")]
+        try:
+            rt = ds.fetch_realtime(codes) or {}
+        except Exception:
+            rt = {}
+        checks = []
+        hits = 0
+        gain_sum = 0.0
+        for p in picks:
+            code = p.get("code")
+            q = rt.get(code) or {}
+            # 用次日 real OHLC（接口返回的是"最新价"，对回溯我们只能用"今收"）
+            today_price = q.get("price")
+            prev_close = q.get("prev_close")
+            open_p = q.get("open")
+            high = q.get("high")
+            low = q.get("low")
+            chosen_price = p.get("price")  # 14:50 推荐时参考价
+            # 次日表现 = (今收 - 昨收) / 昨收
+            if today_price is not None and prev_close:
+                next_open_to_close_pct = (today_price - prev_close) / prev_close * 100
+            else:
+                next_open_to_close_pct = None
+            hit = (next_open_to_close_pct is not None and next_open_to_close_pct >= 1.0)
+            if hit:
+                hits += 1
+            if next_open_to_close_pct is not None:
+                gain_sum += next_open_to_close_pct
+            checks.append({
+                "code": code, "name": p.get("name"),
+                "chosen_price": chosen_price,
+                "next_open": open_p, "next_high": high, "next_low": low,
+                "next_close": today_price,
+                "next_chg_pct": next_open_to_close_pct,
+                "hit": hit,
+                "rules_hit": p.get("rules_hit") or [],
+            })
+        n = len(checks)
+        avg_gain = round(gain_sum / n, 2) if n else 0
+        day["checks"] = checks
+        day["stats"] = {
+            "n": n, "hits": hits, "misses": n - hits,
+            "hit_rate": round(hits / n * 100, 1) if n else 0,
+            "avg_gain_pct": avg_gain,
+        }
+        day["checked"] = True
+        day["checked_at"] = int(time.time())
+        log[date] = day
+        out["checked_days"].append(date)
+        out["new_hits"] += hits
+        out["misses"] += (n - hits)
+        out["items"].extend(checks)
+    _save_tail_log(log)
+    return out
+
+
+def _tail_review_summary(days=30):
+    """尾盘选股的 30 日历史命中率汇总。"""
+    log = _load_tail_log()
+    today = _today_str()
+    import datetime as _dt
+    items = []
+    total_n = total_hits = total_gain_sum = 0
+    for date in sorted(log.keys(), reverse=True):
+        day = log[date]
+        if not day.get("checked"):
+            continue
+        st = day.get("stats") or {}
+        n = st.get("n", 0)
+        if n <= 0:
+            continue
+        items.append({"date": date, **st})
+        total_n += n
+        total_hits += st.get("hits", 0)
+        total_gain_sum += st.get("avg_gain_pct", 0) * n
+    items = items[:days]
+    # 累计收益率（假设每天都满仓 100% 买）：
+    cum_pct = 1.0
+    for it in items:
+        g = (it.get("avg_gain_pct") or 0) / 100
+        cum_pct *= (1 + g)
+    cum_pct = round((cum_pct - 1) * 100, 2)
+    avg_hit = round(total_hits / total_n * 100, 1) if total_n else 0
+    avg_gain = round(total_gain_sum / total_n, 2) if total_n else 0
+    return {
+        "days_counted": len(items),
+        "total_n": total_n,
+        "total_hits": total_hits,
+        "avg_hit_rate": avg_hit,
+        "avg_gain_pct": avg_gain,
+        "cum_gain_pct": cum_pct,
+        "items": items,
+    }
+
+
 def _review_today():
     """返回今日预测。"""
     rh = _load_review_history()
@@ -2703,6 +2991,32 @@ class Handler(BaseHTTPRequestHandler):
             # r40o：预测任务进度（前端 1 秒轮询）
             self._send(200, _load_progress())
             return
+        # r40r：今日晨报（持仓预测 + 尾盘选股 + 信号扫描 Top）—— 首屏用
+        if route == "/api/daily_brief":
+            try:
+                self._send(200, {"ok": True, "brief": _daily_brief()})
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e), "brief": {}})
+            return
+        # r40r：尾盘选股复盘
+        if route == "/api/review/tail_buy":
+            self._send(200, {"ok": True, "log": _load_tail_log()})
+            return
+        if route == "/api/review/tail_buy/summary":
+            try:
+                days = int(qs.get("days", ["30"])[0] or 30)
+                self._send(200, {"ok": True, "summary": _tail_review_summary(days=days)})
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
+            return
+        # r40r：今日尾盘选股自动记录（由调度 18:00 触发，或首次核对时回填）
+        if route == "/api/tail_buy/record_today":
+            try:
+                rec = _record_today_tail()
+                self._send(200, {"ok": True, "record": rec})
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
+            return
 
         self._send(404, {"error": "unknown route"})
 
@@ -3017,6 +3331,14 @@ class Handler(BaseHTTPRequestHandler):
                 date = payload.get("date") if isinstance(payload, dict) else None
                 result = _check_review_today(date=date)
                 self._send(200, result)
+            except Exception as e:
+                self._send(200, {"ok": False, "error": str(e)})
+            return
+        # r40r：核对尾盘选股实际涨跌
+        if route == "/api/review/tail_buy/check":
+            try:
+                result = _check_tail_yesterday()
+                self._send(200, {"ok": True, **result})
             except Exception as e:
                 self._send(200, {"ok": False, "error": str(e)})
             return

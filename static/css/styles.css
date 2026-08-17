@@ -2305,4 +2305,60 @@ body.theme-light .lvl-buy  { background: rgba(231,76,60,.12); color: #c0392b; bo
 body.theme-light .lvl-hold { background: rgba(120,140,160,.12); color: #4a5568; border-color: rgba(120,140,160,.35); }
 body.theme-light .lvl-sell { background: rgba(46,204,113,.12); color: #1f8a4d; border-color: rgba(46,204,113,.35); }
 
+/* ========== r40r：今日晨报 ========== */
+.brief-head-panel { padding: 16px 18px; background: linear-gradient(135deg, rgba(59,130,246,.08), rgba(124,58,237,.06)); border: 1px solid rgba(59,130,246,.25); }
+.brief-head-row { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.brief-title { margin: 0 0 4px; font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: .5px; }
+.brief-sub { margin: 0; font-size: 13px; color: var(--muted); }
+.brief-actions { display: flex; align-items: center; gap: 10px; }
+.brief-meta { font-size: 11px; color: var(--muted); }
+.brief-kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 16px; }
+.brief-kpi { padding: 12px 14px; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px; }
+.brief-kpi-l { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+.brief-kpi-v { font-size: 24px; font-weight: 700; display: block; color: var(--ink); line-height: 1.1; }
+.brief-kpi-v.up { color: var(--up); }
+.brief-kpi-v.down { color: var(--down); }
+.brief-hold-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.brief-hold-tbl th, .brief-hold-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.brief-hold-tbl th { position: sticky; top: 0; background: #1a1a1a; color: var(--muted); font-weight: 400; text-align: left; }
+.brief-hold-tbl th.r, .brief-hold-tbl td.r { text-align: right; }
+.brief-hold-tbl tbody tr:hover { background: #161b22; }
+.brief-hold-tbl td.up { color: var(--up); }
+.brief-hold-tbl td.down { color: var(--down); }
+.brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.brief-card-list { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; max-height: 460px; overflow-y: auto; }
+.brief-tail-card { padding: 10px 12px; background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 8px; }
+.brief-tail-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.brief-tail-name b { color: var(--ink); }
+.brief-tail-name i { color: var(--muted); font-style: normal; font-size: 11px; margin-left: 4px; }
+.brief-tail-px { font-weight: 700; font-size: 15px; color: var(--ink); }
+.brief-tail-chg { font-weight: 700; font-size: 13px; min-width: 60px; text-align: right; }
+.brief-tail-chg.up { color: var(--up); } .brief-tail-chg.down { color: var(--down); }
+.brief-tail-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.brief-tail-tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.brief-scan-list { padding: 4px 0; }
+.brief-scan-row { display: grid; grid-template-columns: 28px 1.4fr 80px 80px 70px 60px; gap: 6px; padding: 8px 6px; align-items: center; border-bottom: 1px dashed var(--line); }
+.brief-scan-row:last-child { border-bottom: none; }
+.brief-scan-idx { color: var(--muted); text-align: center; }
+.brief-scan-name b { color: var(--ink); margin-right: 4px; }
+.brief-scan-name i { color: var(--muted); font-style: normal; font-size: 10px; }
+.brief-scan-px { text-align: right; font-weight: 600; }
+.brief-scan-chg { text-align: right; }
+.brief-scan-chg.up { color: var(--up); } .brief-scan-chg.down { color: var(--down); }
+.brief-scan-act { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(231,76,60,.18); color: var(--up); text-align: center; }
+.brief-scan-score { text-align: right; color: var(--accent); font-weight: 700; }
+body.theme-light .brief-head-panel { background: linear-gradient(135deg, rgba(59,130,246,.07), rgba(124,58,237,.04)); }
+body.theme-light .brief-kpi { background: #f4f6f9; }
+body.theme-light .brief-tail-card { background: #f8f9fb; }
+body.theme-light .brief-hold-tbl th { background: #f1f4f8; }
+
+/* ========== r40r：复盘视图 3 tab ========== */
+.rv-tabs { display: flex; gap: 4px; margin: 8px 0 14px; border-bottom: 1px solid var(--line); }
+.rv-tab { padding: 8px 18px; background: transparent; border: none; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; }
+.rv-tab.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.rv-tab:hover { color: var(--ink); }
+.rv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 0; }
+.rv-lbl-inline { font-size: 12px; color: var(--muted); }
+.rv-actions-common { margin-top: 8px; font-size: 11px; color: var(--muted); }
+
 

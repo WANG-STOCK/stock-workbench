@@ -1,0 +1,86 @@
+{
+  "2026-08-17": {
+    "date": "2026-08-17",
+    "generated_at": "2026-08-17 10:25:20",
+    "market_note": "",
+    "confidence": 65,
+    "rows": [
+      {
+        "code": "sh600183",
+        "name": "生益科技",
+        "open_pred": 143.64,
+        "high_pred": 145.87,
+        "low_pred": 141.84,
+        "close_pred": 144.07,
+        "amp_pred": 0.6,
+        "dir_pred": "up",
+        "confidence": 68,
+        "ref_prev_close": 143.21,
+        "trend_score": 1,
+        "fund_net": -4.8764,
+        "vol_ratio": 1.86
+      },
+      {
+        "code": "sh600667",
+        "name": "太极实业",
+        "open_pred": 23.02,
+        "high_pred": 23.38,
+        "low_pred": 22.73,
+        "close_pred": 23.09,
+        "amp_pred": 0.6,
+        "dir_pred": "up",
+        "confidence": 68,
+        "ref_prev_close": 22.95,
+        "trend_score": 1,
+        "fund_net": -1.1246,
+        "vol_ratio": 2.22
+      },
+      {
+        "code": "sh600105",
+        "name": "永鼎股份",
+        "open_pred": 41.45,
+        "high_pred": 42.6,
+        "low_pred": 40.93,
+        "close_pred": 42.07,
+        "amp_pred": 1.8,
+        "dir_pred": "up",
+        "confidence": 76,
+        "ref_prev_close": 41.33,
+        "trend_score": 2,
+        "fund_net": 0.1204,
+        "vol_ratio": 1.66
+      },
+      {
+        "code": "sh600276",
+        "name": "恒瑞医药",
+        "open_pred": 52.62,
+        "high_pred": 53.28,
+        "low_pred": 51.96,
+        "close_pred": 52.62,
+        "amp_pred": 0,
+        "dir_pred": "flat",
+        "confidence": 60,
+        "ref_prev_close": 52.62,
+        "trend_score": 0,
+        "fund_net": 0.4378,
+        "vol_ratio": 1.62
+      },
+      {
+        "code": "sh600206",
+        "name": "有研新材",
+        "open_pred": 50.93,
+        "high_pred": 52.34,
+        "low_pred": 50.29,
+        "close_pred": 51.69,
+        "amp_pred": 1.8,
+        "dir_pred": "up",
+        "confidence": 84,
+        "ref_prev_close": 50.78,
+        "trend_score": 3,
+        "fund_net": 9.4083,
+        "vol_ratio": 2.31
+      }
+    ],
+    "stats": {}
+  }
+}
