@@ -3911,7 +3911,7 @@ def _scheduler_fire(key):
 def main():
     port = int(os.environ.get("PORT", "8723"))
     # 绑定 0.0.0.0 以便同一局域网内手机/其他设备访问；
-    # 若手机与电脑不在同一 WiFi（异网），请用 cpolar 等内网穿透把本端口映射为公网地址（公网暴露请务必加鉴权，勿公开地址）
+    # 若手机与电脑不在同一 WiFi（异网），请用项目自带的 cloudflared（免注册）：双击 启动公网访问.bat → 复制它给的 https://xxxx.trycloudflare.com 在手机用流量打开（公网暴露请务必加鉴权，勿公开地址）
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"婷婷量化AI 已启动： http://127.0.0.1:{port}")
     try:
@@ -3921,7 +3921,7 @@ def main():
         lan_ip = s.getsockname()[0]
         s.close()
         print(f"① 手机同 WiFi 直连： http://{lan_ip}:{port}")
-        print(f"② 手机异网(4G/5G)看：装 cpolar → 运行 `cpolar http {port}` → 复制它给的 https://xxx.cpolar.io 在手机打开")
+        print(f"② 手机异网(4G/5G)看：双击项目里 启动公网访问.bat(cloudflared 免注册) → 复制它给的 https://xxxx.trycloudflare.com 在手机打开")
     except Exception:
         pass
     print(f"通达信数据源： {'已启用 ' + _tdx_path if _tdx_available else '未配置（使用在线行情）'}")
